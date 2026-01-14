@@ -7,13 +7,54 @@ import BlueprintTable from './components/BlueprintTable';
 import Login from './components/Login';
 import SettingsManager from './components/SettingsManager';
 
-const STORAGE_KEY = 'blueprint_pro_v2_data';
+const DATA_STORAGE_KEY = 'blueprint_pro_v2_data';
+const SESSION_STORAGE_KEY = 'blueprint_pro_session';
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // --- SESSION PERSISTENCE ---
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+      return stored ? JSON.parse(stored).user : null;
+    } catch { return null; }
+  });
   
-  // Navigation State
-  const [currentView, setCurrentView] = useState<'dashboard' | 'exam-types' | 'class-subject' | 'unit-subunit' | 'cognitive'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'exam-types' | 'class-subject' | 'unit-subunit' | 'cognitive'>(() => {
+    try {
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+      return stored ? (JSON.parse(stored).view || 'dashboard') : 'dashboard';
+    } catch { return 'dashboard'; }
+  });
+
+  // Persist Session (User + View)
+  useEffect(() => {
+    const sessionData = { user: currentUser, view: currentView };
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
+  }, [currentUser, currentView]);
+
+  // --- PWA INSTALL LOGIC ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult: any) => {
+      if (choiceResult.outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    });
+  };
+
+  // --- APP STATE ---
   const [dashboardMode, setDashboardMode] = useState<'list' | 'edit'>('list');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -32,9 +73,9 @@ const App: React.FC = () => {
   const [selectedPaperTypeId, setSelectedPaperTypeId] = useState<string>('pt_type1');
   const [blueprintEntries, setBlueprintEntries] = useState<BlueprintEntry[]>([]);
 
-  // Robust Persistence Loading
+  // Robust Persistence Loading (Data)
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(DATA_STORAGE_KEY);
     if (!stored) return;
     try {
       const parsed = JSON.parse(stored);
@@ -43,19 +84,16 @@ const App: React.FC = () => {
         if (Array.isArray(parsed.cognitiveLevels)) setCognitiveLevels(parsed.cognitiveLevels);
         if (Array.isArray(parsed.difficultyLevels)) setDifficultyLevels(parsed.difficultyLevels);
         if (Array.isArray(parsed.paperTypes)) setPaperTypes(parsed.paperTypes);
-        // Handle migration from old Record format to new Array format if needed
-        if (Array.isArray(parsed.savedBlueprints)) {
-           setSavedBlueprints(parsed.savedBlueprints);
-        }
+        if (Array.isArray(parsed.savedBlueprints)) setSavedBlueprints(parsed.savedBlueprints);
       }
     } catch (e) {
       console.error("Error loading data:", e);
     }
   }, []);
 
-  // Auto-save
+  // Auto-save (Data)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify({
       classes, cognitiveLevels, difficultyLevels, paperTypes, savedBlueprints
     }));
   }, [classes, cognitiveLevels, difficultyLevels, paperTypes, savedBlueprints]);
@@ -225,11 +263,18 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row print:bg-white">
       {/* Mobile Header (Hidden on Print) */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 print:hidden">
+      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 print:hidden shadow-lg">
         <span className="font-bold text-lg">Blueprint Pro</span>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
-        </button>
+        <div className="flex items-center gap-2">
+           {deferredPrompt && (
+             <button onClick={handleInstallClick} className="bg-indigo-600 text-white p-2 rounded-lg text-xs font-bold">
+               Install
+             </button>
+           )}
+           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
+           </button>
+        </div>
       </div>
 
       {/* Sidebar (Hidden on Print) */}
@@ -257,10 +302,18 @@ const App: React.FC = () => {
           <NavItem view="cognitive" label="Taxonomy & Levels" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>} />
         </div>
 
-        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 px-4 py-3 text-red-400 hover:text-white hover:bg-red-900/50 rounded-xl transition-all font-bold text-sm">
-           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-           <span>Logout</span>
-        </button>
+        <div className="mt-auto space-y-2">
+            {deferredPrompt && (
+                <button onClick={handleInstallClick} className="w-full flex items-center gap-3 px-4 py-3 text-emerald-400 bg-emerald-900/20 hover:text-white hover:bg-emerald-900/50 rounded-xl transition-all font-bold text-sm border border-emerald-900/50">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    <span>Install App</span>
+                </button>
+            )}
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:text-white hover:bg-red-900/50 rounded-xl transition-all font-bold text-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                <span>Logout</span>
+            </button>
+        </div>
       </aside>
 
       {/* Main Content */}
