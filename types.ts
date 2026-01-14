@@ -13,18 +13,28 @@ export interface User {
 
 export interface CognitiveLevel {
   id: string;
-  name: string; // e.g., SR1, CRS2
-  description: string;
+  code: string; // CP1, CP2...
+  name: string;
 }
 
-export interface DifficultyLevel {
+export interface KnowledgeLevel {
   id: string;
-  name: string; // Basic, Average, Profound
+  code: string; // B, A, P
+  name: string;
+}
+
+export interface ItemFormat {
+  id: string;
+  code: string; // SR1, SR2, CRS1, CRS2, CRL
+  type: 'SR' | 'CRS' | 'CRL';
+  name: string;
+  abbreviation: string; // MCI, MI, VSA, SA, E
 }
 
 export interface SubUnit {
   id: string;
   name: string;
+  learningObjective: string;
 }
 
 export interface Unit {
@@ -36,7 +46,6 @@ export interface Unit {
 export interface Subject {
   id: string;
   name: string;
-  type?: 'AT' | 'BT' | 'GENERAL';
   units: Unit[];
 }
 
@@ -46,24 +55,15 @@ export interface ClassGrade {
   subjects: Subject[];
 }
 
-export interface QuestionType {
-  id: string;
-  marks: number;
-  maxQuestions: number;
-}
-
-export interface PaperType {
-  id: string;
-  name: string; // e.g., "Type 1", "Type 2"
-  questionTypes: QuestionType[];
-}
-
 export interface BlueprintEntry {
   unitId: string;
   subUnitId: string;
-  marksCategory: number;
+  formatId: string; // Links to ItemFormat
   numQuestions: number;
-  levelId: string;
+  marksPerItem: number;
+  cognitiveId: string; // CP1-CP7
+  knowledgeId: string; // B, A, P
+  estimatedTime: number; // in minutes
 }
 
 export interface SavedBlueprint {
@@ -74,13 +74,36 @@ export interface SavedBlueprint {
   subjectId: string;
   examType: string;
   paperTypeId: string;
+  maxScore: number;
+  timeAllotted: number; // total exam time in min
   entries: BlueprintEntry[];
+  // Overrides for inline edits within this blueprint
+  topicNameOverrides: Record<string, string>;
+  objectiveOverrides: Record<string, string>;
 }
 
-export interface AppState {
-  classes: ClassGrade[];
-  cognitiveLevels: CognitiveLevel[];
-  difficultyLevels: DifficultyLevel[];
-  paperTypes: PaperType[];
-  savedBlueprints: SavedBlueprint[]; // Changed from Record to Array
+/**
+ * QuestionType defines the structure of a specific marks category within a paper.
+ */
+export interface QuestionType {
+  id: string;
+  marks: number;
+  maxQuestions: number;
+}
+
+/**
+ * PaperType represents a specific exam format configuration.
+ */
+export interface PaperType {
+  id: string;
+  name: string;
+  questionTypes: QuestionType[];
+}
+
+/**
+ * DifficultyLevel is used for weightage summaries and taxonomy management.
+ */
+export interface DifficultyLevel {
+  id: string;
+  name: string;
 }
