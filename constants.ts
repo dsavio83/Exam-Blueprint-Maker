@@ -1,5 +1,5 @@
 
-import { ClassGrade, CognitiveLevel, DifficultyLevel, QuestionType, User, UserRole } from './types';
+import { ClassGrade, CognitiveLevel, DifficultyLevel, PaperType, User, UserRole } from './types';
 
 export const MOCK_USERS: User[] = [
   { username: 'admin', password: 'password123', role: UserRole.ADMIN, fullName: 'System Administrator' },
@@ -20,12 +20,40 @@ export const DIFFICULTY_LEVELS: DifficultyLevel[] = [
   { id: 'diff_prof', name: 'Profound' },
 ];
 
-export const QUESTION_TYPES: QuestionType[] = [
-  { id: 'qt_1m', marks: 1, maxQuestions: 4 }, 
-  { id: 'qt_2m', marks: 2, maxQuestions: 3 }, 
-  { id: 'qt_3m', marks: 3, maxQuestions: 3 }, 
-  { id: 'qt_5m', marks: 5, maxQuestions: 3 }, 
-  { id: 'qt_6m', marks: 6, maxQuestions: 1 }, 
+export const INITIAL_PAPER_TYPES: PaperType[] = [
+  {
+    id: 'pt_type1',
+    name: 'Type 1',
+    questionTypes: [
+      { id: 't1_q1', marks: 1, maxQuestions: 4 },
+      { id: 't1_q2', marks: 2, maxQuestions: 4 },
+      { id: 't1_q3', marks: 3, maxQuestions: 4 },
+      { id: 't1_q5', marks: 5, maxQuestions: 2 },
+      { id: 't1_q6', marks: 6, maxQuestions: 1 },
+    ]
+  },
+  {
+    id: 'pt_type2',
+    name: 'Type 2',
+    questionTypes: [
+      { id: 't2_q1', marks: 1, maxQuestions: 2 },
+      { id: 't2_q2', marks: 2, maxQuestions: 2 },
+      { id: 't2_q3', marks: 3, maxQuestions: 6 },
+      { id: 't2_q5', marks: 5, maxQuestions: 2 },
+      { id: 't2_q6', marks: 6, maxQuestions: 1 },
+    ]
+  },
+  {
+    id: 'pt_type3',
+    name: 'Type 3',
+    questionTypes: [
+      { id: 't3_q1', marks: 1, maxQuestions: 4 },
+      { id: 't3_q2', marks: 2, maxQuestions: 3 },
+      { id: 't3_q3', marks: 3, maxQuestions: 3 },
+      { id: 't3_q5', marks: 5, maxQuestions: 3 },
+      { id: 't3_q6', marks: 6, maxQuestions: 1 },
+    ]
+  }
 ];
 
 // Helper to generate subunits

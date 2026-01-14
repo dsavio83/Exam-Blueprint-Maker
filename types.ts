@@ -52,6 +52,12 @@ export interface QuestionType {
   maxQuestions: number;
 }
 
+export interface PaperType {
+  id: string;
+  name: string; // e.g., "Type 1", "Type 2"
+  questionTypes: QuestionType[];
+}
+
 export interface BlueprintEntry {
   unitId: string;
   subUnitId: string;
@@ -64,6 +70,6 @@ export interface AppState {
   classes: ClassGrade[];
   cognitiveLevels: CognitiveLevel[];
   difficultyLevels: DifficultyLevel[];
-  questionTypes: QuestionType[];
+  paperTypes: PaperType[];
   savedBlueprints: Record<string, BlueprintEntry[]>;
 }
