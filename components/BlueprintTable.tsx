@@ -35,24 +35,28 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({
   if (!subject) return <div className="p-8 text-center text-slate-500">Please select a class or subject.</div>;
 
   const getEntry = (unitId: string, subUnitId: string, marks: number) => {
-    return entries.find(e => e.unitId === unitId && e.subUnitId === subUnitId && e.marksCategory === marks);
+    // Fix: marksCategory does not exist on BlueprintEntry, using marksPerItem
+    return entries.find(e => e.unitId === unitId && e.subUnitId === subUnitId && e.marksPerItem === marks);
   };
 
   const calculateSubUnitTotal = (unitId: string, subUnitId: string) => {
     return entries
       .filter(e => e.unitId === unitId && e.subUnitId === subUnitId)
-      .reduce((sum, e) => sum + (e.numQuestions * e.marksCategory), 0);
+      // Fix: marksCategory does not exist on BlueprintEntry, using marksPerItem
+      .reduce((sum, e) => sum + (e.numQuestions * e.marksPerItem), 0);
   };
 
   const calculateUnitTotal = (unitId: string) => {
     return entries
       .filter(e => e.unitId === unitId)
-      .reduce((sum, e) => sum + (e.numQuestions * e.marksCategory), 0);
+      // Fix: marksCategory does not exist on BlueprintEntry, using marksPerItem
+      .reduce((sum, e) => sum + (e.numQuestions * e.marksPerItem), 0);
   };
 
   const visibleUnitIds = subject.units.map(u => u.id);
   const visibleEntries = entries.filter(e => visibleUnitIds.includes(e.unitId));
-  const grandTotal = visibleEntries.reduce((sum, e) => sum + (e.numQuestions * e.marksCategory), 0);
+  // Fix: marksCategory does not exist on BlueprintEntry, using marksPerItem
+  const grandTotal = visibleEntries.reduce((sum, e) => sum + (e.numQuestions * e.marksPerItem), 0);
 
   const handlePrint = () => {
     window.print();
@@ -113,11 +117,13 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({
                     <td className="p-3 text-center bg-indigo-50 font-black border print:bg-white print:border-slate-300">{calculateSubUnitTotal(unit.id, sub.id)}</td>
                     {questionTypes.map(qt => {
                       const entry = getEntry(unit.id, sub.id, qt.marks);
-                      const level = cognitiveLevels.find(l => l.id === entry?.levelId);
+                      // Fix: levelId does not exist on BlueprintEntry, using cognitiveId
+                      const level = cognitiveLevels.find(l => l.id === entry?.cognitiveId);
                       return (
                         <td key={qt.id} className="p-1 text-center border h-14 w-14 print:border-slate-300">
                           {entry && (
-                            <div className={`h-full flex flex-col justify-center items-center rounded border ${LEVEL_COLORS[entry.levelId] || 'bg-slate-100 border-slate-300'} print:border-none print:bg-transparent`}>
+                            // Fix: levelId does not exist on BlueprintEntry, using formatId for color mapping as per LEVEL_COLORS definition
+                            <div className={`h-full flex flex-col justify-center items-center rounded border ${LEVEL_COLORS[entry.formatId] || 'bg-slate-100 border-slate-300'} print:border-none print:bg-transparent`}>
                               {/* Screen View */}
                               <input 
                                 type="number" 
@@ -145,7 +151,8 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({
                   <td colSpan={2} className="p-2 text-right uppercase tracking-widest text-[10px] border print:border-slate-300">Unit Total:</td>
                   <td className="p-2 border-r print:border-slate-300">{calculateUnitTotal(unit.id)}</td>
                   {questionTypes.map(qt => {
-                     const count = entries.filter(e => e.unitId === unit.id && e.marksCategory === qt.marks).reduce((s, e) => s + e.numQuestions, 0);
+                     // Fix: marksCategory does not exist on BlueprintEntry, using marksPerItem
+                     const count = entries.filter(e => e.unitId === unit.id && e.marksPerItem === qt.marks).reduce((s, e) => s + e.numQuestions, 0);
                      return <td key={qt.id} className="p-2 text-indigo-200 print:text-black border print:border-slate-300">{count || ''}</td>;
                   })}
                 </tr>
@@ -154,7 +161,8 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({
             <tr className="bg-slate-100 font-black text-center text-slate-900 border-t-4 border-slate-800 print:border-t-2 print:border-black print:bg-white">
               <td colSpan={3} className="p-4 text-right text-base border print:border-slate-300">Grand Total:</td>
               {questionTypes.map(qt => {
-                const count = visibleEntries.filter(e => e.marksCategory === qt.marks).reduce((s, e) => s + e.numQuestions, 0);
+                // Fix: marksCategory does not exist on BlueprintEntry, using marksPerItem
+                const count = visibleEntries.filter(e => e.marksPerItem === qt.marks).reduce((s, e) => s + e.numQuestions, 0);
                 return <td key={qt.id} className="p-4 border-l text-lg border print:border-slate-300">{count}</td>;
               })}
             </tr>

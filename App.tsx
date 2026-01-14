@@ -79,28 +79,41 @@ const App: React.FC = () => {
   };
 
   const handleUpdateEntry = (update: BlueprintEntry | null, index: number) => {
-    if (!activeBlueprint) return;
-    const newEntries = [...activeBlueprint.entries];
-    if (update === null) {
-      newEntries.splice(index, 1);
-    } else {
-      newEntries[index] = update;
-    }
-    setActiveBlueprint({ ...activeBlueprint, entries: newEntries });
+    setActiveBlueprint(prev => {
+      if (!prev) return null;
+      const newEntries = [...prev.entries];
+      if (update === null) {
+        newEntries.splice(index, 1);
+      } else {
+        newEntries[index] = update;
+      }
+      return { ...prev, entries: newEntries };
+    });
   };
 
   const handleAddEntry = (entry: BlueprintEntry) => {
-    if (!activeBlueprint) return;
-    setActiveBlueprint({ ...activeBlueprint, entries: [...activeBlueprint.entries, entry] });
+    setActiveBlueprint(prev => {
+      if (!prev) return null;
+      return { ...prev, entries: [...prev.entries, entry] };
+    });
+  };
+
+  const handleSetEntries = (entries: BlueprintEntry[]) => {
+    setActiveBlueprint(prev => {
+      if (!prev) return null;
+      return { ...prev, entries };
+    });
   };
 
   const handleUpdateOverrides = (key: string, val: string, type: 'name' | 'objective') => {
-    if (!activeBlueprint) return;
-    const overrides = type === 'name' ? { ...activeBlueprint.topicNameOverrides } : { ...activeBlueprint.objectiveOverrides };
-    overrides[key] = val;
-    setActiveBlueprint({
-      ...activeBlueprint,
-      [type === 'name' ? 'topicNameOverrides' : 'objectiveOverrides']: overrides
+    setActiveBlueprint(prev => {
+      if (!prev) return null;
+      const overrides = type === 'name' ? { ...prev.topicNameOverrides } : { ...prev.objectiveOverrides };
+      overrides[key] = val;
+      return {
+        ...prev,
+        [type === 'name' ? 'topicNameOverrides' : 'objectiveOverrides']: overrides
+      };
     });
   };
 
@@ -200,6 +213,7 @@ const App: React.FC = () => {
                     paperPattern={paperTypes.find(p => p.id === activeBlueprint.paperTypeId)}
                     onUpdateEntry={handleUpdateEntry}
                     onAddEntry={handleAddEntry}
+                    onSetEntries={handleSetEntries}
                     onUpdateOverrides={handleUpdateOverrides}
                  />
                )}

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Subject, BlueprintEntry, SavedBlueprint, PaperType } from '../types';
 import { COGNITIVE_PROCESSES, KNOWLEDGE_LEVELS, ITEM_FORMATS } from '../constants';
@@ -8,6 +9,7 @@ interface AnalysisReportProps {
   paperPattern?: PaperType;
   onUpdateEntry: (entry: BlueprintEntry | null, index: number) => void;
   onAddEntry: (entry: BlueprintEntry) => void;
+  onSetEntries: (entries: BlueprintEntry[]) => void;
   onUpdateOverrides: (key: string, val: string, type: 'name' | 'objective') => void;
 }
 
@@ -19,7 +21,7 @@ const VerticalHeader: React.FC<{ children: React.ReactNode }> = ({ children }) =
   </th>
 );
 
-const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, paperPattern, onUpdateEntry, onAddEntry, onUpdateOverrides }) => {
+const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, paperPattern, onUpdateEntry, onAddEntry, onSetEntries, onUpdateOverrides }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'matrix' | 'summaries'>('matrix');
 
@@ -51,77 +53,100 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
     }
     if (!confirm("This will clear your current assignments and generate a new distribution based on the 30/50/20 rule. Proceed?")) return;
 
-    // Clear all entries first
-    entries.forEach((_, idx) => onUpdateEntry(null, 0));
-
-    const newEntries: BlueprintEntry[] = [];
-    const units = subject.units;
-    let unitIdx = 0;
-
-    // Distribute for each Question Type category in the pattern
+    // We will build a complete list of slots to fill from the pattern
+    interface Slot {
+      marks: number;
+    }
+    const allSlots: Slot[] = [];
     paperPattern.questionTypes.forEach(qt => {
-      const marks = qt.marks;
-      const totalToAssign = qt.maxQuestions;
-
-      // Knowledge level quotas for this category
-      const quota = {
-        B: Math.round(totalToAssign * 0.3),
-        A: Math.round(totalToAssign * 0.5),
-        P: totalToAssign - Math.round(totalToAssign * 0.3) - Math.round(totalToAssign * 0.5)
-      };
-
-      let assignedInCat = 0;
-      
-      // Knowledge Distribution
-      (['B', 'A', 'P'] as const).forEach(kCode => {
-        const kId = KNOWLEDGE_LEVELS.find(k => k.code === kCode)?.id || KNOWLEDGE_LEVELS[0].id;
-        const count = quota[kCode];
-
-        for (let i = 0; i < count; i++) {
-          const unit = units[unitIdx % units.length];
-          const subUnit = unit.subUnits[Math.floor(Math.random() * unit.subUnits.length)];
-          const cog = COGNITIVE_PROCESSES[Math.floor(Math.random() * COGNITIVE_PROCESSES.length)];
-          const format = ITEM_FORMATS.find(f => {
-             if (marks === 1) return f.type === 'SR';
-             if (marks <= 3) return f.type === 'CRS';
-             return f.type === 'CRL';
-          }) || ITEM_FORMATS[0];
-
-          newEntries.push({
-            unitId: unit.id,
-            subUnitId: subUnit.id,
-            formatId: format.id,
-            numQuestions: 1,
-            marksPerItem: marks,
-            cognitiveId: cog.id,
-            knowledgeId: kId,
-            estimatedTime: marks * 2
-          });
-          unitIdx++;
-          assignedInCat++;
-        }
-      });
-
-      // Cleanup if rounding left some unassigned
-      while(assignedInCat < totalToAssign) {
-          const unit = units[unitIdx % units.length];
-          const subUnit = unit.subUnits[0];
-          newEntries.push({
-            unitId: unit.id,
-            subUnitId: subUnit.id,
-            formatId: ITEM_FORMATS[0].id,
-            numQuestions: 1,
-            marksPerItem: marks,
-            cognitiveId: COGNITIVE_PROCESSES[0].id,
-            knowledgeId: KNOWLEDGE_LEVELS[1].id,
-            estimatedTime: marks * 2
-          });
-          assignedInCat++;
-          unitIdx++;
+      for (let i = 0; i < qt.maxQuestions; i++) {
+        allSlots.push({ marks: qt.marks });
       }
     });
 
-    newEntries.forEach(e => onAddEntry(e));
+    // Shuffle slots slightly to mix mark distribution across units
+    const shuffledSlots = [...allSlots].sort(() => Math.random() - 0.5);
+
+    // Goal: 30% Basic, 50% Average, 20% Profound (BY MARKS)
+    const targetMarksB = Math.round(blueprint.maxScore * 0.30);
+    const targetMarksA = Math.round(blueprint.maxScore * 0.50);
+    const targetMarksP = blueprint.maxScore - targetMarksB - targetMarksA;
+
+    const bSlots: Slot[] = [];
+    const aSlots: Slot[] = [];
+    const pSlots: Slot[] = [];
+    let currentMarksB = 0;
+    let currentMarksA = 0;
+
+    // Greedily assign shuffled slots to categories to meet mark targets
+    shuffledSlots.forEach(slot => {
+      if (currentMarksB + slot.marks <= targetMarksB + 2) { // Allow small tolerance
+        bSlots.push(slot);
+        currentMarksB += slot.marks;
+      } else if (currentMarksA + slot.marks <= targetMarksA + 2) {
+        aSlots.push(slot);
+        currentMarksA += slot.marks;
+      } else {
+        pSlots.push(slot);
+      }
+    });
+
+    const newEntries: BlueprintEntry[] = [];
+    const allSubUnits: { uId: string; sId: string }[] = [];
+    subject.units.forEach(u => {
+      u.subUnits.forEach(s => {
+        allSubUnits.push({ uId: u.id, sId: s.id });
+      });
+    });
+
+    if (allSubUnits.length === 0) return;
+
+    let subUnitPointer = 0;
+
+    const createEntriesForLevel = (slots: Slot[], kCode: 'B' | 'A' | 'P') => {
+      const kId = KNOWLEDGE_LEVELS.find(k => k.code === kCode)?.id || KNOWLEDGE_LEVELS[0].id;
+      slots.forEach(slot => {
+        const subUnit = allSubUnits[subUnitPointer % allSubUnits.length];
+        const cog = COGNITIVE_PROCESSES[Math.floor(Math.random() * COGNITIVE_PROCESSES.length)];
+        const format = ITEM_FORMATS.find(f => {
+           if (slot.marks === 1) return f.type === 'SR';
+           if (slot.marks <= 3) return f.type === 'CRS';
+           return f.type === 'CRL';
+        }) || ITEM_FORMATS[0];
+
+        // Check if an entry already exists for this exact combination in this set
+        const existing = newEntries.find(e => 
+            e.unitId === subUnit.uId && 
+            e.subUnitId === subUnit.sId && 
+            e.cognitiveId === cog.id && 
+            e.knowledgeId === kId && 
+            e.marksPerItem === slot.marks
+        );
+
+        if (existing) {
+          existing.numQuestions += 1;
+          existing.estimatedTime += (slot.marks * 2);
+        } else {
+          newEntries.push({
+            unitId: subUnit.uId,
+            subUnitId: subUnit.sId,
+            formatId: format.id,
+            numQuestions: 1,
+            marksPerItem: slot.marks,
+            cognitiveId: cog.id,
+            knowledgeId: kId,
+            estimatedTime: slot.marks * 2
+          });
+        }
+        subUnitPointer++;
+      });
+    };
+
+    createEntriesForLevel(bSlots, 'B');
+    createEntriesForLevel(aSlots, 'A');
+    createEntriesForLevel(pSlots, 'P');
+
+    onSetEntries(newEntries);
   };
 
   const getSubUnitEntries = (uId: string, sId: string) => entries.filter(e => e.unitId === uId && e.subUnitId === sId);
@@ -135,7 +160,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
         <div className="flex justify-between border-b border-slate-100 pb-1"><span>Target Score</span> <span className="text-indigo-600">: {blueprint.maxScore}</span></div>
         <div className="flex justify-between border-b border-slate-100 pb-1"><span>Actual Score</span> <span className="text-indigo-600">: {totalScore}</span></div>
         <div className="flex justify-between border-b border-slate-100 pb-1"><span>Examination</span> <span className="text-indigo-600">: {blueprint.examType}</span></div>
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Status</span> <span className={totalScore === blueprint.maxScore ? 'text-emerald-600' : 'text-amber-500'}>: {totalScore === blueprint.maxScore ? 'COMPLETE' : 'IN-PROGRESS'}</span></div>
+        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Status</span> <span className={Math.abs(totalScore - blueprint.maxScore) <= 1 ? 'text-emerald-600' : 'text-amber-500'}>: {Math.abs(totalScore - blueprint.maxScore) <= 1 ? 'COMPLETE' : 'IN-PROGRESS'}</span></div>
       </div>
     </div>
   );
@@ -207,33 +232,32 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
                                  {blueprint.topicNameOverrides[unit.id] || unit.name}
                               </td>
                             )}
-                            <td className="p-3 border-r border-slate-300 italic text-slate-500">
+                            <td className="p-3 border-r border-slate-300 italic text-slate-500 text-[9px]">
                               {blueprint.objectiveOverrides[sub.id] || sub.learningObjective}
                             </td>
                             <td className="p-3 border-r border-slate-300 font-bold text-slate-800">{sub.name}</td>
                             {COGNITIVE_PROCESSES.map(cp => {
-                              // Fix: Remove the generic type argument from the reduce method and type the accumulator parameter instead to avoid TSX parsing conflicts.
-                              const eIndices = entries.reduce((acc: number[], ent, idx) => {
+                              const matchingIndices = entries.reduce((acc: number[], ent, idx) => {
                                 if (ent.unitId === unit.id && ent.subUnitId === sub.id && ent.cognitiveId === cp.id) acc.push(idx);
                                 return acc;
                               }, []);
                               return (
                                 <td key={cp.id} className="border-r border-slate-200 text-center relative h-12">
-                                  {eIndices.map(idx => (
-                                    <div key={idx} className="bg-indigo-100 text-indigo-700 rounded p-0.5 mb-0.5 cursor-pointer hover:bg-red-100 hover:text-red-700" onClick={() => onUpdateEntry(null, idx)}>
-                                      {entries[idx].numQuestions}({entries[idx].marksPerItem})
+                                  {matchingIndices.map(idx => (
+                                    <div key={idx} className="bg-indigo-100 text-indigo-700 rounded p-0.5 mb-0.5 cursor-pointer hover:bg-red-100 hover:text-red-700 text-[8px]" onClick={() => onUpdateEntry(null, idx)}>
+                                      {entries[idx].numQuestions}({entries[idx].marksPerItem}M)
                                     </div>
                                   ))}
                                 </td>
                               );
                             })}
                             {KNOWLEDGE_LEVELS.map(kl => {
-                              const match = entries.find(ent => ent.unitId === unit.id && ent.subUnitId === sub.id && ent.knowledgeId === kl.id);
-                              return <td key={kl.id} className="border-r border-slate-200 text-center h-12 bg-indigo-50/20">{match ? match.numQuestions : ''}</td>;
+                              const matchCount = entries.filter(ent => ent.unitId === unit.id && ent.subUnitId === sub.id && ent.knowledgeId === kl.id).reduce((s, e) => s + e.numQuestions, 0);
+                              return <td key={kl.id} className="border-r border-slate-200 text-center h-12 bg-indigo-50/20">{matchCount > 0 ? matchCount : ''}</td>;
                             })}
                             {ITEM_FORMATS.map(f => {
-                              const match = entries.find(ent => ent.unitId === unit.id && ent.subUnitId === sub.id && ent.formatId === f.id);
-                              return <td key={f.id} className="border-r border-slate-200 text-center h-12 bg-emerald-50/20">{match ? match.numQuestions : ''}</td>;
+                              const matchCount = entries.filter(ent => ent.unitId === unit.id && ent.subUnitId === sub.id && ent.formatId === f.id).reduce((s, e) => s + e.numQuestions, 0);
+                              return <td key={f.id} className="border-r border-slate-200 text-center h-12 bg-emerald-50/20">{matchCount > 0 ? matchCount : ''}</td>;
                             })}
                             <td className="p-1 border-r border-slate-300 text-center bg-slate-50">{subTime || '-'}</td>
                             <td className="p-1 border-r border-slate-300 text-center bg-slate-50">{subItems || '-'}</td>
@@ -262,7 +286,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
                <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200">
                   <h4 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-6 flex justify-between">
-                    <span>Knowledge Level Goals</span>
+                    <span>Knowledge Level Goals (by Marks)</span>
                     <span className="text-slate-400">Target: 30 / 50 / 20</span>
                   </h4>
                   <div className="space-y-4">
@@ -286,7 +310,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
                </div>
 
                <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200">
-                  <h4 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-6">Pattern Adherence</h4>
+                  <h4 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-6">Pattern Check (Question Count)</h4>
                   <div className="grid grid-cols-2 gap-4">
                      {patternStatus.map(p => (
                        <div key={p.id} className={`p-4 rounded-2xl border-2 flex flex-col items-center bg-white ${p.assigned === p.maxQuestions ? 'border-emerald-500' : 'border-slate-100'}`}>
