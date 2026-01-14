@@ -1,27 +1,41 @@
 
 import React, { useState } from 'react';
-import { ClassGrade, CognitiveLevel, QuestionType, Subject } from '../types';
+import { ClassGrade, CognitiveLevel, DifficultyLevel, QuestionType, Subject, Unit } from '../types';
 
 interface SettingsManagerProps {
+  view: 'exam-types' | 'class-subject' | 'unit-subunit' | 'cognitive';
   classes: ClassGrade[];
   levels: CognitiveLevel[];
+  difficultyLevels: DifficultyLevel[];
   questionTypes: QuestionType[];
   updateClasses: (c: ClassGrade[]) => void;
   updateLevels: (l: CognitiveLevel[]) => void;
+  updateDifficulty: (d: DifficultyLevel[]) => void;
   updateQuestionTypes: (qt: QuestionType[]) => void;
 }
 
 const SettingsManager: React.FC<SettingsManagerProps> = ({ 
-  classes, levels, questionTypes, updateClasses, updateLevels, updateQuestionTypes 
+  view,
+  classes, levels, difficultyLevels, questionTypes, 
+  updateClasses, updateLevels, updateDifficulty, updateQuestionTypes 
 }) => {
-  const [activeTab, setActiveTab] = useState<'classes' | 'levels' | 'marks'>('classes');
   
-  // States for forms
-  const [newClassName, setNewClassName] = useState('');
-  const [newLevelName, setNewLevelName] = useState('');
-  const [newLevelDesc, setNewLevelDesc] = useState('');
+  // --- PAPER TYPES (Exam Config) ---
   const [newMark, setNewMark] = useState(1);
-  const [maxQ, setMaxQ] = useState(5);
+  const [maxQ, setMaxQ] = useState(4);
+
+  const addQuestionType = () => {
+    if (questionTypes.some(qt => qt.marks === newMark)) {
+      alert("Marks category already exists");
+      return;
+    }
+    updateQuestionTypes([...questionTypes, { id: `qt_${Date.now()}`, marks: newMark, maxQuestions: maxQ }]);
+  };
+
+  // --- CLASS & SUBJECT ---
+  const [newClassName, setNewClassName] = useState('');
+  const [selectedClassForSub, setSelectedClassForSub] = useState('');
+  const [newSubjectName, setNewSubjectName] = useState('');
 
   const addClass = () => {
     if (!newClassName.trim()) return;
@@ -29,132 +43,294 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
     setNewClassName('');
   };
 
-  const addSubject = (classId: string, name: string) => {
-    if (!name.trim()) return;
-    updateClasses(classes.map(c => c.id === classId ? { ...c, subjects: [...c.subjects, { id: `s_${Date.now()}`, name: name.trim(), units: [] }] } : c));
+  const addSubject = () => {
+    if (!newSubjectName.trim() || !selectedClassForSub) return;
+    updateClasses(classes.map(c => 
+      c.id === selectedClassForSub 
+        ? { ...c, subjects: [...c.subjects, { id: `s_${Date.now()}`, name: newSubjectName.trim(), units: [] }] }
+        : c
+    ));
+    setNewSubjectName('');
   };
 
-  const addLevel = () => {
-    if (!newLevelName.trim()) return;
-    updateLevels([...levels, { id: `l_${Date.now()}`, name: newLevelName.toUpperCase(), description: newLevelDesc }]);
-    setNewLevelName('');
-    setNewLevelDesc('');
+  // --- UNIT & SUBUNIT (Hierarchical) ---
+  const [selClassUnit, setSelClassUnit] = useState('');
+  const [selSubUnit, setSelSubUnit] = useState('');
+  const [selUnitSub, setSelUnitSub] = useState('');
+  
+  const [newUnitName, setNewUnitName] = useState('');
+  const [newSubUnitName, setNewSubUnitName] = useState('');
+
+  const activeSubjectsForUnit = classes.find(c => c.id === selClassUnit)?.subjects || [];
+  const activeUnitsForSub = activeSubjectsForUnit.find(s => s.id === selSubUnit)?.units || [];
+
+  const addUnit = () => {
+    if (!newUnitName.trim() || !selClassUnit || !selSubUnit) return;
+    updateClasses(classes.map(c => c.id === selClassUnit ? {
+      ...c,
+      subjects: c.subjects.map(s => s.id === selSubUnit ? {
+        ...s,
+        units: [...s.units, { id: `u_${Date.now()}`, name: newUnitName.trim(), subUnits: [] }]
+      } : s)
+    } : c));
+    setNewUnitName('');
   };
 
-  const addMarkType = () => {
-    updateQuestionTypes([...questionTypes, { id: `m_${Date.now()}`, marks: newMark, maxQuestions: maxQ }]);
+  const addSubUnit = () => {
+    if (!newSubUnitName.trim() || !selClassUnit || !selSubUnit || !selUnitSub) return;
+    updateClasses(classes.map(c => c.id === selClassUnit ? {
+      ...c,
+      subjects: c.subjects.map(s => s.id === selSubUnit ? {
+        ...s,
+        units: s.units.map(u => u.id === selUnitSub ? {
+          ...u,
+          subUnits: [...u.subUnits, { id: `sub_${Date.now()}`, name: newSubUnitName.trim() }]
+        } : u)
+      } : s)
+    } : c));
+    setNewSubUnitName('');
   };
+
+  // --- TAXONOMY (Cognitive & Difficulty) ---
+  const [newCogName, setNewCogName] = useState('');
+  const [newCogDesc, setNewCogDesc] = useState('');
+  const [newDiffName, setNewDiffName] = useState('');
+
+  const addCognitive = () => {
+    if (!newCogName) return;
+    updateLevels([...levels, { id: `cog_${Date.now()}`, name: newCogName.toUpperCase(), description: newCogDesc }]);
+    setNewCogName(''); setNewCogDesc('');
+  };
+
+  const addDifficulty = () => {
+    if (!newDiffName) return;
+    updateDifficulty([...difficultyLevels, { id: `diff_${Date.now()}`, name: newDiffName }]);
+    setNewDiffName('');
+  };
+
+  const SectionHeader = ({ title, icon }: { title: string, icon: any }) => (
+    <div className="flex items-center gap-2 mb-6 pb-2 border-b border-slate-200">
+      <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">{icon}</div>
+      <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+    </div>
+  );
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden min-h-[500px]">
-      <div className="flex bg-slate-50 border-b border-slate-200">
-        {(['classes', 'levels', 'marks'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-4 px-6 text-sm font-bold uppercase tracking-wider transition-all ${activeTab === tab ? 'bg-white text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            {tab === 'classes' ? 'Classes' : tab === 'levels' ? 'Cognitive Levels' : 'Mark Groups'}
-          </button>
-        ))}
-      </div>
-
-      <div className="p-8">
-        {activeTab === 'classes' && (
-          <div className="space-y-8">
-            <div className="flex gap-4">
-              <input 
-                className="flex-1 p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" 
-                placeholder="Class Name (e.g., 10th Standard)"
-                value={newClassName}
-                onChange={e => setNewClassName(e.target.value)}
-              />
-              <button onClick={addClass} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Add</button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {classes.map(c => (
-                <div key={c.id} className="p-5 border border-slate-100 bg-slate-50 rounded-2xl">
-                  <h4 className="font-bold text-slate-800 text-lg mb-3 flex justify-between">
-                    {c.name}
-                    <button onClick={() => updateClasses(classes.filter(cls => cls.id !== c.id))} className="text-red-400 hover:text-red-600 text-xs uppercase font-bold">Delete</button>
-                  </h4>
-                  <div className="space-y-2 mb-4">
-                    {c.subjects.map(s => (
-                      <div key={s.id} className="bg-white p-2 rounded-lg text-sm border border-slate-200 flex justify-between items-center shadow-sm">
-                        {s.name}
-                        <button onClick={() => updateClasses(classes.map(cls => cls.id === c.id ? {...cls, subjects: cls.subjects.filter(subj => subj.id !== s.id)} : cls))} className="text-slate-400 hover:text-red-500">×</button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input id={`subj-${c.id}`} className="flex-1 p-2 text-xs border rounded-lg" placeholder="New Subject" />
-                    <button 
-                      onClick={() => {
-                        const input = document.getElementById(`subj-${c.id}`) as HTMLInputElement;
-                        addSubject(c.id, input.value);
-                        input.value = '';
-                      }}
-                      className="bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-bold"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              ))}
+    <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-6 min-h-[60vh]">
+      
+      {/* --- EXAM TYPES VIEW --- */}
+      {view === 'exam-types' && (
+        <div>
+          <SectionHeader 
+            title="Question Paper Types" 
+            icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>} 
+          />
+          <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8">
+            <h3 className="text-sm font-bold uppercase text-slate-500 mb-4">Add Configuration (Type 1, 2, 3...)</h3>
+            <div className="flex flex-wrap gap-4 items-end">
+               <div className="space-y-1">
+                 <label className="text-xs font-bold text-slate-700">Question Count</label>
+                 <input type="number" min="1" className="p-3 border rounded-lg w-32" value={maxQ} onChange={e => setMaxQ(Number(e.target.value))} />
+               </div>
+               <div className="space-y-1">
+                 <label className="text-xs font-bold text-slate-700">Marks per Q</label>
+                 <input type="number" min="1" className="p-3 border rounded-lg w-32" value={newMark} onChange={e => setNewMark(Number(e.target.value))} />
+               </div>
+               <button onClick={addQuestionType} className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-indigo-700">Add Pattern</button>
             </div>
           </div>
-        )}
-
-        {activeTab === 'levels' && (
-          <div className="space-y-6">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 bg-indigo-50 rounded-2xl border border-indigo-100">
-               <input className="p-3 border rounded-xl outline-none" placeholder="Code (e.g. K1)" value={newLevelName} onChange={e => setNewLevelName(e.target.value)} />
-               <input className="p-3 border rounded-xl outline-none" placeholder="Description" value={newLevelDesc} onChange={e => setNewLevelDesc(e.target.value)} />
-               <button onClick={addLevel} className="bg-indigo-600 text-white rounded-xl font-bold">Add</button>
-             </div>
-             <div className="grid grid-cols-1 gap-3">
-               {levels.map(l => (
-                 <div key={l.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-                   <div>
-                     <span className="font-bold text-indigo-600 mr-4">{l.name}</span>
-                     <span className="text-slate-500 text-sm">{l.description}</span>
-                   </div>
-                   <button onClick={() => updateLevels(levels.filter(lvl => lvl.id !== l.id))} className="text-red-400 hover:text-red-600">
-                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                   </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+             {questionTypes.map(qt => (
+               <div key={qt.id} className="bg-white p-4 border border-slate-200 rounded-xl flex justify-between items-center shadow-sm">
+                 <div>
+                   <div className="text-lg font-black text-slate-800">{qt.maxQuestions} × {qt.marks} Marks</div>
+                   <div className="text-xs text-slate-500 font-bold">Total: {qt.maxQuestions * qt.marks} Marks</div>
                  </div>
-               ))}
+                 <button onClick={() => updateQuestionTypes(questionTypes.filter(q => q.id !== qt.id))} className="text-red-400 hover:text-red-600">×</button>
+               </div>
+             ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- CLASS & SUBJECT VIEW --- */}
+      {view === 'class-subject' && (
+        <div>
+          <SectionHeader 
+             title="Classes & Subjects" 
+             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>}
+          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Add Class */}
+            <div className="space-y-4">
+               <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                  <h3 className="text-xs font-bold uppercase text-indigo-600 mb-2">Create New Class</h3>
+                  <div className="flex gap-2">
+                    <input className="flex-1 p-2 border rounded-lg text-sm" placeholder="Class Name" value={newClassName} onChange={e => setNewClassName(e.target.value)} />
+                    <button onClick={addClass} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Add</button>
+                  </div>
+               </div>
+               <div className="space-y-2">
+                 {classes.map(c => (
+                   <div key={c.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg">
+                      <span className="font-bold">{c.name}</span>
+                      <button onClick={() => updateClasses(classes.filter(cl => cl.id !== c.id))} className="text-red-400 text-xs uppercase font-bold">Delete</button>
+                   </div>
+                 ))}
+               </div>
+            </div>
+
+            {/* Add Subject */}
+            <div className="space-y-4">
+               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                  <h3 className="text-xs font-bold uppercase text-emerald-600 mb-2">Add Subject to Class</h3>
+                  <div className="space-y-2">
+                    <select className="w-full p-2 border rounded-lg text-sm bg-white" value={selectedClassForSub} onChange={e => setSelectedClassForSub(e.target.value)}>
+                       <option value="">Select Class</option>
+                       {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <div className="flex gap-2">
+                      <input className="flex-1 p-2 border rounded-lg text-sm" placeholder="Subject Name" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
+                      <button onClick={addSubject} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Add</button>
+                    </div>
+                  </div>
+               </div>
+               
+               {selectedClassForSub && (
+                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <h4 className="text-xs font-bold uppercase text-slate-400 mb-2">Subjects in Selected Class</h4>
+                    <div className="space-y-1">
+                       {classes.find(c => c.id === selectedClassForSub)?.subjects.map(s => (
+                         <div key={s.id} className="text-sm p-2 bg-white rounded border border-slate-200 flex justify-between">
+                            {s.name}
+                            <button onClick={() => updateClasses(classes.map(c => c.id === selectedClassForSub ? {...c, subjects: c.subjects.filter(sub => sub.id !== s.id)} : c))} className="text-red-400">×</button>
+                         </div>
+                       )) || <div className="text-sm text-slate-400 italic">No subjects yet</div>}
+                    </div>
+                 </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- UNIT & SUBUNIT VIEW --- */}
+      {view === 'unit-subunit' && (
+        <div>
+          <SectionHeader 
+             title="Units & Subunits (Hierarchy)" 
+             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>}
+          />
+          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-orange-800 uppercase">1. Select Class</label>
+               <select className="w-full p-2 border border-orange-200 rounded-lg text-sm bg-white" value={selClassUnit} onChange={e => { setSelClassUnit(e.target.value); setSelSubUnit(''); setSelUnitSub(''); }}>
+                 <option value="">-- Class --</option>
+                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+               </select>
+             </div>
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-orange-800 uppercase">2. Select Subject</label>
+               <select className="w-full p-2 border border-orange-200 rounded-lg text-sm bg-white" value={selSubUnit} onChange={e => { setSelSubUnit(e.target.value); setSelUnitSub(''); }} disabled={!selClassUnit}>
+                 <option value="">-- Subject --</option>
+                 {activeSubjectsForUnit.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+               </select>
+             </div>
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-orange-800 uppercase">3. Select Unit (For Subunit)</label>
+               <select className="w-full p-2 border border-orange-200 rounded-lg text-sm bg-white" value={selUnitSub} onChange={e => setSelUnitSub(e.target.value)} disabled={!selSubUnit}>
+                 <option value="">-- Unit (Optional) --</option>
+                 {activeUnitsForSub.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+               </select>
              </div>
           </div>
-        )}
 
-        {activeTab === 'marks' && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap gap-4 items-end p-5 bg-slate-50 rounded-2xl border border-slate-200">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Marks</label>
-                <input type="number" className="p-3 border rounded-xl w-32" value={newMark} onChange={e => setNewMark(Number(e.target.value))} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Max Q</label>
-                <input type="number" className="p-3 border rounded-xl w-32" value={maxQ} onChange={e => setMaxQ(Number(e.target.value))} />
-              </div>
-              <button onClick={addMarkType} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold">Add Group</button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className={`p-4 rounded-xl border transition-all ${selSubUnit ? 'bg-white border-slate-200' : 'bg-slate-50 border-transparent opacity-50'}`}>
+               <h3 className="font-bold text-slate-800 mb-3">Add Unit</h3>
+               <div className="flex gap-2">
+                 <input className="flex-1 p-2 border rounded-lg text-sm" placeholder="Unit Name" value={newUnitName} onChange={e => setNewUnitName(e.target.value)} disabled={!selSubUnit} />
+                 <button onClick={addUnit} disabled={!selSubUnit} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Add</button>
+               </div>
+               <div className="mt-4 space-y-1 max-h-40 overflow-y-auto">
+                 {activeUnitsForSub.map(u => (
+                   <div key={u.id} className="text-sm p-2 bg-slate-50 rounded border border-slate-100 flex justify-between">
+                     {u.name}
+                     <button onClick={() => updateClasses(classes.map(c => c.id === selClassUnit ? {...c, subjects: c.subjects.map(s => s.id === selSubUnit ? {...s, units: s.units.filter(unit => unit.id !== u.id)} : s)} : c))} className="text-red-300 hover:text-red-500">×</button>
+                   </div>
+                 ))}
+               </div>
             </div>
-            <div className="flex flex-wrap gap-4">
-              {questionTypes.map(qt => (
-                <div key={qt.id} className="px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm flex flex-col items-center">
-                  <span className="text-2xl font-black text-slate-800">{qt.marks}</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Marks</span>
-                  <div className="mt-2 text-xs font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded">Max Q: {qt.maxQuestions}</div>
-                  <button onClick={() => updateQuestionTypes(questionTypes.filter(q => q.id !== qt.id))} className="mt-3 text-red-300 hover:text-red-500 text-[10px] uppercase font-bold">Remove</button>
-                </div>
-              ))}
+
+            <div className={`p-4 rounded-xl border transition-all ${selUnitSub ? 'bg-white border-slate-200' : 'bg-slate-50 border-transparent opacity-50'}`}>
+               <h3 className="font-bold text-slate-800 mb-3">Add Subunit (Topic)</h3>
+               <div className="flex gap-2">
+                 <input className="flex-1 p-2 border rounded-lg text-sm" placeholder="Topic Name" value={newSubUnitName} onChange={e => setNewSubUnitName(e.target.value)} disabled={!selUnitSub} />
+                 <button onClick={addSubUnit} disabled={!selUnitSub} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Add</button>
+               </div>
+               <div className="mt-4 space-y-1 max-h-40 overflow-y-auto">
+                 {activeUnitsForSub.find(u => u.id === selUnitSub)?.subUnits.map(sub => (
+                   <div key={sub.id} className="text-sm p-2 bg-indigo-50 rounded border border-indigo-100 text-indigo-800 flex justify-between">
+                     {sub.name}
+                     <button className="text-red-300 hover:text-red-500">×</button>
+                   </div>
+                 ))}
+               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* --- TAXONOMY VIEW --- */}
+      {view === 'cognitive' && (
+        <div className="space-y-8">
+           <SectionHeader 
+             title="Taxonomy Management" 
+             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>}
+          />
+           
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Question Types (Cognitive) */}
+              <div>
+                <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Question Type (Cognitive)</h3>
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4 space-y-2">
+                   <input className="w-full p-2 border rounded text-sm" placeholder="Code (e.g. SR1, CRS2)" value={newCogName} onChange={e => setNewCogName(e.target.value)} />
+                   <input className="w-full p-2 border rounded text-sm" placeholder="Description" value={newCogDesc} onChange={e => setNewCogDesc(e.target.value)} />
+                   <button onClick={addCognitive} className="w-full bg-blue-600 text-white py-2 rounded font-bold text-sm">Add Type</button>
+                </div>
+                <div className="space-y-2">
+                   {levels.map(l => (
+                     <div key={l.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg">
+                       <div>
+                         <span className="font-bold text-blue-700 block">{l.name}</span>
+                         <span className="text-xs text-slate-500">{l.description}</span>
+                       </div>
+                       <button onClick={() => updateLevels(levels.filter(lvl => lvl.id !== l.id))} className="text-red-300 hover:text-red-500">×</button>
+                     </div>
+                   ))}
+                </div>
+              </div>
+
+              {/* Question Level (Difficulty) */}
+              <div>
+                <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Question Level (Difficulty)</h3>
+                <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 mb-4 flex gap-2">
+                   <input className="flex-1 p-2 border rounded text-sm" placeholder="Level (e.g. Basic)" value={newDiffName} onChange={e => setNewDiffName(e.target.value)} />
+                   <button onClick={addDifficulty} className="bg-purple-600 text-white px-4 py-2 rounded font-bold text-sm">Add</button>
+                </div>
+                <div className="space-y-2">
+                   {difficultyLevels.map(d => (
+                     <div key={d.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg">
+                       <span className="font-bold text-purple-700">{d.name}</span>
+                       <button onClick={() => updateDifficulty(difficultyLevels.filter(diff => diff.id !== d.id))} className="text-red-300 hover:text-red-500">×</button>
+                     </div>
+                   ))}
+                </div>
+              </div>
+           </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -82,8 +82,11 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({ subject, entries, cogni
               <th className="p-3 w-48">Lesson/Topic</th>
               <th className="p-3 w-16 bg-indigo-700">Marks</th>
               {questionTypes.map(qt => (
-                <th key={qt.id} className="p-3 font-semibold w-20">
-                  {qt.marks}M ({qt.maxQuestions})
+                <th key={qt.id} className="p-3 font-semibold w-24">
+                  <div className="flex flex-col items-center leading-tight">
+                    <span>{qt.maxQuestions} × {qt.marks}M</span>
+                    <span className="text-[10px] opacity-75 font-normal">= {qt.maxQuestions * qt.marks}</span>
+                  </div>
                 </th>
               ))}
             </tr>

@@ -6,15 +6,20 @@ export enum UserRole {
 
 export interface User {
   username: string;
-  password?: string; // Added for auth logic
+  password?: string;
   role: UserRole;
   fullName: string;
 }
 
 export interface CognitiveLevel {
   id: string;
-  name: string;
+  name: string; // e.g., SR1, CRS2
   description: string;
+}
+
+export interface DifficultyLevel {
+  id: string;
+  name: string; // Basic, Average, Profound
 }
 
 export interface SubUnit {
@@ -31,7 +36,7 @@ export interface Unit {
 export interface Subject {
   id: string;
   name: string;
-  type?: 'AT' | 'BT' | 'GENERAL'; // To handle specific Tamil AT/BT logic
+  type?: 'AT' | 'BT' | 'GENERAL';
   units: Unit[];
 }
 
@@ -58,6 +63,7 @@ export interface BlueprintEntry {
 export interface AppState {
   classes: ClassGrade[];
   cognitiveLevels: CognitiveLevel[];
+  difficultyLevels: DifficultyLevel[];
   questionTypes: QuestionType[];
   savedBlueprints: Record<string, BlueprintEntry[]>;
 }
