@@ -20,6 +20,15 @@ const LEVEL_COLORS: Record<string, string> = {
   as1: 'bg-teal-100 border-teal-200',
 };
 
+const LEVEL_PROGRESS_COLORS: Record<string, string> = {
+  sr1: 'bg-blue-500',
+  sr2: 'bg-orange-500',
+  crs1: 'bg-green-500',
+  crs2: 'bg-purple-500',
+  crl: 'bg-pink-500',
+  as1: 'bg-teal-500',
+};
+
 const BlueprintTable: React.FC<BlueprintTableProps> = ({ subject, entries, cognitiveLevels, questionTypes, onUpdateEntry, weightNote }) => {
   if (!subject) return <div className="p-8 text-center text-slate-500">Please select a class or subject.</div>;
 
@@ -138,11 +147,17 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({ subject, entries, cogni
             {summaryByLevel.map(s => (
               <div key={s.id} className="space-y-1">
                 <div className="flex justify-between text-xs font-bold">
-                  <span>{s.name} ({s.description})</span>
+                  <span>
+                    {s.name} 
+                    <span className="text-slate-400 font-normal ml-2">({s.marks} marks)</span>
+                  </span>
                   <span>{s.percentage.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2">
-                  <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${s.percentage}%` }} />
+                  <div 
+                    className={`h-2 rounded-full transition-all duration-500 ${LEVEL_PROGRESS_COLORS[s.id] || 'bg-indigo-600'}`} 
+                    style={{ width: `${s.percentage}%` }} 
+                  />
                 </div>
               </div>
             ))}

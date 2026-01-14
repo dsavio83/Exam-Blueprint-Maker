@@ -185,7 +185,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleClearEntries = () => {
-    if (window.confirm("Are you sure you want to delete all data for this blueprint?")) {
+    if (window.confirm("Are you sure you want to clear all entries for the CURRENT blueprint view?")) {
       setBlueprintEntries([]);
     }
   };
@@ -346,8 +346,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Dangerous Action */}
       <div className="p-2">
-        <button onClick={handleClearEntries} className="w-full text-[10px] font-bold text-slate-300 hover:text-red-400 uppercase tracking-widest transition-colors py-2 border border-transparent hover:border-red-100 rounded-lg">
-          Clear Buffer
+        <button onClick={handleClearEntries} className="w-full text-[10px] font-bold text-white bg-red-400 hover:bg-red-500 uppercase tracking-widest transition-colors py-3 rounded-lg shadow-sm">
+          Clear Current Blueprint
         </button>
       </div>
     </div>
