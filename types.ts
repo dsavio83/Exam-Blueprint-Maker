@@ -66,10 +66,21 @@ export interface BlueprintEntry {
   levelId: string;
 }
 
+export interface SavedBlueprint {
+  id: string;
+  name: string;
+  timestamp: number;
+  classId: string;
+  subjectId: string;
+  examType: string;
+  paperTypeId: string;
+  entries: BlueprintEntry[];
+}
+
 export interface AppState {
   classes: ClassGrade[];
   cognitiveLevels: CognitiveLevel[];
   difficultyLevels: DifficultyLevel[];
   paperTypes: PaperType[];
-  savedBlueprints: Record<string, BlueprintEntry[]>;
+  savedBlueprints: SavedBlueprint[]; // Changed from Record to Array
 }
