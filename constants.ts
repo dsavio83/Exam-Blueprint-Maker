@@ -1,4 +1,3 @@
-
 import { ClassGrade, CognitiveLevel, KnowledgeLevel, ItemFormat, User, UserRole } from './types';
 
 export const MOCK_USERS: User[] = [
@@ -22,33 +21,36 @@ export const KNOWLEDGE_LEVELS: KnowledgeLevel[] = [
 ];
 
 export const ITEM_FORMATS: ItemFormat[] = [
-  { id: 'sr1', code: 'SR1', type: 'SR', name: 'Selected Response - Multiple Choice', abbreviation: 'MCI' },
-  { id: 'sr2', code: 'SR2', type: 'SR', name: 'Selected Response - Matching Item', abbreviation: 'MI' },
-  { id: 'crs1', code: 'CRS1', type: 'CRS', name: 'Constructed Response - Very Short Answer', abbreviation: 'VSA' },
-  { id: 'crs2', code: 'CRS2', type: 'CRS', name: 'Constructed Response - Short Answer', abbreviation: 'SA' },
-  { id: 'crl', code: 'CRL', type: 'CRL', name: 'Constructed Response - Long Answer', abbreviation: 'E' },
+  { id: 'sr1', code: 'SR1', type: 'SR', name: 'Objective Type 1', abbreviation: 'SR1' },
+  { id: 'sr2', code: 'SR2', type: 'SR', name: 'Objective Type 2', abbreviation: 'SR2' },
+  { id: 'crs1', code: 'CRS1', type: 'CRS', name: 'Short Answer (2M)', abbreviation: 'CRS1' },
+  { id: 'crs2', code: 'CRS2', type: 'CRS', name: 'Medium Answer (3-4M)', abbreviation: 'CRS2' },
+  { id: 'crl', code: 'CRL', type: 'CRL', name: 'Essay Type (5-6M)', abbreviation: 'CRL' },
 ];
 
 export const INITIAL_CLASSES: ClassGrade[] = [
   {
+    id: 'c8',
+    name: 'Class VIII',
+    subjects: [
+      { id: 'tam_at_8', name: 'Tamil AT', units: Array.from({length: 6}, (_, i) => ({ id: `u${i+1}`, name: `Unit ${i+1}`, subUnits: [{id: `s${i+1}_1`, name: `Topic ${i+1}.1`, learningObjective: 'Objective'}] })) },
+      { id: 'tam_bt_8', name: 'Tamil BT', units: Array.from({length: 3}, (_, i) => ({ id: `u${i+1}`, name: `Unit ${i+1}`, subUnits: [{id: `s${i+1}_1`, name: `Topic ${i+1}.1`, learningObjective: 'Objective'}] })) }
+    ]
+  },
+  {
+    id: 'c9',
+    name: 'Class IX',
+    subjects: [
+      { id: 'tam_at_9', name: 'Tamil AT', units: Array.from({length: 6}, (_, i) => ({ id: `u${i+1}`, name: `Unit ${i+1}`, subUnits: [{id: `s${i+1}_1`, name: `Topic ${i+1}.1`, learningObjective: 'Objective'}] })) },
+      { id: 'tam_bt_9', name: 'Tamil BT', units: Array.from({length: 3}, (_, i) => ({ id: `u${i+1}`, name: `Unit ${i+1}`, subUnits: [{id: `s${i+1}_1`, name: `Topic ${i+1}.1`, learningObjective: 'Objective'}] })) }
+    ]
+  },
+  {
     id: 'c10',
     name: 'Class X',
     subjects: [
-      {
-        id: 'tam_bt',
-        name: 'Tamil BT',
-        units: [
-          { 
-            id: 'u1', 
-            name: 'நலம் விரும்பு', 
-            subUnits: [
-              { id: 's1', name: 'அமுதசுரபி', learningObjective: 'ஆரோக்கியமான உணவு' },
-              { id: 's2', name: 'நோய் நாடி', learningObjective: 'சித்த மருத்துவத்தின் சிறப்புகள்' },
-              { id: 's3', name: 'டிஜிட்டல் உலகு', learningObjective: 'இணைய அடிமை தனம்' }
-            ] 
-          }
-        ]
-      }
+      { id: 'tam_at_10', name: 'Tamil AT', units: Array.from({length: 6}, (_, i) => ({ id: `u${i+1}`, name: `Unit ${i+1}`, subUnits: [{id: `s${i+1}_1`, name: `Topic ${i+1}.1`, learningObjective: 'Objective'}] })) },
+      { id: 'tam_bt_10', name: 'Tamil BT', units: Array.from({length: 3}, (_, i) => ({ id: `u${i+1}`, name: `Unit ${i+1}`, subUnits: [{id: `s${i+1}_1`, name: `Topic ${i+1}.1`, learningObjective: 'Objective'}] })) }
     ]
   }
 ];

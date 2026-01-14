@@ -13,481 +13,361 @@ interface AnalysisReportProps {
   onUpdateOverrides: (key: string, val: string, type: 'name' | 'objective') => void;
 }
 
-const VerticalHeader: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <th className="p-2 border border-slate-300 text-xs font-bold bg-slate-50 relative h-36 align-bottom min-w-[30px]">
-    <div className="transform -rotate-90 origin-bottom-left absolute left-1/2 bottom-2 translate-x-[-50%] whitespace-nowrap text-[10px] leading-tight w-0 tracking-tighter uppercase font-black">
-      {children}
-    </div>
-  </th>
-);
-
 const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, paperPattern, onUpdateEntry, onAddEntry, onSetEntries, onUpdateOverrides }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'matrix' | 'summaries'>('matrix');
 
-  const [newEntry, setNewEntry] = useState<BlueprintEntry>({
-    unitId: subject.units[0]?.id || '',
-    subUnitId: subject.units[0]?.subUnits[0]?.id || '',
-    formatId: ITEM_FORMATS[0].id,
-    numQuestions: 1,
-    marksPerItem: 1,
-    cognitiveId: COGNITIVE_PROCESSES[0].id,
-    knowledgeId: KNOWLEDGE_LEVELS[0].id,
-    estimatedTime: 2
-  });
-
   const { entries } = blueprint;
   const totalScore = useMemo(() => entries.reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0), [entries]);
-  const totalItems = useMemo(() => entries.reduce((s, e) => s + e.numQuestions, 0), [entries]);
-  const totalTime = useMemo(() => entries.reduce((s, e) => s + e.estimatedTime, 0), [entries]);
-
-  const patternStatus = useMemo(() => paperPattern?.questionTypes.map(qt => {
-    const assigned = entries.filter(e => e.marksPerItem === qt.marks).reduce((s, e) => s + e.numQuestions, 0);
-    return { ...qt, assigned };
-  }) || [], [paperPattern, entries]);
+  const formatColumns = useMemo(() => paperPattern?.questionTypes || [], [paperPattern]);
 
   const handleAutoGenerate = () => {
     if (!paperPattern) {
-      alert("Please select a Paper Pattern first to use auto-generation.");
+      alert("Please select a Paper Pattern first.");
       return;
     }
-    if (!confirm("This will clear your current assignments and generate a new distribution based on the 30/50/20 rule. Proceed?")) return;
+    if (!confirm("This will overwrite existing data using the V3 Term-Logic. Proceed?")) return;
 
-    // We will build a complete list of slots to fill from the pattern
-    interface Slot {
-      marks: number;
-    }
-    const allSlots: Slot[] = [];
-    paperPattern.questionTypes.forEach(qt => {
-      for (let i = 0; i < qt.maxQuestions; i++) {
-        allSlots.push({ marks: qt.marks });
+    // Rules logic:
+    // Tamil BT: 3 Units. T1: U1(100%). T2: U2(80%), U1(20%). T3: U3(70%), U2(20%), U1(10%).
+    // Tamil AT: 6 Units. T1: U1,2(100%). T2: U3,4(80%), U1,2(20%). T3: U5,6(70%), U3,4(20%), U1,2(10%).
+    const isBT = subject.name.toLowerCase().includes('bt');
+    const exam = blueprint.examType;
+    const cls = blueprint.classId;
+
+    const getUnitWeights = (): Record<number, number> => {
+      if (isBT) {
+        if (exam === 'First Term') return { 0: 1.0 };
+        if (exam === 'Second Term') return { 1: 0.8, 0: 0.2 };
+        return { 2: 0.7, 1: 0.2, 0: 0.1 };
       }
-    });
+      
+      // Tamil AT / Standard
+      if (exam === 'First Term') return { 0: 0.5, 1: 0.5 };
+      if (exam === 'Second Term') return { 2: 0.4, 3: 0.4, 0: 0.1, 1: 0.1 };
+      
+      // Class 10 SSLC has 20/20/60 distribution usually, adjusting based on prompt
+      const isClass10 = cls.includes('10') || exam.includes('SSLC');
+      if (isClass10) return { 4: 0.3, 5: 0.3, 2: 0.1, 3: 0.1, 0: 0.1, 1: 0.1 };
 
-    // Shuffle slots slightly to mix mark distribution across units
-    const shuffledSlots = [...allSlots].sort(() => Math.random() - 0.5);
-
-    // Goal: 30% Basic, 50% Average, 20% Profound (BY MARKS)
-    const targetMarksB = Math.round(blueprint.maxScore * 0.30);
-    const targetMarksA = Math.round(blueprint.maxScore * 0.50);
-    const targetMarksP = blueprint.maxScore - targetMarksB - targetMarksA;
-
-    const bSlots: Slot[] = [];
-    const aSlots: Slot[] = [];
-    const pSlots: Slot[] = [];
-    let currentMarksB = 0;
-    let currentMarksA = 0;
-
-    // Greedily assign shuffled slots to categories to meet mark targets
-    shuffledSlots.forEach(slot => {
-      if (currentMarksB + slot.marks <= targetMarksB + 2) { // Allow small tolerance
-        bSlots.push(slot);
-        currentMarksB += slot.marks;
-      } else if (currentMarksA + slot.marks <= targetMarksA + 2) {
-        aSlots.push(slot);
-        currentMarksA += slot.marks;
-      } else {
-        pSlots.push(slot);
-      }
-    });
-
-    const newEntries: BlueprintEntry[] = [];
-    const allSubUnits: { uId: string; sId: string }[] = [];
-    subject.units.forEach(u => {
-      u.subUnits.forEach(s => {
-        allSubUnits.push({ uId: u.id, sId: s.id });
-      });
-    });
-
-    if (allSubUnits.length === 0) return;
-
-    let subUnitPointer = 0;
-
-    const createEntriesForLevel = (slots: Slot[], kCode: 'B' | 'A' | 'P') => {
-      const kId = KNOWLEDGE_LEVELS.find(k => k.code === kCode)?.id || KNOWLEDGE_LEVELS[0].id;
-      slots.forEach(slot => {
-        const subUnit = allSubUnits[subUnitPointer % allSubUnits.length];
-        const cog = COGNITIVE_PROCESSES[Math.floor(Math.random() * COGNITIVE_PROCESSES.length)];
-        const format = ITEM_FORMATS.find(f => {
-           if (slot.marks === 1) return f.type === 'SR';
-           if (slot.marks <= 3) return f.type === 'CRS';
-           return f.type === 'CRL';
-        }) || ITEM_FORMATS[0];
-
-        // Check if an entry already exists for this exact combination in this set
-        const existing = newEntries.find(e => 
-            e.unitId === subUnit.uId && 
-            e.subUnitId === subUnit.sId && 
-            e.cognitiveId === cog.id && 
-            e.knowledgeId === kId && 
-            e.marksPerItem === slot.marks
-        );
-
-        if (existing) {
-          existing.numQuestions += 1;
-          existing.estimatedTime += (slot.marks * 2);
-        } else {
-          newEntries.push({
-            unitId: subUnit.uId,
-            subUnitId: subUnit.sId,
-            formatId: format.id,
-            numQuestions: 1,
-            marksPerItem: slot.marks,
-            cognitiveId: cog.id,
-            knowledgeId: kId,
-            estimatedTime: slot.marks * 2
-          });
-        }
-        subUnitPointer++;
-      });
+      // Standard T3 Class 8, 9
+      return { 4: 0.35, 5: 0.35, 2: 0.1, 3: 0.1, 0: 0.05, 1: 0.05 };
     };
 
-    createEntriesForLevel(bSlots, 'B');
-    createEntriesForLevel(aSlots, 'A');
-    createEntriesForLevel(pSlots, 'P');
+    const unitWeights = getUnitWeights();
+    const totalPossibleMarks = blueprint.maxScore;
+    
+    // Knowledge Distribution: 30/50/20
+    const targetB = Math.round(totalPossibleMarks * 0.30);
+    const targetA = Math.round(totalPossibleMarks * 0.50);
+    const targetP = totalPossibleMarks - targetB - targetA;
+
+    const allSlots: {marks: number}[] = [];
+    paperPattern.questionTypes.forEach(qt => {
+      for (let i = 0; i < qt.maxQuestions; i++) allSlots.push({ marks: qt.marks });
+    });
+
+    const sortedSlots = [...allSlots].sort((a, b) => b.marks - a.marks);
+    let currB = 0, currA = 0;
+    const newEntries: BlueprintEntry[] = [];
+    const subUnitCounters: Record<number, number> = {};
+
+    sortedSlots.forEach((slot, idx) => {
+      let kCode: 'B' | 'A' | 'P' = 'P';
+      if (currB + slot.marks <= targetB + 1) { kCode = 'B'; currB += slot.marks; }
+      else if (currA + slot.marks <= targetA + 1) { kCode = 'A'; currA += slot.marks; }
+      const kId = KNOWLEDGE_LEVELS.find(k => k.code === kCode)?.id || KNOWLEDGE_LEVELS[1].id;
+
+      const r = Math.random();
+      let acc = 0, uIdx = 0;
+      for (const [key, val] of Object.entries(unitWeights)) {
+        acc += val;
+        if (r <= acc) { uIdx = parseInt(key); break; }
+      }
+      
+      const unit = subject.units[uIdx] || subject.units[0];
+      subUnitCounters[uIdx] = (subUnitCounters[uIdx] || 0) + 1;
+      const subUnit = unit.subUnits[(subUnitCounters[uIdx] - 1) % unit.subUnits.length];
+
+      // Format Logic:
+      // SR1, SR2: all Objective
+      // CRS1: 2 marks
+      // CRS2: 3-4 marks
+      // CRL: 5-6 marks
+      let formatId = 'sr1';
+      if (slot.marks === 1) formatId = Math.random() > 0.5 ? 'sr1' : 'sr2';
+      else if (slot.marks === 2) formatId = 'crs1';
+      else if (slot.marks <= 4) formatId = 'crs2';
+      else formatId = 'crl';
+
+      const cog = COGNITIVE_PROCESSES[idx % COGNITIVE_PROCESSES.length];
+
+      const existing = newEntries.find(e => 
+        e.unitId === unit.id && e.subUnitId === subUnit.id && 
+        e.formatId === formatId && e.cognitiveId === cog.id && 
+        e.knowledgeId === kId && e.marksPerItem === slot.marks
+      );
+
+      if (existing) {
+        existing.numQuestions += 1;
+        existing.estimatedTime += (slot.marks * 2.5);
+      } else {
+        newEntries.push({
+          unitId: unit.id,
+          subUnitId: subUnit.id,
+          formatId,
+          numQuestions: 1,
+          marksPerItem: slot.marks,
+          cognitiveId: cog.id,
+          knowledgeId: kId,
+          estimatedTime: slot.marks * 2.5
+        });
+      }
+    });
 
     onSetEntries(newEntries);
   };
 
-  const getSubUnitEntries = (uId: string, sId: string) => entries.filter(e => e.unitId === uId && e.subUnitId === sId);
-
-  const ReportHeader = () => (
-    <div className="text-center border-b-4 border-indigo-600 pb-8 mb-12">
-      <h1 className="text-3xl font-black text-slate-900 uppercase tracking-[0.2em] mb-4">HS Question Paper Analysis Engine</h1>
-      <div className="grid grid-cols-2 mt-6 text-left max-w-4xl mx-auto gap-x-12 gap-y-4 font-black text-slate-700 text-sm">
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Class</span> <span className="text-indigo-600">: {blueprint.classId}</span></div>
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Subject</span> <span className="text-indigo-600">: {subject.name}</span></div>
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Target Score</span> <span className="text-indigo-600">: {blueprint.maxScore}</span></div>
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Actual Score</span> <span className="text-indigo-600">: {totalScore}</span></div>
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Examination</span> <span className="text-indigo-600">: {blueprint.examType}</span></div>
-        <div className="flex justify-between border-b border-slate-100 pb-1"><span>Status</span> <span className={Math.abs(totalScore - blueprint.maxScore) <= 1 ? 'text-emerald-600' : 'text-amber-500'}>: {Math.abs(totalScore - blueprint.maxScore) <= 1 ? 'COMPLETE' : 'IN-PROGRESS'}</span></div>
-      </div>
-    </div>
-  );
+  const getSubUnitEntryInCol = (uId: string, sId: string, marks: number) => 
+    entries.filter(e => e.unitId === uId && e.subUnitId === sId && e.marksPerItem === marks);
 
   return (
-    <div className="space-y-10">
-      {/* Top Controls */}
-      <div className="flex justify-between items-center print:hidden">
-        <div className="flex gap-4">
-           <button onClick={() => setActiveTab('matrix')} className={`px-8 py-3 rounded-2xl font-black text-sm transition-all ${activeTab === 'matrix' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-slate-400 border border-slate-200 hover:text-slate-900'}`}>1. Assignment Matrix</button>
-           <button onClick={() => setActiveTab('summaries')} className={`px-8 py-3 rounded-2xl font-black text-sm transition-all ${activeTab === 'summaries' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-slate-400 border border-slate-200 hover:text-slate-900'}`}>2. Reports Summary</button>
+    <div className="space-y-12 animate-in">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6 no-print">
+        <div className="flex bg-white p-1.5 rounded-[2rem] border border-slate-200 shadow-sm w-full md:w-auto">
+           <button onClick={() => setActiveTab('matrix')} className={`flex-1 md:flex-none px-10 py-3 rounded-3xl font-black text-sm transition-all ${activeTab === 'matrix' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-900'}`}>Assignments Matrix</button>
+           <button onClick={() => setActiveTab('summaries')} className={`flex-1 md:flex-none px-10 py-3 rounded-3xl font-black text-sm transition-all ${activeTab === 'summaries' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-900'}`}>Weightage Summary</button>
         </div>
-        <div className="flex gap-4">
-          <button onClick={handleAutoGenerate} className="bg-amber-500 text-white px-8 py-3 rounded-2xl font-black text-sm shadow-xl shadow-amber-200 flex items-center gap-2 hover:-translate-y-0.5 transition-all">
+        <div className="flex gap-4 w-full md:w-auto">
+          <button onClick={handleAutoGenerate} className="flex-1 md:flex-none bg-amber-500 text-white px-8 py-4 rounded-[2rem] font-black text-xs shadow-xl shadow-amber-200 flex items-center justify-center gap-2 hover:-translate-y-1 transition-all">
              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-             Auto-Generate (30/50/20)
+             Auto-Generate
           </button>
-          <button onClick={() => window.print()} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black text-sm shadow-xl shadow-slate-200 flex items-center gap-2">
+          <button onClick={() => window.print()} className="flex-1 md:flex-none bg-slate-900 text-white px-8 py-4 rounded-[2rem] font-black text-xs shadow-xl flex items-center justify-center gap-2">
              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-             Print All Reports
+             Print / PDF
           </button>
         </div>
       </div>
 
-      <div className="bg-white p-10 max-w-[1300px] mx-auto rounded-[3rem] shadow-2xl border border-slate-100 print:shadow-none print:border-none print:p-0 print:rounded-none">
-        
+      <div className="bg-white p-6 md:p-12 rounded-[4rem] shadow-2xl border border-slate-100 print:shadow-none print:p-0">
         {activeTab === 'matrix' ? (
-          <section className="animate-fade-in">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4">Matrix Design Proforma</h3>
-              <button onClick={() => setShowAddModal(true)} className="bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold text-xs shadow-lg shadow-emerald-600/20 print:hidden">
-                 + Manual Entry
-              </button>
-            </div>
-            
-            <div className="overflow-x-auto rounded-[2rem] border-2 border-slate-900 shadow-2xl mb-12">
-              <table className="w-full border-collapse text-[10px] font-bold leading-tight">
+          <div className="space-y-12">
+            <div className="overflow-x-auto rounded-[2rem] border-2 border-slate-900 shadow-2xl custom-scrollbar">
+              <table className="w-full border-collapse text-[11px] font-bold leading-none min-w-[1000px]">
                 <thead>
-                  <tr className="bg-slate-900 text-white">
-                    <th rowSpan={2} className="p-4 border border-slate-700 w-32 uppercase">Content Area</th>
-                    <th rowSpan={2} className="p-4 border border-slate-700 w-48 uppercase">Objective</th>
-                    <th rowSpan={2} className="p-4 border border-slate-700 w-32 uppercase">Topic</th>
-                    <th colSpan={7} className="p-2 border border-slate-700 text-center uppercase text-[9px] bg-slate-800">Cognitive Process</th>
-                    <th colSpan={3} className="p-2 border border-slate-700 text-center uppercase text-[9px] bg-indigo-900">Knowledge Level</th>
-                    <th colSpan={5} className="p-2 border border-slate-700 text-center uppercase text-[9px] bg-emerald-900">Format</th>
-                    <th rowSpan={2} className="p-2 border border-slate-700 w-8 text-center">T</th>
-                    <th rowSpan={2} className="p-2 border border-slate-700 w-8 text-center">I</th>
-                    <th rowSpan={2} className="p-2 border border-slate-700 w-8 text-center bg-indigo-600">S</th>
-                  </tr>
-                  <tr className="bg-slate-100 text-slate-900">
-                    {COGNITIVE_PROCESSES.map(cp => <VerticalHeader key={cp.id}>{cp.code}</VerticalHeader>)}
-                    {KNOWLEDGE_LEVELS.map(kl => <VerticalHeader key={kl.id}>{kl.code}</VerticalHeader>)}
-                    {ITEM_FORMATS.map(f => <VerticalHeader key={f.id}>{f.abbreviation}</VerticalHeader>)}
+                  <tr className="bg-slate-900 text-white border-b border-slate-700">
+                    <th className="p-4 w-12 text-center uppercase">#</th>
+                    <th className="p-4 w-40 text-left bg-slate-800 uppercase tracking-widest text-[10px]">Unit Name</th>
+                    <th className="p-4 w-48 text-left bg-slate-800 uppercase tracking-widest text-[10px]">Topic/Discourse</th>
+                    <th className="p-4 w-16 text-center bg-yellow-500 text-black uppercase tracking-widest text-[10px]">Marks</th>
+                    {formatColumns.map(col => (
+                      <th key={col.id} className="p-4 border-l border-slate-700 text-center min-w-[100px] bg-slate-800">
+                         <div className="flex flex-col gap-1">
+                           <span className="text-[12px]">{col.marks} Marks</span>
+                           <span className="opacity-50 text-[9px] font-normal uppercase">Slots: {col.maxQuestions}</span>
+                         </div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {subject.units.map(unit => (
+                  {subject.units.map((unit, uIdx) => (
                     <React.Fragment key={unit.id}>
                       {unit.subUnits.map((sub, sIdx) => {
-                        const subEntries = getSubUnitEntries(unit.id, sub.id);
-                        const subScore = subEntries.reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
-                        const subItems = subEntries.reduce((s, e) => s + e.numQuestions, 0);
-                        const subTime = subEntries.reduce((s, e) => s + e.estimatedTime, 0);
-
+                        const subTotal = entries.filter(e => e.unitId === unit.id && e.subUnitId === sub.id).reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
                         return (
-                          <tr key={sub.id} className="group hover:bg-slate-50 border-b border-slate-200">
-                            {sIdx === 0 && (
-                              <td rowSpan={unit.subUnits.length} className="p-3 border-r border-slate-300 align-top font-black text-indigo-700 uppercase">
-                                 {blueprint.topicNameOverrides[unit.id] || unit.name}
-                              </td>
-                            )}
-                            <td className="p-3 border-r border-slate-300 italic text-slate-500 text-[9px]">
-                              {blueprint.objectiveOverrides[sub.id] || sub.learningObjective}
-                            </td>
-                            <td className="p-3 border-r border-slate-300 font-bold text-slate-800">{sub.name}</td>
-                            {COGNITIVE_PROCESSES.map(cp => {
-                              const matchingIndices = entries.reduce((acc: number[], ent, idx) => {
-                                if (ent.unitId === unit.id && ent.subUnitId === sub.id && ent.cognitiveId === cp.id) acc.push(idx);
-                                return acc;
-                              }, []);
+                          <tr key={sub.id} className="hover:bg-indigo-50/30 border-b border-slate-100 h-20 group transition-colors">
+                            {sIdx === 0 && <td rowSpan={unit.subUnits.length} className="p-4 border-r border-slate-100 text-center font-black text-slate-400 bg-slate-50/50">{uIdx + 1}</td>}
+                            {sIdx === 0 && <td rowSpan={unit.subUnits.length} className="p-4 border-r border-slate-100 font-black uppercase text-indigo-700 bg-slate-50/50 leading-tight pr-6">{unit.name}</td>}
+                            <td className="p-4 border-r border-slate-100 font-bold text-slate-600 italic pr-8">{sub.name}</td>
+                            <td className="p-4 border-r border-slate-100 text-center bg-yellow-50 font-black text-sm text-yellow-700">{subTotal || ''}</td>
+                            {formatColumns.map(col => {
+                              const matches = getSubUnitEntryInCol(unit.id, sub.id, col.marks);
                               return (
-                                <td key={cp.id} className="border-r border-slate-200 text-center relative h-12">
-                                  {matchingIndices.map(idx => (
-                                    <div key={idx} className="bg-indigo-100 text-indigo-700 rounded p-0.5 mb-0.5 cursor-pointer hover:bg-red-100 hover:text-red-700 text-[8px]" onClick={() => onUpdateEntry(null, idx)}>
-                                      {entries[idx].numQuestions}({entries[idx].marksPerItem}M)
+                                <td key={col.id} className="p-2 border-r border-slate-100 text-center relative group">
+                                  <div className="flex flex-col gap-1.5 items-center justify-center min-h-[40px]">
+                                    {matches.map((m, mIdx) => {
+                                      const fmt = ITEM_FORMATS.find(f => f.id === m.formatId);
+                                      const cogCode = COGNITIVE_PROCESSES.find(c => c.id === m.cognitiveId)?.code.slice(-1) || '1';
+                                      let bgColor = 'bg-slate-100 text-slate-700';
+                                      if (m.formatId.includes('sr')) bgColor = 'bg-blue-100 text-blue-800 border-blue-200';
+                                      if (m.formatId.includes('crs1')) bgColor = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                                      if (m.formatId.includes('crs2')) bgColor = 'bg-purple-100 text-purple-800 border-purple-200';
+                                      if (m.formatId.includes('crl')) bgColor = 'bg-orange-100 text-orange-800 border-orange-200';
+                                      
+                                      return (
+                                        <div 
+                                          key={mIdx} 
+                                          className={`${bgColor} text-[10px] p-2 rounded-xl border font-black shadow-sm flex items-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95 transition-all no-print`}
+                                          onClick={() => onUpdateEntry(null, entries.indexOf(m))}
+                                        >
+                                          <span>{m.numQuestions}({cogCode})</span>
+                                          <span className="opacity-50 font-black">{fmt?.code}</span>
+                                        </div>
+                                      );
+                                    })}
+                                    {/* Print View Only */}
+                                    <div className="hidden print:block">
+                                      {matches.map((m, mIdx) => (
+                                        <div key={mIdx} className="text-xs">{m.numQuestions}({m.marksPerItem}) {m.formatId.toUpperCase()}</div>
+                                      ))}
                                     </div>
-                                  ))}
+                                  </div>
                                 </td>
                               );
                             })}
-                            {KNOWLEDGE_LEVELS.map(kl => {
-                              const matchCount = entries.filter(ent => ent.unitId === unit.id && ent.subUnitId === sub.id && ent.knowledgeId === kl.id).reduce((s, e) => s + e.numQuestions, 0);
-                              return <td key={kl.id} className="border-r border-slate-200 text-center h-12 bg-indigo-50/20">{matchCount > 0 ? matchCount : ''}</td>;
-                            })}
-                            {ITEM_FORMATS.map(f => {
-                              const matchCount = entries.filter(ent => ent.unitId === unit.id && ent.subUnitId === sub.id && ent.formatId === f.id).reduce((s, e) => s + e.numQuestions, 0);
-                              return <td key={f.id} className="border-r border-slate-200 text-center h-12 bg-emerald-50/20">{matchCount > 0 ? matchCount : ''}</td>;
-                            })}
-                            <td className="p-1 border-r border-slate-300 text-center bg-slate-50">{subTime || '-'}</td>
-                            <td className="p-1 border-r border-slate-300 text-center bg-slate-50">{subItems || '-'}</td>
-                            <td className="p-1 border-slate-300 text-center font-black bg-indigo-600 text-white">{subScore || '-'}</td>
                           </tr>
                         );
                       })}
                     </React.Fragment>
                   ))}
                 </tbody>
-                <tfoot className="bg-slate-900 text-white font-black text-[10px] uppercase">
-                   <tr>
-                     <td colSpan={3} className="p-4 text-right">SUMMARY TOTALS</td>
-                     {COGNITIVE_PROCESSES.map(cp => <td key={cp.id} className="border border-slate-700 text-center">{entries.filter(e => e.cognitiveId === cp.id).reduce((s, e) => s + e.numQuestions, 0)}</td>)}
-                     {KNOWLEDGE_LEVELS.map(kl => <td key={kl.id} className="border border-slate-700 text-center">{entries.filter(e => e.knowledgeId === kl.id).reduce((s, e) => s + e.numQuestions, 0)}</td>)}
-                     {ITEM_FORMATS.map(f => <td key={f.id} className="border border-slate-700 text-center">{entries.filter(e => e.formatId === f.id).reduce((s, e) => s + e.numQuestions, 0)}</td>)}
-                     <td className="border border-slate-700 text-center bg-slate-800">{totalTime}</td>
-                     <td className="border border-slate-700 text-center bg-slate-800">{totalItems}</td>
-                     <td className="border border-slate-700 text-center bg-indigo-600 text-sm">{totalScore}</td>
+                <tfoot className="bg-slate-900 text-white font-black">
+                   <tr className="border-t-2 border-slate-800">
+                     <td colSpan={3} className="p-5 text-right uppercase tracking-[0.2em] text-[11px] bg-indigo-900">Final Aggregated Totals</td>
+                     <td className="p-5 text-center text-xl bg-yellow-500 text-black border-r border-slate-800">{totalScore}</td>
+                     {formatColumns.map(col => {
+                        const count = entries.filter(e => e.marksPerItem === col.marks).reduce((s, e) => s + e.numQuestions, 0);
+                        const mks = count * col.marks;
+                        return (
+                          <td key={col.id} className="p-3 text-center border-l border-slate-700 bg-slate-800">
+                             <div className="flex flex-col gap-1">
+                               <span className="text-indigo-400 text-[10px] uppercase">Items</span>
+                               <span className="text-xl leading-none">{count}</span>
+                               <div className="mt-2 h-1 w-full bg-slate-700 rounded-full overflow-hidden">
+                                  <div className="h-full bg-indigo-500" style={{ width: `${(count/col.maxQuestions)*100}%` }}></div>
+                               </div>
+                               <span className="text-[9px] opacity-40 font-normal mt-1">{mks} Marks</span>
+                             </div>
+                          </td>
+                        );
+                     })}
                    </tr>
                 </tfoot>
               </table>
             </div>
-            
-            {/* Real-time Target Tracker */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-               <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200">
-                  <h4 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-6 flex justify-between">
-                    <span>Knowledge Level Goals (by Marks)</span>
-                    <span className="text-slate-400">Target: 30 / 50 / 20</span>
-                  </h4>
-                  <div className="space-y-4">
-                     {KNOWLEDGE_LEVELS.map(kl => {
-                        const target = kl.code === 'B' ? 30 : kl.code === 'A' ? 50 : 20;
-                        const score = entries.filter(e => e.knowledgeId === kl.id).reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
-                        const actual = totalScore > 0 ? (score / totalScore) * 100 : 0;
-                        return (
-                          <div key={kl.id} className="space-y-1">
-                             <div className="flex justify-between text-[10px] font-black uppercase">
-                                <span>{kl.name} ({kl.code})</span>
-                                <span className={Math.abs(actual-target) < 5 ? 'text-emerald-600' : 'text-amber-500'}>{actual.toFixed(1)}% / {target}%</span>
-                             </div>
-                             <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
-                                <div className="h-full bg-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${actual}%` }}></div>
-                             </div>
-                          </div>
-                        );
-                     })}
-                  </div>
-               </div>
 
-               <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200">
-                  <h4 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-6">Pattern Check (Question Count)</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                     {patternStatus.map(p => (
-                       <div key={p.id} className={`p-4 rounded-2xl border-2 flex flex-col items-center bg-white ${p.assigned === p.maxQuestions ? 'border-emerald-500' : 'border-slate-100'}`}>
-                          <span className="text-[10px] font-black opacity-40 uppercase">{p.marks} Marks</span>
-                          <span className="text-xl font-black">{p.assigned} / {p.maxQuestions}</span>
-                       </div>
-                     ))}
-                  </div>
-               </div>
-            </div>
-          </section>
-        ) : (
-          <div className="space-y-20 animate-fade-in print:space-y-16">
-            <ReportHeader />
-
-            <section className="break-after-page">
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4 mb-6">II. Weightage to Content Area</h3>
-              <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
-                <table className="w-full text-xs font-bold border-collapse">
-                  <thead className="bg-slate-900 text-white text-[10px] uppercase">
-                    <tr><th className="p-3 border border-slate-700 w-16">S.No</th><th className="p-3 border border-slate-700 text-left">Unit / Topic</th><th className="p-3 border border-slate-700">Actual Marks</th><th className="p-3 border border-slate-700">Percentage</th></tr>
-                  </thead>
-                  <tbody>
-                    {subject.units.map((u, i) => {
-                      const score = entries.filter(e => e.unitId === u.id).reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
-                      return (
-                        <tr key={u.id} className="border-b border-slate-200">
-                          <td className="p-3 border-r text-center">{i+1}</td>
-                          <td className="p-3 border-r uppercase">{u.name}</td>
-                          <td className="p-3 border-r text-center font-black">{score}</td>
-                          <td className="p-3 text-center">{totalScore > 0 ? ((score/totalScore)*100).toFixed(1) : '0'}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="break-after-page">
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4 mb-6">III. Weightage to Cognitive Process</h3>
-              <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
-                <table className="w-full text-xs font-bold border-collapse">
-                  <thead className="bg-slate-900 text-white text-[10px] uppercase">
-                    <tr><th className="p-3 border border-slate-700 w-16">S.No</th><th className="p-3 border border-slate-700 text-left">Process Name</th><th className="p-3 border border-slate-700">Score</th><th className="p-3 border border-slate-700">Percentage</th></tr>
-                  </thead>
-                  <tbody>
-                    {COGNITIVE_PROCESSES.map((cp, i) => {
-                      const score = entries.filter(e => e.cognitiveId === cp.id).reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
-                      return (
-                        <tr key={cp.id} className="border-b border-slate-200">
-                          <td className="p-3 border-r text-center">{i+1}</td>
-                          <td className="p-3 border-r">{cp.name}</td>
-                          <td className="p-3 border-r text-center font-black">{score || '-'}</td>
-                          <td className="p-3 text-center">{totalScore > 0 ? ((score/totalScore)*100).toFixed(1) : '0'}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="break-after-page">
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4 mb-6">IV. Weightage to Knowledge Level (30/50/20)</h3>
-              <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
-                <table className="w-full text-xs font-bold border-collapse">
-                  <thead className="bg-slate-900 text-white text-[10px] uppercase">
-                    <tr><th className="p-3 border border-slate-700">Level</th><th className="p-3 border border-slate-700">Target %</th><th className="p-3 border border-slate-700">Actual Score</th><th className="p-3 border border-slate-700">Actual %</th><th className="p-3 border border-slate-700">Status</th></tr>
-                  </thead>
-                  <tbody>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 no-print">
+               <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-200">
+                  <h3 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-8 flex justify-between">
+                    <span>Knowledge Level Goals</span>
+                    <span className="text-slate-400">Standard: 30 / 50 / 20</span>
+                  </h3>
+                  <div className="space-y-6">
                     {KNOWLEDGE_LEVELS.map(kl => {
                       const target = kl.code === 'B' ? 30 : kl.code === 'A' ? 50 : 20;
                       const score = entries.filter(e => e.knowledgeId === kl.id).reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
                       const actual = totalScore > 0 ? (score / totalScore) * 100 : 0;
                       return (
-                        <tr key={kl.id} className="border-b border-slate-200">
-                          <td className="p-3 border-r font-black uppercase">{kl.name}</td>
-                          <td className="p-3 border-r text-center">{target}%</td>
-                          <td className="p-3 border-r text-center font-black text-indigo-600">{score}</td>
-                          <td className="p-3 border-r text-center">{actual.toFixed(1)}%</td>
-                          <td className="p-3 text-center">{Math.abs(actual - target) < 5 ? 'OPTIMAL' : 'VARIES'}</td>
-                        </tr>
+                        <div key={kl.id} className="space-y-2">
+                           <div className="flex justify-between items-end">
+                             <span className="font-black text-slate-800 uppercase text-[11px] tracking-wider">{kl.name} ({kl.code})</span>
+                             <div className="text-right">
+                               <div className={`text-xl font-black ${Math.abs(actual-target) < 5 ? 'text-emerald-600' : 'text-amber-500'}`}>{actual.toFixed(1)}%</div>
+                               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Target: {target}%</div>
+                             </div>
+                           </div>
+                           <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${actual}%` }}></div>
+                           </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                  </div>
+               </div>
 
-            <section className="break-after-page">
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4 mb-6">V. Weightage to Item Format</h3>
-              <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
-                <table className="w-full text-xs font-bold border-collapse">
-                  <thead className="bg-slate-900 text-white text-[10px] uppercase">
-                    <tr><th className="p-3 border border-slate-700 text-left">Format</th><th className="p-3 border border-slate-700">Total Items</th><th className="p-3 border border-slate-700">Total Score</th><th className="p-3 border border-slate-700">Estimated Time</th></tr>
-                  </thead>
-                  <tbody>
-                    {ITEM_FORMATS.map(f => {
-                      const match = entries.filter(e => e.formatId === f.id);
-                      const items = match.reduce((s, e) => s + e.numQuestions, 0);
-                      const score = match.reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
-                      const time = match.reduce((s, e) => s + e.estimatedTime, 0);
-                      return (
-                        <tr key={f.id} className="border-b border-slate-200">
-                          <td className="p-3 border-r">{f.name} ({f.abbreviation})</td>
-                          <td className="p-3 border-r text-center">{items || '-'}</td>
-                          <td className="p-3 border-r text-center font-black">{score || '-'}</td>
-                          <td className="p-3 text-center">{time || '-'}m</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="bg-slate-50 font-black">
-                     <tr><td className="p-3 text-right">TOTALS</td><td className="p-3 text-center">{totalItems}</td><td className="p-3 text-center text-indigo-600">{totalScore}</td><td className="p-3 text-center">{totalTime}m</td></tr>
-                  </tfoot>
-                </table>
-              </div>
-            </section>
+               <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-200">
+                  <h3 className="font-black text-xs uppercase tracking-widest text-indigo-600 mb-8">Pattern Adherence Engine</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                     {formatColumns.map(p => {
+                       const assigned = entries.filter(e => e.marksPerItem === p.marks).reduce((s, e) => s + e.numQuestions, 0);
+                       const isComplete = assigned === p.maxQuestions;
+                       return (
+                         <div key={p.id} className={`p-6 rounded-[2rem] border-2 flex flex-col items-center gap-1 transition-all ${isComplete ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xl shadow-emerald-500/10' : 'bg-white border-slate-100 text-slate-400'}`}>
+                            <span className="text-[10px] font-black uppercase opacity-60 tracking-widest">{p.marks} Marks</span>
+                            <span className="text-2xl font-black">{assigned} / {p.maxQuestions}</span>
+                            <div className={`text-[9px] font-black uppercase mt-1 px-3 py-0.5 rounded-full ${isComplete ? 'bg-emerald-200' : 'bg-slate-100'}`}>
+                               {isComplete ? 'Valid' : 'Invalid'}
+                            </div>
+                         </div>
+                       );
+                     })}
+                  </div>
+               </div>
+            </div>
           </div>
-        )}
-
-        <footer className="mt-20 pt-8 border-t border-slate-100 hidden print:block text-slate-400 text-[9px] italic text-center">
-           Confidential Administrative Document &bull; Institutional Analysis Report &bull; Powered by Blueprint Pro Engine
-        </footer>
-      </div>
-
-      {/* Manual Entry Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-xl p-4 print:hidden">
-          <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden border-2 border-indigo-600 animate-scale-up">
-             <div className="bg-indigo-600 p-8 text-white flex justify-between items-center">
-               <h3 className="font-black text-2xl uppercase tracking-widest">Add Assignment</h3>
-               <button onClick={() => setShowAddModal(false)} className="text-3xl font-black">×</button>
+        ) : (
+          <div className="space-y-20 animate-in">
+             <div className="text-center pb-12 border-b-2 border-slate-100">
+               <h2 className="text-4xl font-black uppercase text-slate-900 tracking-tight leading-none mb-6">Weightage & Taxonomy Report</h2>
+               <div className="flex flex-wrap justify-center gap-x-12 gap-y-4 font-black text-slate-400 text-xs tracking-widest uppercase">
+                 <div className="flex items-center gap-2"><span>Class</span> <span className="text-indigo-600">: {blueprint.classId}</span></div>
+                 <div className="flex items-center gap-2"><span>Subject</span> <span className="text-indigo-600">: {subject.name}</span></div>
+                 <div className="flex items-center gap-2"><span>Examination</span> <span className="text-indigo-600">: {blueprint.examType}</span></div>
+                 <div className="flex items-center gap-2"><span>Aggregated Score</span> <span className="text-indigo-600">: {totalScore} Marks</span></div>
+               </div>
              </div>
-             <div className="p-10 space-y-6">
-               <div className="grid grid-cols-2 gap-6">
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Unit</label>
-                   <select className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={newEntry.unitId} onChange={e => setNewEntry({...newEntry, unitId: e.target.value})}>
-                     {subject.units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sub-unit</label>
-                   <select className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={newEntry.subUnitId} onChange={e => setNewEntry({...newEntry, subUnitId: e.target.value})}>
-                     {subject.units.find(u => u.id === newEntry.unitId)?.subUnits.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cognitive Process</label>
-                   <select className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={newEntry.cognitiveId} onChange={e => setNewEntry({...newEntry, cognitiveId: e.target.value})}>
-                     {COGNITIVE_PROCESSES.map(cp => <option key={cp.id} value={cp.id}>{cp.code}: {cp.name}</option>)}
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Knowledge Level</label>
-                   <select className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={newEntry.knowledgeId} onChange={e => setNewEntry({...newEntry, knowledgeId: e.target.value})}>
-                     {KNOWLEDGE_LEVELS.map(kl => <option key={kl.id} value={kl.id}>{kl.code}: {kl.name}</option>)}
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Marks</label>
-                   <select className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={newEntry.marksPerItem} onChange={e => setNewEntry({...newEntry, marksPerItem: Number(e.target.value)})}>
-                      {[1, 2, 3, 5, 8, 10].map(m => <option key={m} value={m}>{m} Mark Slot</option>)}
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Item Count</label>
-                   <input type="number" min="1" className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={newEntry.numQuestions} onChange={e => setNewEntry({...newEntry, numQuestions: Number(e.target.value)})}/>
+
+             <section className="grid grid-cols-1 md:grid-cols-2 gap-12">
+               <div className="space-y-8">
+                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4">I. Weightage to Item Format</h3>
+                 <div className="border-2 border-slate-900 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                   <table className="w-full text-xs font-bold border-collapse">
+                     <thead className="bg-slate-900 text-white uppercase text-[10px] tracking-widest">
+                       <tr><th className="p-4 text-left">Code</th><th className="p-4">Items</th><th className="p-4">Score</th><th className="p-4 text-right">Weightage</th></tr>
+                     </thead>
+                     <tbody>
+                       {ITEM_FORMATS.map(fmt => {
+                         const match = entries.filter(e => e.formatId === fmt.id);
+                         const qs = match.reduce((s, e) => s + e.numQuestions, 0);
+                         const mk = match.reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
+                         const pc = totalScore > 0 ? (mk / totalScore) * 100 : 0;
+                         return (
+                           <tr key={fmt.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                             <td className="p-4 font-black text-indigo-700 uppercase">{fmt.code}</td>
+                             <td className="p-4 text-center">{qs || '-'}</td>
+                             <td className="p-4 text-center font-black">{mk || '-'}</td>
+                             <td className="p-4 text-right text-slate-400">{pc.toFixed(1)}%</td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                   </table>
                  </div>
                </div>
-               <button onClick={() => { onAddEntry(newEntry); setShowAddModal(false); }} className="w-full bg-indigo-600 text-white p-5 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-indigo-600/30">Commit to Matrix</button>
-             </div>
+
+               <div className="space-y-8">
+                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-widest border-l-8 border-indigo-600 pl-4">II. Content Area Analysis</h3>
+                 <div className="border-2 border-slate-900 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                   <table className="w-full text-xs font-bold border-collapse">
+                     <thead className="bg-slate-900 text-white uppercase text-[10px] tracking-widest">
+                       <tr><th className="p-4 text-left">Unit</th><th className="p-4">Score</th><th className="p-4 text-right">Percentage</th></tr>
+                     </thead>
+                     <tbody>
+                        {subject.units.map(u => {
+                          const mk = entries.filter(e => e.unitId === u.id).reduce((s, e) => s + (e.numQuestions * e.marksPerItem), 0);
+                          const pc = totalScore > 0 ? (mk / totalScore) * 100 : 0;
+                          return (
+                            <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                              <td className="p-4 font-black uppercase">{u.name}</td>
+                              <td className="p-4 text-center font-black text-indigo-600">{mk || '-'}</td>
+                              <td className="p-4 text-right text-slate-400">{pc.toFixed(1)}%</td>
+                            </tr>
+                          );
+                        })}
+                     </tbody>
+                   </table>
+                 </div>
+               </div>
+             </section>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <footer className="mt-20 pt-8 border-t border-slate-100 no-print opacity-40 text-[10px] font-black uppercase tracking-[0.3em] text-center pb-20">
+         High-Precision Assessment Analysis &bull; Institutional Framework V3 &bull; {new Date().getFullYear()}
+      </footer>
     </div>
   );
 };

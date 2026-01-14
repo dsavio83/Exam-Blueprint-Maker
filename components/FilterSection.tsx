@@ -63,10 +63,10 @@ const FilterSection: React.FC<FilterSectionProps> = ({
             onChange={(e) => setSelectedExamType(e.target.value)}
             className="w-full rounded-lg border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none border"
           >
-            <option value="Term1">First Term</option>
-            <option value="Term2">Second Term</option>
-            <option value="Term3">Third Term</option>
-            <option value="SSLC">SSLC Exam (Final)</option>
+            <option value="First Term">First Term</option>
+            <option value="Second Term">Second Term</option>
+            <option value="Third Term">Third Term</option>
+            <option value="SSLC Exam (Final)">SSLC Exam (Final)</option>
           </select>
         </div>
 
