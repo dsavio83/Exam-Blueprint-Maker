@@ -1,276 +1,2621 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    Role, ClassLevel, SubjectType, ExamTerm,
+    BlueprintItem, Blueprint, ItemFormat, KnowledgeLevel, CognitiveProcess, Unit, SubUnit, Curriculum, User, ExamConfiguration, UnitWeightage, SystemSettings, QuestionPaperType, QuestionPatternSection,
+    QuestionType, Discourse, DiscourseScores
+} from './types';
+import {
+    generateBlueprintTemplate, getCurriculum, getFilteredCurriculum, saveCurriculum,
+    getUsers, saveUsers, getExamConfigs, saveExamConfigs, getSettings, getDB,
+    getBlueprints, saveBlueprint, deleteBlueprint, getQuestionPaperTypes, saveQuestionPaperTypes,
+    getDefaultFormat, getDefaultKnowledge, getDiscourses, saveDiscourses,
+    getAllAccessibleBlueprints, shareBlueprint, removeShare, getSharedWithUsers
+} from './services/db';
+import {
+    Trash2, Plus, Download, LogOut, FileText,
+    Menu, X, Settings, Edit2, Save, Printer, Users, BookOpen, Layers, UserCircle, LayoutDashboard, ChevronLeft, List, FileType, Grip, GripVertical, CheckCircle, RefreshCw, Clock, GripHorizontal,
+    Bold, Italic, Underline, ListOrdered, Share2, Eye, EyeOff, Lock, ChevronDown, ChevronUp
+} from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import AdminPortal from './components/AdminPortal';
+import BlueprintSharingModal from './components/BlueprintSharingModal';
+import AnswerKeyView from './components/AnswerKeyView';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { UserRole, ClassGrade, BlueprintEntry, User, SavedBlueprint, PaperType } from './types';
-import { INITIAL_CLASSES, COGNITIVE_PROCESSES, KNOWLEDGE_LEVELS } from './constants';
-import AnalysisReport from './components/AnalysisReport';
-import Login from './components/Login';
-import SettingsManager from './components/SettingsManager';
-import BlueprintSetup from './components/BlueprintSetup';
+// --- Login & Admin Components remain mostly the same (collapsed for brevity in thought, but included fully here) ---
 
-const DATA_STORAGE_KEY = 'blueprint_pro_v3_data';
-const SESSION_STORAGE_KEY = 'blueprint_pro_v3_session';
+const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [error, setError] = useState('');
 
-const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-      return stored ? JSON.parse(stored).user : null;
-    } catch { return null; }
-  });
-  
-  const [currentView, setCurrentView] = useState<'dashboard' | 'paper-types' | 'class-subject' | 'unit-subunit' | 'taxonomy'>('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const handleLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        const users = getUsers();
+        const user = users.find(u => u.username === username && u.password === password);
 
-  const [classes, setClasses] = useState<ClassGrade[]>(INITIAL_CLASSES);
-  const [paperTypes, setPaperTypes] = useState<PaperType[]>([]);
-  const [savedBlueprints, setSavedBlueprints] = useState<SavedBlueprint[]>([]);
-  const [dashboardMode, setDashboardMode] = useState<'list' | 'setup' | 'edit'>('list');
-  const [activeBlueprint, setActiveBlueprint] = useState<SavedBlueprint | null>(null);
-
-  useEffect(() => {
-    const sessionData = { user: currentUser };
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
-  }, [currentUser]);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(DATA_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed.savedBlueprints)) setSavedBlueprints(parsed.savedBlueprints);
-        if (Array.isArray(parsed.classes)) setClasses(parsed.classes);
-        if (Array.isArray(parsed.paperTypes)) setPaperTypes(parsed.paperTypes);
-      } catch (e) { console.error(e); }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify({ classes, savedBlueprints, paperTypes }));
-  }, [classes, savedBlueprints, paperTypes]);
-
-  const handleStartSetup = () => setDashboardMode('setup');
-
-  const handleConfirmSetup = (config: Partial<SavedBlueprint>) => {
-    const newBp: SavedBlueprint = {
-      id: `bp_${Date.now()}`,
-      name: config.name || 'Untitled Analysis',
-      timestamp: Date.now(),
-      classId: config.classId || '',
-      subjectId: config.subjectId || '',
-      examType: config.examType || '',
-      paperTypeId: config.paperTypeId || '',
-      maxScore: config.maxScore || 40,
-      timeAllotted: config.timeAllotted || 90,
-      entries: [],
-      topicNameOverrides: {},
-      objectiveOverrides: {}
+        if (user) {
+            onLogin(user);
+        } else {
+            setError('Invalid credentials');
+        }
     };
-    setActiveBlueprint(newBp);
-    setDashboardMode('edit');
-  };
 
-  const handleEditSaved = (bp: SavedBlueprint) => {
-    setActiveBlueprint(bp);
-    setDashboardMode('edit');
-  };
-
-  const handleDeleteSaved = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm("Delete this analysis?")) {
-      setSavedBlueprints(prev => prev.filter(b => b.id !== id));
-    }
-  };
-
-  const handleSave = () => {
-    if (!activeBlueprint) return;
-    const updatedBp = { ...activeBlueprint, timestamp: Date.now() };
-    setSavedBlueprints(prev => {
-      const idx = prev.findIndex(b => b.id === updatedBp.id);
-      if (idx > -1) {
-          const updated = [...prev];
-          updated[idx] = updatedBp;
-          return updated;
-      }
-      return [updatedBp, ...prev];
-    });
-    setDashboardMode('list');
-  };
-
-  const activeSubject = useMemo(() => {
-      if (!activeBlueprint) return null;
-      return classes.find(c => c.id === activeBlueprint.classId)?.subjects.find(s => s.id === activeBlueprint.subjectId);
-  }, [activeBlueprint, classes]);
-
-  const SidebarNavItem = ({ view, label, icon }: { view: any, label: string, icon: any }) => (
-    <button 
-      onClick={() => { setCurrentView(view); setDashboardMode('list'); setIsSidebarOpen(false); }}
-      className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all font-bold text-sm ${currentView === view ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-    >
-      <span className="shrink-0">{icon}</span>
-      <span>{label}</span>
-    </button>
-  );
-
-  if (!currentUser) return <Login onLogin={setCurrentUser} />;
-
-  return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row overflow-hidden">
-      {/* Mobile Top Header */}
-      <header className="md:hidden bg-slate-900 p-4 flex items-center justify-between no-print sticky top-0 z-50">
-        <div className="flex items-center gap-3 text-white">
-           <div className="bg-indigo-600 w-8 h-8 rounded-lg font-black flex items-center justify-center text-sm">B</div>
-           <span className="font-bold tracking-tight">Proforma V3</span>
-        </div>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-white">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} /></svg>
-        </button>
-      </header>
-
-      {/* Sidebar / Mobile Menu */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-slate-900 p-6 flex flex-col transform transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} no-print`}>
-        <div className="hidden md:flex items-center gap-4 px-4 mb-12 text-white">
-           <div className="bg-indigo-600 p-2.5 rounded-xl font-black text-2xl shadow-xl shadow-indigo-600/20">B</div>
-           <div>
-             <div className="font-black text-xl leading-tight">Proforma</div>
-             <div className="text-[10px] uppercase font-black text-indigo-500 tracking-widest">Version 3.0</div>
-           </div>
-        </div>
-        
-        <div className="flex-1 space-y-2">
-          <div className="px-4 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-600">Main Console</div>
-          <SidebarNavItem view="dashboard" label="Dashboard" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 14a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1v-5zM14 14a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1v-5z" /></svg>} />
-          
-          <div className="pt-8 px-4 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-600">Configuration</div>
-          <SidebarNavItem view="class-subject" label="Classes & Subjects" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} />
-          <SidebarNavItem view="unit-subunit" label="Units & Hierarchy" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>} />
-          <SidebarNavItem view="paper-types" label="Paper Patterns" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>} />
-          <SidebarNavItem view="taxonomy" label="Standards" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>} />
-        </div>
-        
-        <button onClick={() => setCurrentUser(null)} className="mt-8 flex items-center gap-4 px-5 py-4 text-rose-400 hover:text-white hover:bg-rose-900/40 rounded-2xl transition-all font-black text-sm border border-rose-900/20">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-          Sign Out
-        </button>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto h-screen p-4 md:p-12 custom-scrollbar">
-        {currentView === 'dashboard' ? (
-          dashboardMode === 'list' ? (
-            <div className="max-w-7xl mx-auto space-y-12 animate-in">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-200 pb-10">
-                 <div className="space-y-2 text-center md:text-left">
-                   <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-none">Your Proformas</h1>
-                   <p className="text-slate-500 font-medium text-lg">High-precision question paper analysis system</p>
-                 </div>
-                 <button onClick={handleStartSetup} className="bg-indigo-600 text-white px-10 py-4 rounded-[2rem] font-black text-sm shadow-2xl shadow-indigo-600/30 active:scale-95 transition-all">Start New Analysis</button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                 {savedBlueprints.map(bp => (
-                   <div key={bp.id} onClick={() => handleEditSaved(bp)} className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:border-indigo-100 transition-all group flex flex-col justify-between h-80 relative cursor-pointer overflow-hidden">
-                      <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={(e) => handleDeleteSaved(bp.id, e)} className="p-3 bg-rose-50 text-rose-500 rounded-full hover:bg-rose-500 hover:text-white transition-all">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                         </button>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="inline-flex px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-600 font-black text-[10px] uppercase tracking-widest">{bp.classId} &bull; {bp.examType}</div>
-                        <h3 className="font-black text-slate-800 text-2xl leading-tight group-hover:text-indigo-600 transition-colors">{bp.name}</h3>
-                      </div>
-                      <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                        <div className="flex flex-col">
-                           <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Last Updated</span>
-                           <span className="text-sm font-bold text-slate-600">{new Date(bp.timestamp).toLocaleDateString()}</span>
-                        </div>
-                        <div className="bg-indigo-50 p-4 rounded-2xl text-indigo-600 font-black group-hover:bg-indigo-600 group-hover:text-white transition-all">&rarr;</div>
-                      </div>
-                   </div>
-                 ))}
-                 
-                 {savedBlueprints.length === 0 && (
-                   <div className="col-span-full py-40 text-center border-4 border-dashed border-slate-200 rounded-[4rem] text-slate-300 font-black text-2xl uppercase tracking-[0.2em] flex flex-col items-center gap-6">
-                     <div className="bg-slate-100 p-8 rounded-full">
-                       <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                     </div>
-                     No Proformas Created Yet
-                   </div>
-                 )}
-              </div>
-            </div>
-          ) : dashboardMode === 'setup' ? (
-            <BlueprintSetup classes={classes} paperTypes={paperTypes} onCancel={() => setDashboardMode('list')} onConfirm={handleConfirmSetup} />
-          ) : (
-            <div className="animate-in max-w-[1500px] mx-auto pb-20">
-               <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 md:px-10 md:py-8 rounded-[3rem] border border-slate-200 shadow-xl mb-12 no-print gap-6">
-                  <div className="flex items-center gap-8">
-                    <button onClick={() => setDashboardMode('list')} className="w-12 h-12 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all shadow-sm">&larr;</button>
-                    <div>
-                      <h2 className="font-black text-3xl text-slate-800 leading-none">{activeBlueprint?.name}</h2>
-                      <div className="flex items-center gap-3 mt-3">
-                         <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1 rounded-full">Active Analysis Session</span>
-                         <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">{activeBlueprint?.maxScore} Marks</span>
-                      </div>
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+            <div className="bg-white/90 backdrop-blur-sm p-10 rounded-2xl shadow-2xl w-full max-w-md border border-white">
+                <div className="text-center mb-10">
+                    <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg rotate-3">
+                        <FileText size={40} className="text-white" />
                     </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <button onClick={handleSave} className="flex-1 md:flex-none bg-indigo-600 text-white px-12 py-4 rounded-[2rem] font-black text-sm shadow-2xl shadow-indigo-600/30 hover:-translate-y-1 transition-all">Save Matrix</button>
-                  </div>
-               </div>
-               {activeBlueprint && activeSubject && (
-                 <AnalysisReport 
-                    blueprint={activeBlueprint} 
-                    subject={activeSubject} 
-                    paperPattern={paperTypes.find(p => p.id === activeBlueprint.paperTypeId)}
-                    onUpdateEntry={(update, idx) => {
-                      setActiveBlueprint(prev => {
-                        if (!prev) return null;
-                        const newEntries = [...prev.entries];
-                        if (update === null) newEntries.splice(idx, 1);
-                        else newEntries[idx] = update;
-                        return { ...prev, entries: newEntries };
-                      });
-                    }}
-                    onAddEntry={(e) => setActiveBlueprint(prev => prev ? {...prev, entries: [...prev.entries, e]} : null)}
-                    onSetEntries={(e) => setActiveBlueprint(prev => prev ? {...prev, entries: e} : null)}
-                    onUpdateOverrides={(key, val, type) => {
-                      setActiveBlueprint(prev => {
-                        if (!prev) return null;
-                        const overrides = type === 'name' ? { ...prev.topicNameOverrides } : { ...prev.objectiveOverrides };
-                        overrides[key] = val;
-                        return { ...prev, [type === 'name' ? 'topicNameOverrides' : 'objectiveOverrides']: overrides };
-                      });
-                    }}
-                 />
-               )}
-            </div>
-          )
-        ) : (
-          <div className="max-w-6xl mx-auto pb-20 animate-in">
-            <SettingsManager 
-              view={currentView as any}
-              classes={classes}
-              levels={COGNITIVE_PROCESSES as any}
-              difficultyLevels={KNOWLEDGE_LEVELS as any}
-              paperTypes={paperTypes}
-              updateClasses={setClasses}
-              updateLevels={()=>{}}
-              updateDifficulty={()=>{}}
-              updatePaperTypes={setPaperTypes}
-            />
-          </div>
-        )}
-      </main>
+                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                        Exam Blueprint
+                    </h1>
+                    <p className="text-gray-500 mt-2">Quality Question Paper System</p>
+                </div>
 
-      {/* Sidebar Overlay for Mobile */}
-      {isSidebarOpen && (
-        <div 
-          onClick={() => setIsSidebarOpen(false)} 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-30 md:hidden"
-        />
-      )}
-    </div>
-  );
+                {error && (
+                    <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 mb-6 rounded text-sm font-medium">
+                        {error}
+                    </div>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Username</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                <UserCircle size={18} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Enter username"
+                                className="block w-full pl-10 pr-3 py-3 rounded-xl border-gray-200 border bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                <Lock size={18} />
+                            </div>
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Enter password"
+                                className="block w-full pl-10 pr-12 py-3 rounded-xl border-gray-200 border bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
+                            <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 focus:outline-none transition-colors"
+                                onClick={() => setShowPassword(!showPassword)}
+                            >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl hover:scale-[1.01] transition-all"
+                    >
+                        Login
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
 };
 
+// --- Admin Components have been moved to ./components/AdminPortal.tsx and its sub-components ---
+
+// --- Question & Answer Entry Component ---
+
+// --- Rich Text Editor (Basic) ---
+const SimpleRichTextEditor = ({ value, onChange, placeholder }: any) => {
+    const ref = useRef<HTMLDivElement>(null);
+
+    // Sync external value changes only when not focused to avoid cursor loss
+    useEffect(() => {
+        if (ref.current && document.activeElement !== ref.current && ref.current.innerHTML !== value) {
+            ref.current.innerHTML = value || '';
+        }
+    }, [value]);
+
+    const handleInput = () => {
+        if (ref.current) onChange(ref.current.innerHTML);
+    };
+
+    const exec = (cmd: string, val?: string) => {
+        document.execCommand(cmd, false, val);
+        handleInput();
+        ref.current?.focus();
+    };
+
+    return (
+        <div className="border rounded-md overflow-hidden bg-white">
+            <div className="bg-gray-50 border-b p-1 flex gap-1">
+                <button onMouseDown={(e) => { e.preventDefault(); exec('bold'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Bold"><Bold size={14} /></button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('italic'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Italic"><Italic size={14} /></button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('underline'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Underline"><Underline size={14} /></button>
+                <div className="w-px h-4 bg-gray-300 mx-1 self-center"></div>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('insertUnorderedList'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Bullet List"><List size={14} /></button>
+                <button onMouseDown={(e) => { e.preventDefault(); exec('insertOrderedList'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Number List"><ListOrdered size={14} /></button>
+            </div>
+            <div
+                ref={ref}
+                contentEditable
+                className="p-3 min-h-[120px] outline-none text-sm prose max-w-none"
+                onInput={handleInput}
+                onBlur={handleInput}
+                placeholder={placeholder}
+            />
+        </div>
+    );
+};
+
+// --- Question Row Component ---
+const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSettings, curriculum }: any) => {
+    const [activeTab, setActiveTab] = useState<'question' | 'answer'>('question');
+    const [answerMode, setAnswerMode] = useState<'content' | 'discourse' | 'ai'>('content');
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // Helpers for Unit selection
+    const selectedUnit = curriculum?.units.find((u: Unit) => u.id === item.unitId);
+    const availableSubUnits = selectedUnit?.subUnits || [];
+
+    const generateAIAnswer = (targetField: 'answerText' | 'answerTextB', sourceField: 'questionText' | 'questionTextB') => {
+        setIsGenerating(true);
+        setTimeout(() => {
+            onUpdateItem(item.id, targetField, `<p>Answer generated by AI based on: "${item[sourceField] || 'question'}"</p>`);
+            setIsGenerating(false);
+            setAnswerMode('content');
+        }, 1500);
+    };
+
+    const applyDiscourse = (discourseId: string, targetField: 'answerText' | 'answerTextB') => {
+        const d = availableDiscourses.find((x: Discourse) => x.id === discourseId);
+        if (d) {
+            let html = `<p><b>${d.name}</b></p>`;
+            if (d.description) html += `<p>${d.description}</p>`;
+            html += `<ul class="list-disc pl-4">`;
+            d.rubrics.forEach((r: DiscourseScores) => {
+                html += `<li>${r.point} - <b>${r.marks}M</b></li>`;
+            });
+            html += `</ul>`;
+            onUpdateItem(item.id, targetField, html);
+
+            // Apply Cognitive Process if present in Discourse (only for main/A option or global)
+            if (d.cognitiveProcess && targetField === 'answerText') {
+                onUpdateItem(item.id, 'cognitiveProcess', d.cognitiveProcess);
+            }
+        }
+    };
+
+    return (
+        <div className="border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
+            {/* Header / Metadata Row */}
+            <div className="bg-gray-50 p-3 border-b flex flex-wrap gap-4 items-center justify-between rounded-t-lg">
+                <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                        Q{index + 1}
+                    </span>
+                    <span className="font-bold text-gray-700 text-sm">
+                        {item.marksPerQuestion} Mark{item.marksPerQuestion > 1 ? 's' : ''}
+                    </span>
+
+                    {/* Internal Choice Toggle */}
+                    <div className="flex items-center gap-2 ml-4 border-l pl-4">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Options</span>
+                        <button
+                            onClick={() => onUpdateItem(item.id, 'hasInternalChoice', !item.hasInternalChoice)}
+                            className={`w-10 h-5 rounded-full p-1 transition-colors ${item.hasInternalChoice ? 'bg-blue-600' : 'bg-gray-300'}`}
+                            title="Enable Internal Choice (Either/Or)"
+                        >
+                            <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${item.hasInternalChoice ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 items-center">
+                    {curriculum && (
+                        <>
+                            <select
+                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[150px]"
+                                value={item.unitId}
+                                onChange={(e) => {
+                                    onUpdateItem(item.id, 'unitId', e.target.value);
+                                    // Reset subunit when unit changes
+                                    const newUnit = curriculum.units.find((u: Unit) => u.id === e.target.value);
+                                    if (newUnit && newUnit.subUnits.length > 0) {
+                                        onUpdateItem(item.id, 'subUnitId', newUnit.subUnits[0].id);
+                                    } else {
+                                        onUpdateItem(item.id, 'subUnitId', '');
+                                    }
+                                }}
+                                title="Unit"
+                            >
+                                {curriculum.units.map((u: Unit) => <option key={u.id} value={u.id}>Unit {u.unitNumber}: {u.name}</option>)}
+                            </select>
+
+                            <select
+                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[150px]"
+                                value={item.subUnitId}
+                                onChange={(e) => onUpdateItem(item.id, 'subUnitId', e.target.value)}
+                                title="Sub-Unit"
+                                disabled={!item.unitId || availableSubUnits.length === 0}
+                            >
+                                {availableSubUnits.length === 0 && <option value="">No Subunits</option>}
+                                {availableSubUnits.map((s: SubUnit) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                        </>
+                    )}
+
+                    <select
+                        className={`border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
+                        value={item.knowledgeLevel}
+                        onChange={(e) => onUpdateItem(item.id, 'knowledgeLevel', e.target.value)}
+                        title="Knowledge Level"
+                        disabled={item.marksPerQuestion === 1}
+                    >
+                        {systemSettings.knowledgeLevels.map((k: any) => <option key={k.code} value={k.name}>{k.name}</option>)}
+                    </select>
+
+                    <select
+                        className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none"
+                        value={item.cognitiveProcess}
+                        onChange={(e) => onUpdateItem(item.id, 'cognitiveProcess', e.target.value)}
+                        title="Cognitive Process"
+                    >
+                        {systemSettings.cognitiveProcesses.map((c: any) => <option key={c.code} value={c.description}>{c.name}</option>)}
+                    </select>
+
+                    <select
+                        className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none w-24"
+                        value={item.itemFormat}
+                        onChange={(e) => onUpdateItem(item.id, 'itemFormat', e.target.value)}
+                        title="Item Format"
+                    >
+                        {systemSettings.itemFormats.map((f: any) => <option key={f.code} value={f.name}>{f.name}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="p-4">
+                {/* Section Instruction Display */}
+                {item.instruction && (
+                    <div className="mb-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg">
+                        <div className="text-[10px] font-bold text-amber-600 uppercase mb-1 tracking-wider">Section Instruction</div>
+                        <p className="text-sm font-bold text-amber-900 border-none outline-none">{item.instruction}</p>
+                    </div>
+                )}
+
+                {/* Tabs */}
+                <div className="flex border-b mb-4">
+                    <button
+                        onClick={() => setActiveTab('question')}
+                        className={`px-4 py-2 text-sm font-medium mr-1 rounded-t-md transition-colors ${activeTab === 'question' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Question
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('answer')}
+                        className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${activeTab === 'answer' ? 'bg-green-50 text-green-700 border-b-2 border-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Answer
+                    </button>
+                </div>
+
+                {/* Tab Content */}
+                <div className="min-h-[150px]">
+                    {activeTab === 'question' && (
+                        <div className="animate-fade-in space-y-6">
+                            {/* Option A (Default) */}
+                            <div>
+                                {item.hasInternalChoice && <div className="text-xs font-bold text-blue-600 mb-1">Option A</div>}
+                                <SimpleRichTextEditor
+                                    value={item.questionText}
+                                    onChange={(val: string) => onUpdateItem(item.id, 'questionText', val)}
+                                    placeholder="Type the question content here..."
+                                />
+                            </div>
+
+                            {/* Option B (If Enabled) */}
+                            {item.hasInternalChoice && (
+                                <div className="border-t pt-4 bg-purple-50/20 p-4 rounded-lg border border-purple-100">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="text-xs font-bold text-purple-600 flex items-center gap-2">
+                                            <span className="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">OR</span>
+                                            Option B Settings
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={item.knowledgeLevelB || item.knowledgeLevel}
+                                                onChange={(e) => onUpdateItem(item.id, 'knowledgeLevelB', e.target.value)}
+                                                className={`text-[10px] border p-1 rounded bg-white font-bold ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
+                                                disabled={item.marksPerQuestion === 1}
+                                            >
+                                                {Object.values(KnowledgeLevel).map(kl => <option key={kl} value={kl}>{kl}</option>)}
+                                            </select>
+                                            <select
+                                                value={item.cognitiveProcessB || item.cognitiveProcess}
+                                                onChange={(e) => onUpdateItem(item.id, 'cognitiveProcessB', e.target.value)}
+                                                className="text-[10px] border p-1 rounded bg-white font-bold"
+                                            >
+                                                {Object.values(CognitiveProcess).map(cp => <option key={cp} value={cp}>{cp.split(' ')[0]}</option>)}
+                                            </select>
+                                            <select
+                                                value={item.itemFormatB || item.itemFormat}
+                                                onChange={(e) => onUpdateItem(item.id, 'itemFormatB', e.target.value)}
+                                                className="text-[10px] border p-1 rounded bg-white font-bold"
+                                            >
+                                                {systemSettings.itemFormats.map((f: any) => <option key={f.code} value={f.name}>{f.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <SimpleRichTextEditor
+                                        value={item.questionTextB}
+                                        onChange={(val: string) => onUpdateItem(item.id, 'questionTextB', val)}
+                                        placeholder="Type the second option (OR) question content here..."
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'answer' && (
+                        <div className="animate-fade-in space-y-6">
+                            {/* Answer Toolbar - Global or Per Item? Keeping Global for simplicity for now, applies to the active field conceptually, but we have two fields. 
+                                We'll just replicate controls for A and B if needed or share.
+                            */}
+
+                            {/* Option A Answer */}
+                            <div className="space-y-3">
+                                {item.hasInternalChoice && <div className="text-xs font-bold text-blue-600">Option A Answer</div>}
+
+                                <div className="flex items-center gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mode:</span>
+                                    <select
+                                        className="border rounded px-2 py-1 text-sm bg-white"
+                                        value={answerMode}
+                                        onChange={(e) => setAnswerMode(e.target.value as any)}
+                                    >
+                                        <option value="content">Write Content</option>
+                                        <option value="discourse">Select Discourse</option>
+                                        <option value="ai">AI Generation</option>
+                                    </select>
+                                </div>
+
+                                {answerMode === 'content' && (
+                                    <SimpleRichTextEditor
+                                        value={item.answerText}
+                                        onChange={(val: string) => onUpdateItem(item.id, 'answerText', val)}
+                                        placeholder="Type the answer key or hints..."
+                                    />
+                                )}
+                                {answerMode === 'discourse' && (
+                                    <div className="border rounded p-4 bg-gray-50">
+                                        <p className="text-sm text-gray-600 mb-2">Select a discourse rubrics to apply:</p>
+                                        {availableDiscourses.length === 0 ? (
+                                            <p className="text-red-500 text-sm italic">No discourses found for {item.marksPerQuestion} Marks.</p>
+                                        ) : (
+                                            <select
+                                                className="w-full border p-2 rounded mb-2"
+                                                onChange={(e) => {
+                                                    if (e.target.value) {
+                                                        applyDiscourse(e.target.value, 'answerText');
+                                                        setAnswerMode('content');
+                                                    }
+                                                }}
+                                                defaultValue=""
+                                            >
+                                                <option value="" disabled>-- Choose Discourse --</option>
+                                                {availableDiscourses.map((d: Discourse) => (
+                                                    <option key={d.id} value={d.id}>{d.name} ({d.cognitiveProcess ? d.cognitiveProcess : 'No CP'})</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                )}
+                                {answerMode === 'ai' && (
+                                    <div className="border rounded p-6 bg-blue-50 text-center">
+                                        <button
+                                            onClick={() => generateAIAnswer('answerText', 'questionText')}
+                                            disabled={isGenerating || !item.questionText}
+                                            className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 disabled:bg-gray-400 transition"
+                                        >
+                                            {isGenerating ? 'Generating...' : 'Generate Answer with AI'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Option B Answer */}
+                            {item.hasInternalChoice && (
+                                <div className="space-y-3 pt-4 border-t">
+                                    <div className="text-xs font-bold text-purple-600">Option B Answer</div>
+                                    {/* Reusing same mode for simplicity, but in reality might want distinct mode. 
+                                        For this iteration, we just provide the same toolbar or just Content Editor to save space if mode is Content.
+                                        Let's just duplicate the toolbar logic for robustness.
+                                     */}
+
+                                    <div className="flex items-center gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
+                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mode:</span>
+                                        {/* We share the mode state for simplicity for now */}
+                                        <select
+                                            className="border rounded px-2 py-1 text-sm bg-white"
+                                            value={answerMode}
+                                            onChange={(e) => setAnswerMode(e.target.value as any)}
+                                        >
+                                            <option value="content">Write Content</option>
+                                            <option value="discourse">Select Discourse</option>
+                                            <option value="ai">AI Generation</option>
+                                        </select>
+                                    </div>
+
+                                    {answerMode === 'content' && (
+                                        <SimpleRichTextEditor
+                                            value={item.answerTextB}
+                                            onChange={(val: string) => onUpdateItem(item.id, 'answerTextB', val)}
+                                            placeholder="Type the answer key or hints for Option B..."
+                                        />
+                                    )}
+                                    {answerMode === 'discourse' && (
+                                        <div className="border rounded p-4 bg-gray-50">
+                                            <select
+                                                className="w-full border p-2 rounded mb-2"
+                                                onChange={(e) => {
+                                                    if (e.target.value) {
+                                                        applyDiscourse(e.target.value, 'answerTextB');
+                                                        setAnswerMode('content');
+                                                    }
+                                                }}
+                                                defaultValue=""
+                                            >
+                                                <option value="" disabled>-- Choose Discourse --</option>
+                                                {availableDiscourses.map((d: Discourse) => (
+                                                    <option key={d.id} value={d.id}>{d.name} ({d.cognitiveProcess ? d.cognitiveProcess : 'No CP'})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                    {answerMode === 'ai' && (
+                                        <div className="border rounded p-6 bg-blue-50 text-center">
+                                            <button
+                                                onClick={() => generateAIAnswer('answerTextB', 'questionTextB')}
+                                                disabled={isGenerating || !item.questionTextB}
+                                                className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 disabled:bg-gray-400 transition"
+                                            >
+                                                {isGenerating ? 'Generating...' : 'Generate Answer B with AI'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blueprint: Blueprint, onUpdateItem: (id: string, field: keyof BlueprintItem, val: string) => void, paperType?: QuestionPaperType }) => {
+    const settings = getSettings();
+    const discourses = getDiscourses() || [];
+
+    const fullCurriculum = getCurriculum(blueprint.classLevel, blueprint.subject);
+    const curriculum = getFilteredCurriculum(fullCurriculum, blueprint.examTerm) || fullCurriculum;
+
+    // Helper for unit order
+    const unitOrderMap = new Map<string, number>();
+    curriculum?.units.forEach((u: Unit, idx: number) => {
+        unitOrderMap.set(u.id, u.unitNumber);
+    });
+
+    // Sort items: Marks Ascending -> Unit Order Ascending
+    const sortedItems = [...blueprint.items].sort((a, b) => {
+        // 1. Sort by Marks (Ascending)
+        if (a.marksPerQuestion !== b.marksPerQuestion) {
+            return a.marksPerQuestion - b.marksPerQuestion;
+        }
+
+        // 2. Sort by Unit (using looked-up order)
+        const unitA = unitOrderMap.get(a.unitId) || 999;
+        const unitB = unitOrderMap.get(b.unitId) || 999;
+        return unitA - unitB;
+    });
+
+    return (
+        <div className="bg-white p-6 rounded shadow mt-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2">
+                <Edit2 size={24} className="text-blue-600" />
+                Question & Answer Entry
+            </h2>
+            <div className="space-y-6">
+                {sortedItems.map((item, index) => {
+                    // Filter discourses for this item
+                    const itemDiscourses = discourses.filter(d =>
+                        d.subject === blueprint.subject &&
+                        d.marks === item.marksPerQuestion
+                    );
+
+                    const section = paperType?.sections.find(s => s.id === item.sectionId);
+                    const itemWithInstruction = { ...item, instruction: section?.instruction };
+
+                    return (
+                        <QuestionRow
+                            key={item.id}
+                            item={itemWithInstruction}
+                            index={index}
+                            onUpdateItem={onUpdateItem}
+                            availableDiscourses={itemDiscourses}
+                            systemSettings={settings}
+                            curriculum={curriculum}
+                        />
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// --- Reports Component ---
+
+export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprint: Blueprint, curriculum: Curriculum, onDownloadPDF: (type: any) => void }) => {
+    if (!blueprint.isConfirmed) return null;
+    const [activeTab, setActiveTab] = useState<'report1' | 'report2' | 'report3' | 'answerKey'>('report1');
+
+    const stats = {
+        knowledge: {} as Record<string, { count: number, marks: number }>,
+        cognitive: {} as Record<string, { count: number, marks: number }>,
+        format: {} as Record<string, { count: number, marks: number }>,
+        content: {} as Record<string, number>
+    };
+
+    let totalMarks = 0;
+    let totalQuestions = 0;
+    let totalEstimatedTime = 0;
+
+    blueprint.items.forEach(item => {
+        // Knowledge
+        if (!stats.knowledge[item.knowledgeLevel]) stats.knowledge[item.knowledgeLevel] = { count: 0, marks: 0 };
+        stats.knowledge[item.knowledgeLevel].count += item.questionCount;
+        stats.knowledge[item.knowledgeLevel].marks += item.totalMarks;
+
+        // Cognitive
+        if (!stats.cognitive[item.cognitiveProcess]) stats.cognitive[item.cognitiveProcess] = { count: 0, marks: 0 };
+        stats.cognitive[item.cognitiveProcess].count += item.questionCount;
+        stats.cognitive[item.cognitiveProcess].marks += item.totalMarks;
+
+        // Format
+        if (!stats.format[item.itemFormat]) stats.format[item.itemFormat] = { count: 0, marks: 0 };
+        stats.format[item.itemFormat].count += item.questionCount;
+        stats.format[item.itemFormat].marks += item.totalMarks;
+
+        // Content
+        stats.content[item.unitId] = (stats.content[item.unitId] || 0) + item.totalMarks;
+
+        totalMarks += item.totalMarks;
+        totalQuestions += item.questionCount;
+
+        // Time Calculation Logic
+        let time = 2;
+        if (item.marksPerQuestion === 1) time = 2;
+        else if (item.marksPerQuestion === 2) time = 3;
+        else if (item.marksPerQuestion === 3) time = 5;
+        else if (item.marksPerQuestion === 4) time = 8;
+        else if (item.marksPerQuestion === 5) time = 10;
+        else if (item.marksPerQuestion >= 6) time = 15;
+        totalEstimatedTime += time * item.questionCount;
+    });
+
+    const TableHeader = ({ children, className = "" }: any) => <th className={`border border-black p-2 bg-[#e2efda] text-center font-semibold text-sm text-black ${className}`}>{children}</th>;
+    const TableCell = ({ children, className = "", colSpan }: any) => <td colSpan={colSpan} className={`border border-black p-2 text-sm text-black ${className} `}>{children}</td>;
+
+    // Helper for QP Code
+    const getQPCode = () => {
+        const cls = blueprint.classLevel === ClassLevel._8 ? '8' : blueprint.classLevel === ClassLevel._9 ? '9' : '10';
+        const sub = blueprint.subject.includes('AT') ? '02' : '12';
+        return `T${cls}${sub} `;
+    };
+
+    // Helper for Subject Name
+    const getSubjectTitle = () => {
+        if (blueprint.subject.includes('AT')) {
+            return { tamil: 'தமிழ் முதல் தாள் (AT)', eng: 'First Language - Tamil Paper I' };
+        }
+        return { tamil: 'தமிழ் இரண்டாம் தாள் (BT)', eng: 'First Language - Tamil Paper II' };
+    };
+
+    const getTermTamil = () => {
+        switch (blueprint.examTerm) {
+            case ExamTerm.FIRST: return 'முதல்';
+            case ExamTerm.SECOND: return 'இரண்டாம்';
+            case ExamTerm.THIRD: return 'மூன்றாம்';
+            default: return 'முதல்';
+        }
+    };
+    const getAcademicYear = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        if (month <= 4) return `${year - 1}-${year}`;
+        return `${year}-${year + 1}`;
+    };
+    const academicYear = blueprint.academicYear || getAcademicYear();
+    const qpCode = getQPCode();
+    const subjectTitle = getSubjectTitle();
+    const termTamil = getTermTamil();
+    const setId = (blueprint.setId || 'Set A').replace('Set ', '');
+    const termEnglish = blueprint.examTerm === ExamTerm.FIRST ? 'First' : blueprint.examTerm === ExamTerm.SECOND ? 'Second' : 'Third';
+
+    // Pagination and Sorting for Item Analysis (Report 2)
+    const ITEMS_PER_PAGE = 15;
+
+    // Grouping identical items for Report 2
+    const groupedItemsMap = blueprint.items.reduce((acc, item) => {
+        const key = `${item.unitId}-${item.subUnitId}-${item.marksPerQuestion}-${item.knowledgeLevel}-${item.knowledgeLevelB || ''}-${item.cognitiveProcess}-${item.cognitiveProcessB || ''}-${item.itemFormat}-${item.itemFormatB || ''}-${item.hasInternalChoice ? 'yes' : 'no'}`;
+        if (!acc[key]) {
+            acc[key] = {
+                ...item,
+                questionCount: 1,
+                totalMarks: item.marksPerQuestion
+            };
+        } else {
+            acc[key].questionCount += 1;
+            acc[key].totalMarks += item.marksPerQuestion;
+        }
+        return acc;
+    }, {} as Record<string, any>);
+
+    const sortedGroups = Object.values(groupedItemsMap)
+        .sort((a, b) => a.marksPerQuestion - b.marksPerQuestion)
+        .map((group, idx) => ({ ...group, displayIdx: idx + 1 }));
+
+    const chunkedItems = [];
+    for (let i = 0; i < sortedGroups.length; i += ITEMS_PER_PAGE) {
+        chunkedItems.push(sortedGroups.slice(i, i + ITEMS_PER_PAGE));
+    }
+
+    // Helper for unit order
+    const unitOrderMap = new Map<string, number>();
+    curriculum?.units.forEach((u: Unit) => {
+        unitOrderMap.set(u.id, u.unitNumber);
+    });
+
+    const sortedReportItems = [...blueprint.items].sort((a, b) => {
+        const unitA = unitOrderMap.get(a.unitId) || 999;
+        const unitB = unitOrderMap.get(b.unitId) || 999;
+        if (unitA !== unitB) return unitA - unitB;
+        return a.marksPerQuestion - b.marksPerQuestion;
+    });
+
+    // --- RENDER HELPERS ---
+
+    const renderReport1Content = (pageOnly?: number) => {
+        // Calculate internal choice percentage for Section VI
+        const internalChoiceItems = blueprint.items.filter(i => i.hasInternalChoice);
+        const internalChoiceMarks = internalChoiceItems.reduce((sum, i) => sum + i.totalMarks, 0);
+        const internalPercent = ((internalChoiceMarks / totalMarks) * 100).toFixed(0);
+
+        return (
+            <div className="tamil-font">
+                {(!pageOnly || pageOnly === 1) && (
+                    <div className="bg-white p-4">
+                        <div className="mb-6 font-sans">
+
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="border-2 border-black w-10 h-10 flex items-center justify-center text-xl font-bold">{setId}</div>
+                                <div className="text-center flex-1">
+                                    <h1 className="text-xl font-bold text-black">சமக்ர சிக்ஷா கேரளம்</h1>
+                                </div>
+                                <div className="bg-black text-white rounded-full px-4 py-1 font-bold text-sm">GI {qpCode}</div>
+                            </div>
+                            <div className="text-center mb-2">
+                                <h2 className="text-lg font-bold text-black">{termTamil} பருவ தொகுத்தறி மதிப்பீடு {academicYear}</h2>
+                                <h3 className="text-md font-bold uppercase text-black">{termEnglish} Term Summative Assessment {academicYear}</h3>
+                            </div>
+                            <div className="text-center mb-4">
+                                <h2 className="text-lg font-bold text-black">{subjectTitle.tamil}</h2>
+                                <h3 className="text-md font-bold text-black">{subjectTitle.eng}</h3>
+                            </div>
+                            <div className="flex justify-between items-end border-b-2 border-black pb-2 mt-4 font-bold text-lg text-black">
+                                <div className="w-1/3">Std. : {blueprint.classLevel}</div>
+                                <div className="text-right w-2/3">
+                                    <div className="mb-1">நேரம் : 90 நிமிடங்கள்</div>
+                                    <div>மதிப்பெண் : {blueprint.totalMarks}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mb-8">
+                            <h3 className="text-base font-bold text-blue-600 mb-2">I. Weightage to Content Area</h3>
+                            <table className="w-full border-collapse border border-black">
+                                <thead>
+                                    <tr>
+                                        <TableHeader className="w-16">Sl. No.</TableHeader>
+                                        <TableHeader>Learning Outcomes (LOs)</TableHeader>
+                                        <TableHeader>Unit / Topic</TableHeader>
+                                        <TableHeader>Sub-unit / Discourse</TableHeader>
+                                        <TableHeader className="w-20">Score</TableHeader>
+                                        <TableHeader className="w-24">Percentage</TableHeader>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {curriculum.units.map((unit, idx) => {
+                                        const unitScore = stats.content[unit.id] || 0;
+                                        const percentage = ((unitScore / totalMarks) * 100).toFixed(1);
+                                        if (unitScore === 0) return null;
+                                        return (
+                                            <tr key={unit.id}>
+                                                <TableCell className="text-center">{idx + 1}</TableCell>
+                                                <TableCell>
+                                                    <div className="text-xs whitespace-pre-wrap">{unit.learningOutcomes || '-'}</div>
+                                                </TableCell>
+                                                <TableCell className="text-center font-medium">{unit.name}</TableCell>
+                                                <TableCell>
+                                                    <ol className="list-decimal pl-4 text-xs italic">
+                                                        {unit.subUnits.map(s => <li key={s.id}>{s.name}</li>)}
+                                                    </ol>
+                                                </TableCell>
+                                                <TableCell className="text-center font-bold">{unitScore}</TableCell>
+                                                <TableCell className="text-center">{percentage}%</TableCell>
+                                            </tr>
+                                        );
+                                    })}
+                                    <tr className="font-bold bg-[#e2efda]">
+                                        <TableCell className="text-center" colSpan={4}>Total</TableCell>
+                                        <TableCell className="text-center">{totalMarks}</TableCell>
+                                        <TableCell className="text-center">100%</TableCell>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="mb-8">
+                            <h3 className="text-base font-bold text-blue-600 mb-2">II. Weightage to Cognitive Process</h3>
+                            <table className="w-full border-collapse border border-black max-w-2xl">
+                                <thead>
+                                    <tr>
+                                        <TableHeader className="w-16">Sl. No.</TableHeader>
+                                        <TableHeader>Cognitive Process</TableHeader>
+                                        <TableHeader className="w-20">Score</TableHeader>
+                                        <TableHeader className="w-24">Percentage</TableHeader>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(CognitiveProcess).map(([key, value], idx) => {
+                                        const data = stats.cognitive[value] || { count: 0, marks: 0 };
+                                        const percentage = ((data.marks / totalMarks) * 100).toFixed(1);
+                                        return (
+                                            <tr key={key}>
+                                                <TableCell className="text-center font-bold">CP<sub>{idx + 1}</sub></TableCell>
+                                                <TableCell>{value}</TableCell>
+                                                <TableCell className="text-center">{data.marks || '-'}</TableCell>
+                                                <TableCell className="text-center">{data.marks ? `${percentage}%` : '-'}</TableCell>
+                                            </tr>
+                                        );
+                                    })}
+                                    <tr className="font-bold bg-[#e2efda]">
+                                        <TableCell className="text-center" colSpan={2}>Total</TableCell>
+                                        <TableCell className="text-center">{totalMarks}</TableCell>
+                                        <TableCell className="text-center">100%</TableCell>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div className="text-sm font-bold mt-2">Index of Abbreviation: CP - Cognitive Process</div>
+                        </div>
+
+                        <div className="mb-4">
+                            <h3 className="text-base font-bold text-blue-600 mb-2">III. Weightage to Knowledge Level</h3>
+                            <table className="w-full border-collapse border border-black max-w-2xl">
+                                <thead>
+                                    <tr>
+                                        <TableHeader className="w-16">Sl. No.</TableHeader>
+                                        <TableHeader>Knowledge Level</TableHeader>
+                                        <TableHeader className="w-20">Score</TableHeader>
+                                        <TableHeader className="w-24">Percentage</TableHeader>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.values(KnowledgeLevel).map((kl, idx) => {
+                                        const data = stats.knowledge[kl] || { count: 0, marks: 0 };
+                                        const percentage = ((data.marks / totalMarks) * 100).toFixed(0);
+                                        return (
+                                            <tr key={kl}>
+                                                <TableCell className="text-center">{idx + 1}</TableCell>
+                                                <TableCell>{kl}</TableCell>
+                                                <TableCell className="text-center">{data.marks}</TableCell>
+                                                <TableCell className="text-center">{percentage}%</TableCell>
+                                            </tr>
+                                        );
+                                    })}
+                                    <tr className="font-bold bg-[#e2efda]">
+                                        <TableCell className="text-center" colSpan={2}>Total</TableCell>
+                                        <TableCell className="text-center">{totalMarks}</TableCell>
+                                        <TableCell className="text-center">100%</TableCell>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {(!pageOnly || pageOnly === 2) && (
+                    <div className="bg-white p-4">
+                        <div className="mb-8">
+                            <h3 className="text-base font-bold text-blue-600 mb-2">IV. Weightage to Item Format</h3>
+                            <table className="w-full border-collapse border border-black">
+                                <thead>
+                                    <tr>
+                                        <TableHeader className="w-16">Sl. No.</TableHeader>
+                                        <TableHeader colSpan={2}>Item Format</TableHeader>
+                                        <TableHeader>No. of Items</TableHeader>
+                                        <TableHeader>Estimated Time</TableHeader>
+                                        <TableHeader>Score allotted</TableHeader>
+                                        <TableHeader>Percentage</TableHeader>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(() => {
+                                        const rows = [
+                                            {
+                                                main: 'SR Item',
+                                                subs: [
+                                                    { code: 'SR1', label: 'MCI', fmt: ItemFormat.SR1 },
+                                                    { code: 'SR2', label: 'MI', fmt: ItemFormat.SR2 }
+                                                ]
+                                            },
+                                            {
+                                                main: 'CRS Item',
+                                                subs: [
+                                                    { code: 'CRS1', label: 'VSA', fmt: ItemFormat.CRS1 },
+                                                    { code: 'CRS2', label: 'SA', fmt: ItemFormat.CRS2 }
+                                                ]
+                                            },
+                                            {
+                                                main: 'CRL Item',
+                                                subs: [
+                                                    { code: 'CRL', label: 'E', fmt: ItemFormat.CRL }
+                                                ]
+                                            }
+                                        ];
+
+                                        let totalItemsInFormat = 0;
+                                        let totalScoreInFormat = 0;
+
+                                        return (
+                                            <>
+                                                {rows.map((r, rIdx) => {
+                                                    const groupScore = r.subs.reduce((acc, s) => acc + (stats.format[s.fmt]?.marks || 0), 0);
+                                                    const groupCount = r.subs.reduce((acc, s) => acc + (stats.format[s.fmt]?.count || 0), 0);
+                                                    const groupPercent = ((groupScore / totalMarks) * 100).toFixed(0);
+
+                                                    totalItemsInFormat += groupCount;
+                                                    totalScoreInFormat += groupScore;
+
+                                                    return r.subs.map((s, sIdx) => {
+                                                        const data = stats.format[s.fmt] || { count: 0, marks: 0 };
+
+                                                        // Time calculation for this format
+                                                        let formatTime = 0;
+                                                        blueprint.items.forEach(item => {
+                                                            if (item.itemFormat === s.fmt) {
+                                                                let time = 2;
+                                                                if (item.marksPerQuestion === 1) time = 2;
+                                                                else if (item.marksPerQuestion === 2) time = 3;
+                                                                else if (item.marksPerQuestion === 3) time = 5;
+                                                                else if (item.marksPerQuestion === 4) time = 8;
+                                                                else if (item.marksPerQuestion === 5) time = 10;
+                                                                else if (item.marksPerQuestion >= 6) time = 15;
+                                                                formatTime += time * item.questionCount;
+                                                            }
+                                                        });
+
+                                                        return (
+                                                            <tr key={s.code}>
+                                                                {sIdx === 0 && <TableCell className="text-center" rowSpan={r.subs.length}>{rIdx + 1}</TableCell>}
+                                                                {sIdx === 0 && <TableCell rowSpan={r.subs.length}>{r.main}</TableCell>}
+                                                                <TableCell>
+                                                                    <div className="flex justify-between">
+                                                                        <span>{s.code}</span>
+                                                                        <span>{s.label}</span>
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-center">{data.count || '-'}</TableCell>
+                                                                <TableCell className="text-center">{formatTime || '-'}</TableCell>
+                                                                <TableCell className="text-center">{data.marks || '-'}</TableCell>
+                                                                {sIdx === 0 && <TableCell className="text-center" rowSpan={r.subs.length}>{groupPercent}%</TableCell>}
+                                                            </tr>
+                                                        );
+                                                    });
+                                                })}
+                                                <tr className="font-bold bg-[#e2efda]">
+                                                    <TableCell className="text-center" colSpan={3}>Total</TableCell>
+                                                    <TableCell className="text-center">{totalItemsInFormat}</TableCell>
+                                                    <TableCell className="text-center">{totalEstimatedTime}</TableCell>
+                                                    <TableCell className="text-center"></TableCell>
+                                                    <TableCell className="text-center">100%</TableCell>
+                                                </tr>
+                                            </>
+                                        );
+                                    })()}
+                                </tbody>
+                            </table>
+                            <div className="grid grid-cols-2 gap-x-4 mt-4 text-sm leading-relaxed">
+                                <div className="space-y-1">
+                                    <div><strong>Index of Abbreviations:</strong></div>
+                                    <div className="flex gap-4"><span>SR</span> <span>- Selected Response</span></div>
+                                    <div className="flex gap-4"><span>CRS</span> <span>- Constructed Response Short Answer</span></div>
+                                    <div className="flex gap-4"><span>CRL</span> <span>- Constructed Response Long Answer</span></div>
+                                </div>
+                                <div className="space-y-1 mt-6">
+                                    <div className="flex gap-4"><span>MCI</span> <span>- Multiple Choice Items</span></div>
+                                    <div className="flex gap-4"><span>MI</span> <span>- Matching Item</span></div>
+                                    <div className="flex gap-4"><span>VSA</span> <span>- Very Short Answer</span></div>
+                                    <div className="flex gap-4"><span>SA</span> <span>- Short Answer</span></div>
+                                    <div className="flex gap-4"><span>E</span> <span>- Essay</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <h3 className="text-base font-bold text-blue-600 mb-2 underline">V. Scheme of Sections :</h3>
+                        </div>
+
+                        <div className="mb-8">
+                            <h3 className="text-base font-bold text-blue-600 mb-4 underline">VI. Pattern of Options :</h3>
+                            <div className="flex items-center gap-12 ml-4">
+                                <div className="flex items-center gap-4">
+                                    <span>Internal choice</span>
+                                    <div className="border border-black w-6 h-6 flex items-center justify-center font-bold">
+                                        {internalChoiceItems.length > 0 ? '✓' : ''}
+                                    </div>
+                                    <span className="ml-4">{internalPercent}%</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span>Overall choice</span>
+                                    <div className="border border-black w-6 h-6 flex items-center justify-center font-bold">
+                                        {/* Usually not used in this pattern but provided placeholder */}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderReport2Content = (chunk: any[], pageIdx: number) => (
+        <div className="tamil-font p-4 w-full">
+            <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold text-pink-600 mb-2">Proforma for Analysing Question Paper</h1>
+                <h2 className="text-lg font-bold text-pink-500">Item/Question-wise Analysis</h2>
+            </div>
+
+            <div className="mb-4 text-[12px] font-bold">
+                <div className="grid grid-cols-2 gap-x-12 gap-y-1 px-4">
+                    <div className="flex justify-between border-b border-gray-300"><span>Name of the Board</span> <span>: SSLC</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Class</span> <span>: {blueprint.classLevel}</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Name of Examination</span> <span>: {blueprint.examTerm}</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Subject</span> <span>: {blueprint.subject}</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Year of Examination</span> <span>: {blueprint.academicYear}</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Score</span> <span>: {blueprint.totalMarks}</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Q. Paper No./Code</span> <span>: {qpCode}</span></div>
+                    <div className="flex justify-between border-b border-gray-300"><span>Time Allotted</span> <span>: 1.30</span></div>
+                </div>
+            </div>
+
+            <h3 className="text-center font-bold text-blue-600 mb-4 underline">Part – II: Item-wise Analysis</h3>
+
+            <table className="w-full border-collapse border border-black text-[11px] table-fixed">
+                <thead>
+                    <tr className="bg-orange-200">
+                        <th rowSpan={2} className="border border-black p-1 w-[3%] text-black">Item/ Qn. No.</th>
+                        <th colSpan={3} className="border border-black p-1 w-[25%] text-black">Content Area</th>
+                        <th colSpan={3} className="border border-black p-1 w-[5.5%] text-black">Knowledge level</th>
+                        <th colSpan={7} className="border border-black p-1 w-[10.5%] text-black">Cognitive Process</th>
+                        <th colSpan={6} className="border border-black p-1 w-[10%] text-black">Item Format</th>
+                        <th rowSpan={2} className="border border-black p-1 w-[3%] text-black text-center">Choice</th>
+                        <th rowSpan={2} className="border border-black p-1 w-[3%] text-black">Score Allotted</th>
+                        <th rowSpan={2} className="border border-black p-1 w-[4%] text-black">Estimated Time (in minute)</th>
+                    </tr>
+                    <tr className="bg-orange-100">
+                        <th className="border border-black p-1 text-black w-[29%]">Learning Objective</th>
+                        <th className="border border-black p-1 text-black w-[28%]">Topic/Unit /Chapter</th>
+                        <th className="border border-black p-1 text-black w-[28%]">Sub-Topic/Sub-unit/ Discourse</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black">B</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black">A</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black">P</th>
+                        {/* Cognitive Processes */}
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP1</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP2</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP3</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP4</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP5</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP6</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP7</th>
+                        {/* Item Formats */}
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">SR1</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">SR2</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRS1</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRS2</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRS3</th>
+                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {chunk.map((item, idx) => {
+                        const unit = curriculum.units.find((u: any) => u.id === item.unitId);
+                        const subUnit = unit?.subUnits.find((s: any) => s.id === item.subUnitId);
+
+                        let time = 2;
+                        if (item.totalMarks === 1) time = 2;
+                        else if (item.totalMarks === 2) time = 3;
+                        else if (item.totalMarks === 3) time = 5;
+                        else if (item.totalMarks === 4) time = 8;
+                        else if (item.totalMarks === 5) time = 10;
+                        else if (item.totalMarks >= 6) time = 15;
+
+                        const rowA = (
+                            <tr key={`${item.id}-A`}>
+                                <td className="border border-black p-1 text-center font-bold text-black w-[2.5%]">{item.displayIdx}{item.hasInternalChoice ? 'A' : ''}</td>
+                                <td className="border border-black p-1 text-black text-[10px] w-[27%]">{unit?.learningOutcomes}</td>
+                                <td className="border border-black p-1 text-center text-black text-[10px] w-[18%]">{unit?.name}</td>
+                                <td className="border border-black p-1 text-center text-black text-[10px] w-[18%]">{subUnit?.name}</td>
+
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.BASIC ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.AVERAGE ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.PROFOUND ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP4 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP5 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP6 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP7 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.SR1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.SR2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRL ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+
+                                <td className="border border-black p-1 text-center font-bold text-black w-[3%]">{item.hasInternalChoice ? 'OR' : ''}</td>
+                                <td className="border border-black p-1 text-center font-bold bg-gray-50 text-black w-[4%]">{item.questionCount}({item.totalMarks})</td>
+                                <td className="border border-black p-1 text-center text-black w-[4.5%]">{time}</td>
+                            </tr>
+                        );
+
+                        if (!item.hasInternalChoice) return rowA;
+
+                        const klB = item.knowledgeLevelB || item.knowledgeLevel;
+                        const cpB = item.cognitiveProcessB || item.cognitiveProcess;
+                        const formatB = item.itemFormatB || item.itemFormat;
+
+                        const rowB = (
+                            <tr key={`${item.id}-B`} className="bg-purple-50/10">
+                                <td className="border border-black p-1 text-center font-bold text-gray-600">{item.displayIdx}B</td>
+                                <td className="border border-black p-1 text-black text-[9px] opacity-40 italic">Same as A</td>
+                                <td className="border border-black p-1 text-center text-black text-[9px] opacity-40">"</td>
+                                <td className="border border-black p-1 text-center text-black text-[9px] opacity-40">"</td>
+
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{klB === KnowledgeLevel.BASIC ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{klB === KnowledgeLevel.AVERAGE ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{klB === KnowledgeLevel.PROFOUND ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP4 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP5 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP6 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP7 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.SR1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.SR2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRS1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRS2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRS3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRL ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+
+                                <td className="border border-black p-1 text-center font-bold text-gray-400">OR</td>
+                                <td className="border border-black p-1 text-center font-bold bg-gray-50 text-gray-600">{item.questionCount}({item.totalMarks})</td>
+                                <td className="border border-black p-1 text-center text-gray-500">{time}</td>
+                            </tr>
+                        );
+
+                        return (
+                            <React.Fragment key={item.id}>
+                                {rowA}
+                                {rowB}
+                            </React.Fragment>
+                        );
+                    })}
+
+                    {pageIdx === chunkedItems.length - 1 && (
+                        <tr className="font-bold bg-gray-100">
+                            <td className="border border-black p-1 text-right text-black" colSpan={4}>Total</td>
+                            {Object.values(KnowledgeLevel).map(kl => (
+                                <td key={kl} className="border border-black p-1 text-center text-black">
+                                    {stats.knowledge[kl] ? `${stats.knowledge[kl].count}(${stats.knowledge[kl].marks})` : ''}
+                                </td>
+                            ))}
+                            {Object.values(CognitiveProcess).map(cp => (
+                                <td key={cp} className="border border-black p-1 text-center text-black">
+                                    {stats.cognitive[cp] ? `${stats.cognitive[cp].count}(${stats.cognitive[cp].marks})` : ''}
+                                </td>
+                            ))}
+                            {Object.values(ItemFormat).map(fmt => (
+                                <td key={fmt} className="border border-black p-1 text-center text-black">
+                                    {stats.format[fmt] ? `${stats.format[fmt].count}(${stats.format[fmt].marks})` : ''}
+                                </td>
+                            ))}
+                            <td className="border border-black p-1 text-center font-bold text-black">-</td>
+                            <td className="border border-black p-1 text-center text-black font-bold">{totalQuestions}({totalMarks})</td>
+                            <td className="border border-black p-1 text-center text-black font-bold">{totalEstimatedTime}</td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    const renderReport3Content = () => (
+        <div className="tamil-font p-4">
+            <div className="text-center mb-6">
+                <h1 className="text-xl font-bold text-black border-b-2 border-black inline-block px-4 pb-1">
+                    BLUE PRINT – {blueprint.classLevel}{blueprint.subject.includes('AT') ? 'AT' : 'BT'} ({blueprint.setId || 'Set A'}) - {blueprint.questionPaperTypeName}
+                </h1>
+                <h2 className="text-lg font-bold text-black mt-2">
+                    {blueprint.subject.includes('AT') ? 'TAMIL FIRST LANGUAGE PAPER I' : 'TAMIL FIRST LANGUAGE PAPER II'}
+                </h2>
+            </div>
+
+            <table className="w-full border-collapse border border-black text-[11px] table-fixed">
+                <thead>
+                    <tr className="bg-gray-50">
+                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[16%]">Learning Objective</th>
+                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[14%]">Unit</th>
+                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[14%]">Sub Unit</th>
+                        <th colSpan={7} className="border border-black p-1 text-black uppercase bg-gray-100">Cognitive Process</th>
+                        <th colSpan={3} className="border border-black p-1 text-black uppercase bg-gray-50">Level</th>
+                        <th colSpan={6} className="border border-black p-1 text-black uppercase bg-gray-100">Types of Questions</th>
+                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[3%]">Time</th>
+                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[3%]">Total Item</th>
+                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[3%]">Total Score</th>
+                    </tr>
+                    <tr className="bg-gray-50">
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP1</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP2</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP3</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP4</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP5</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP6</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">CP7</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">B</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">A</th>
+                        <th className="border border-black p-1 text-black w-[2.5%]">P</th>
+                        <th className="border border-black p-1 text-black w-[4.5%]">SR<sub>1</sub> <br /> <span className="text-[8px]">MCI</span></th>
+                        <th className="border border-black p-1 text-black w-[4.5%]">SR<sub>2</sub> <br /> <span className="text-[8px]">MI</span></th>
+                        <th className="border border-black p-1 text-black w-[4.5%]">CRS<sub>1</sub> <br /> <span className="text-[8px]">VSA</span></th>
+                        <th className="border border-black p-1 text-black w-[4.5%]">CRS<sub>2</sub> <br /> <span className="text-[8px]">SA</span></th>
+                        <th className="border border-black p-1 text-black w-[4.5%]">CRS<sub>3</sub> <br /> <span className="text-[8px]">SE</span></th>
+                        <th className="border border-black p-1 text-black w-[4.5%]">CRL <br /> <span className="text-[8px]">E</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {(() => {
+                        const footerSums = {
+                            cp: {} as Record<string, { count: number, score: number }>,
+                            level: {} as Record<string, { count: number, score: number }>,
+                            format: {} as Record<string, { count: number, score: number }>,
+                            totalItems: 0,
+                            totalScore: 0,
+                            totalTime: 0
+                        };
+
+                        return (
+                            <>
+                                {sortedReportItems.map((item, idx) => {
+                                    const unit = curriculum.units.find((u: any) => u.id === item.unitId);
+                                    const subUnit = unit?.subUnits.find((s: any) => s.id === item.subUnitId);
+                                    const lo = unit?.learningOutcomes || '-';
+
+                                    let time = 2;
+                                    if (item.marksPerQuestion === 1) time = 2;
+                                    else if (item.marksPerQuestion === 2) time = 3;
+                                    else if (item.marksPerQuestion === 3) time = 5;
+                                    else if (item.marksPerQuestion === 4) time = 8;
+                                    else if (item.marksPerQuestion === 5) time = 10;
+                                    else if (item.marksPerQuestion >= 6) time = 15;
+
+                                    const formatCell = (val: string, count: number, score: number) => {
+                                        if (!val) return '';
+                                        return `${count}(${score})`;
+                                    };
+
+                                    const renderRow = (isA: boolean) => {
+                                        const cp = isA ? item.cognitiveProcess : (item.cognitiveProcessB || item.cognitiveProcess);
+                                        const kl = isA ? item.knowledgeLevel : (item.knowledgeLevelB || item.knowledgeLevel);
+                                        const fmt = isA ? item.itemFormat : (item.itemFormatB || item.itemFormat);
+
+                                        const cpKey = Object.entries(CognitiveProcess).find(([k, v]) => v === cp)?.[0] || '';
+
+                                        if (!footerSums.cp[cpKey]) footerSums.cp[cpKey] = { count: 0, score: 0 };
+                                        footerSums.cp[cpKey].count += item.questionCount;
+                                        footerSums.cp[cpKey].score += item.totalMarks;
+
+                                        const klKey = kl[0]; // B, A, or P
+                                        if (!footerSums.level[klKey]) footerSums.level[klKey] = { count: 0, score: 0 };
+                                        footerSums.level[klKey].count += item.questionCount;
+                                        footerSums.level[klKey].score += item.totalMarks;
+
+                                        if (!footerSums.format[fmt]) footerSums.format[fmt] = { count: 0, score: 0 };
+                                        footerSums.format[fmt].count += item.questionCount;
+                                        footerSums.format[fmt].score += item.totalMarks;
+
+                                        if (isA) {
+                                            footerSums.totalItems += item.questionCount;
+                                            footerSums.totalScore += item.totalMarks;
+                                            footerSums.totalTime += time;
+                                        }
+
+                                        return (
+                                            <tr key={`${item.id}-${isA ? 'A' : 'B'}`} className={!isA ? 'bg-gray-100 italic' : ''}>
+                                                <td className="border border-black p-1 tamil-font break-words text-[10px] w-[15%]">{lo}</td>
+                                                <td className="border border-black p-1 tamil-font break-words text-center text-[10px] w-[12%]">Unit {unit?.unitNumber}: {unit?.name}</td>
+                                                <td className="border border-black p-1 tamil-font break-words text-center text-[10px] w-[12%]">{subUnit?.name} {!isA && '(Option B)'}</td>
+                                                {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                                                    <td key={n} className="border border-black p-1 text-center font-bold">
+                                                        {cpKey === `CP${n}` ? formatCell(cpKey, item.questionCount, item.totalMarks) : ''}
+                                                    </td>
+                                                ))}
+                                                {['Basic', 'Average', 'Profound'].map(l => (
+                                                    <td key={l} className="border border-black p-1 text-center font-bold">
+                                                        {kl === l ? formatCell(kl, item.questionCount, item.totalMarks) : ''}
+                                                    </td>
+                                                ))}
+                                                {['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'].map(f => (
+                                                    <td key={f} className="border border-black p-1 text-center font-bold">
+                                                        {fmt === f ? formatCell(fmt, item.questionCount, item.totalMarks) : ''}
+                                                    </td>
+                                                ))}
+                                                <td className="border border-black p-1 text-center w-[4%]">{time}</td>
+                                                <td className="border border-black p-1 text-center font-bold w-[4%]">{item.questionCount}</td>
+                                                <td className="border border-black p-1 text-center font-bold w-[4%]">{item.totalMarks}</td>
+                                            </tr>
+                                        );
+                                    };
+
+                                    return (
+                                        <React.Fragment key={item.id}>
+                                            {renderRow(true)}
+                                            {item.hasInternalChoice && renderRow(false)}
+                                        </React.Fragment>
+                                    );
+                                })}
+
+                                <tr className="bg-gray-200 font-bold">
+                                    <td colSpan={3} className="border border-black p-1 uppercase text-right">Total Item</td>
+                                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                                        <td key={n} className="border border-black p-1 text-center">
+                                            {footerSums.cp[`CP${n}`]?.count || ''}
+                                        </td>
+                                    ))}
+                                    {['B', 'A', 'P'].map(l => (
+                                        <td key={l} className="border border-black p-1 text-center">
+                                            {footerSums.level[l]?.count || ''}
+                                        </td>
+                                    ))}
+                                    {['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'].map(f => (
+                                        <td key={f} className="border border-black p-1 text-center">
+                                            {footerSums.format[f]?.count || ''}
+                                        </td>
+                                    ))}
+                                    <td className="border border-black p-1 text-center">{footerSums.totalTime}</td>
+                                    <td className="border border-black p-1 text-center bg-black text-white">{footerSums.totalItems}</td>
+                                    <td className="border border-black p-1 text-center bg-gray-400"></td>
+                                </tr>
+
+                                <tr className="bg-gray-200 font-bold">
+                                    <td colSpan={3} className="border border-black p-1 uppercase text-right">Total Score</td>
+                                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                                        <td key={n} className="border border-black p-1 text-center">
+                                            {footerSums.cp[`CP${n}`]?.score || ''}
+                                        </td>
+                                    ))}
+                                    {['B', 'A', 'P'].map(l => (
+                                        <td key={l} className="border border-black p-1 text-center">
+                                            {footerSums.level[l]?.score || ''}
+                                        </td>
+                                    ))}
+                                    {['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'].map(f => (
+                                        <td key={f} className="border border-black p-1 text-center">
+                                            {footerSums.format[f]?.score || ''}
+                                        </td>
+                                    ))}
+                                    <td className="border border-black p-1 text-center"></td>
+                                    <td className="border border-black p-1 text-center bg-black text-white"></td>
+                                    <td className="border border-black p-1 text-center bg-white text-black font-extrabold text-xs">{footerSums.totalScore}</td>
+                                </tr>
+                            </>
+                        );
+                    })()}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    return (
+        <div className="mt-10 w-full text-black reports-container relative">
+            {/* Sticky Sub-Header for Reports */}
+            <div className="sticky top-[72px] z-30 bg-white/95 backdrop-blur-sm py-4 mb-8 no-print border-b shadow-md flex justify-center items-center gap-4 flex-wrap px-4 rounded-lg">
+                <div className="flex bg-gray-200 p-1 rounded-full shadow-inner overflow-x-auto scrollbar-hide">
+                    <button
+                        onClick={() => setActiveTab('report1')}
+                        className={`px-4 py-2 rounded-full font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === 'report1' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700 hover:bg-gray-300'}`}
+                    >
+                        Report 1
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('report2')}
+                        className={`px-4 py-2 rounded-full font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === 'report2' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700 hover:bg-gray-300'}`}
+                    >
+                        Report 2
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('report3')}
+                        className={`px-4 py-2 rounded-full font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === 'report3' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700 hover:bg-gray-300'}`}
+                    >
+                        Report 3
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('answerKey')}
+                        className={`px-4 py-2 rounded-full font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === 'answerKey' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700 hover:bg-gray-300'}`}
+                    >
+                        Answer Key
+                    </button>
+                </div>
+
+                <button
+                    onClick={() => onDownloadPDF(activeTab)}
+                    className="bg-red-600 text-white px-5 py-2 rounded-full font-bold shadow-lg hover:bg-red-700 flex items-center gap-2 transition-all transform hover:scale-105 text-sm md:text-base"
+                >
+                    <Download size={18} />
+                    Download {activeTab === 'answerKey' ? 'Answer Key' : activeTab.toUpperCase()} PDF
+                </button>
+            </div>
+
+            <div className="print-only-container">
+                {/* --- UI VIEW (Only active tab) --- */}
+                <div className="no-print">
+                    {activeTab === 'report1' && (
+                        <div className="max-w-[210mm] mx-auto space-y-8 bg-white p-8 mb-8 shadow-md rounded-xl">
+                            {renderReport1Content()}
+                        </div>
+                    )}
+
+                    {activeTab === 'report2' && (
+                        <div className="w-full space-y-8">
+                            {chunkedItems.map((chunk, pageIdx) => (
+                                <div key={pageIdx} className="w-full bg-white p-8 shadow-md mb-8 landscape-report-page rounded-xl">
+                                    {renderReport2Content(chunk, pageIdx)}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {activeTab === 'report3' && (
+                        <div className="w-full bg-white p-8 mb-8 shadow-md rounded-xl overflow-x-auto">
+                            {renderReport3Content()}
+                        </div>
+                    )}
+
+                    {activeTab === 'answerKey' && (
+                        <div className="max-w-[210mm] mx-auto bg-white p-8 mb-8 shadow-md rounded-xl">
+                            <AnswerKeyView blueprint={blueprint} curriculum={curriculum} />
+                        </div>
+                    )}
+                </div>
+
+                {/* --- PDF CAPTURE SOURCE (Always available but hidden from screen) --- */}
+                <div id="pdf-capture-source" className="absolute -left-[50000px] pointer-events-none opacity-0 no-print" style={{ width: '1200px' }}>
+                    <div id="report-page-1" className="bg-white p-8 mb-8">
+                        {renderReport1Content(1)}
+                    </div>
+                    <div id="report-page-2" className="bg-white p-8 mb-8">
+                        {renderReport1Content(2)}
+                    </div>
+
+                    {chunkedItems.map((chunk, pageIdx) => (
+                        <div key={pageIdx} id={`report-item-analysis-page-${pageIdx}`} className="bg-white p-8 mb-8">
+                            {renderReport2Content(chunk, pageIdx)}
+                        </div>
+                    ))}
+
+                    <div id="report-page-blueprint-matrix" className="bg-white p-8 mb-8">
+                        {renderReport3Content()}
+                    </div>
+
+                    <div id="report-answer-key" className="bg-white p-8 mb-8">
+                        <AnswerKeyView blueprint={blueprint} curriculum={curriculum} />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- SummaryTable Component ---
+
+export const SummaryTable = ({ items = [] }: { items?: BlueprintItem[] }) => {
+    if (!items || items.length === 0) return null;
+    const totalMarks = items.reduce((acc, item) => acc + item.totalMarks, 0);
+
+
+
+    // 1. Format Stats
+    const formatStats = items.reduce((acc, item) => {
+        // Count Option A
+        if (!acc[item.itemFormat]) acc[item.itemFormat] = { count: 0, marks: 0 };
+        acc[item.itemFormat].count += item.questionCount;
+        acc[item.itemFormat].marks += item.totalMarks;
+
+        // Count Option B if exists
+        if (item.hasInternalChoice) {
+            const fmtB = item.itemFormatB || item.itemFormat;
+            if (!acc[fmtB]) acc[fmtB] = { count: 0, marks: 0 };
+            acc[fmtB].count += item.questionCount;
+            acc[fmtB].marks += item.totalMarks;
+        }
+        return acc;
+    }, {} as Record<string, { count: number, marks: number }>);
+
+    // 2. Knowledge Level Stats
+    const knowledgeStats = items.reduce((acc, item) => {
+        // Count Option A
+        const keyA = item.knowledgeLevel || 'Unknown';
+        if (!acc[keyA]) acc[keyA] = { count: 0, marks: 0 };
+        acc[keyA].count += item.questionCount;
+        acc[keyA].marks += item.totalMarks;
+
+        // Count Option B if exists
+        if (item.hasInternalChoice) {
+            const keyB = item.knowledgeLevelB || item.knowledgeLevel || 'Unknown';
+            if (!acc[keyB]) acc[keyB] = { count: 0, marks: 0 };
+            acc[keyB].count += item.questionCount;
+            acc[keyB].marks += item.totalMarks;
+        }
+        return acc;
+    }, {} as Record<string, { count: number, marks: number }>);
+
+    // 3. Cognitive Process Stats
+    const cognitiveStats = items.reduce((acc, item) => {
+        // Count Option A
+        const cpCodeA = item.cognitiveProcess?.split(' ')[0] || 'N/A';
+        if (!acc[cpCodeA]) acc[cpCodeA] = { count: 0, marks: 0 };
+        acc[cpCodeA].count += item.questionCount;
+        acc[cpCodeA].marks += item.totalMarks;
+
+        // Count Option B if exists
+        if (item.hasInternalChoice) {
+            const cpCodeB = (item.cognitiveProcessB || item.cognitiveProcess)?.split(' ')[0] || 'N/A';
+            if (!acc[cpCodeB]) acc[cpCodeB] = { count: 0, marks: 0 };
+            acc[cpCodeB].count += item.questionCount;
+            acc[cpCodeB].marks += item.totalMarks;
+        }
+        return acc;
+    }, {} as Record<string, { count: number, marks: number }>);
+
+    // 4. Option Stats
+    const optionStats = items.reduce((acc, item) => {
+        const key = item.hasInternalChoice ? 'With Option' : 'No Option';
+        if (!acc[key]) acc[key] = { count: 0, marks: 0 };
+        acc[key].count += item.questionCount;
+        acc[key].marks += item.totalMarks;
+        return acc;
+    }, {} as Record<string, { count: number, marks: number }>);
+
+    const StatTable = ({ title, data }: { title: string, data: Record<string, { count: number, marks: number }> }) => (
+        <div className="bg-white border rounded shadow-sm overflow-hidden flex-1 min-w-[200px]">
+            <table className="w-full text-xs">
+                <thead>
+                    <tr className="bg-gray-100 border-b">
+                        <th className="p-2 text-left font-bold text-gray-700 uppercase tracking-wider">{title}</th>
+                        <th className="p-2 text-center font-bold text-gray-700 w-16">Qns</th>
+                        <th className="p-2 text-center font-bold text-gray-700 w-16">Marks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {Object.entries(data).sort((a, b) => b[0].localeCompare(a[0])).map(([key, stat]) => (
+                        <tr key={key} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
+                            <td className="p-2 font-medium text-gray-800">{key}</td>
+                            <td className="p-2 text-center text-gray-600 border-l">{stat.count}</td>
+                            <td className="p-2 text-center text-gray-900 font-bold border-l">{stat.marks}</td>
+                        </tr>
+                    ))}
+                    {Object.keys(data).length === 0 && (
+                        <tr><td colSpan={3} className="p-4 text-center text-gray-400 italic">No data</td></tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    return (
+        <div className="mt-8 no-print animate-fade-in">
+            <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                <LayoutDashboard size={16} className="text-blue-600" /> Blueprint Summary
+                <span className="ml-auto bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full font-bold shadow-sm border border-green-200">
+                    Grand Total: {items.length} Items | {totalMarks} Marks
+                </span>
+            </h4>
+            <div className="flex gap-4 items-start flex-wrap">
+                <StatTable title="Knowledge Level" data={knowledgeStats} />
+                <StatTable title="Item Format" data={formatStats} />
+                <StatTable title="Cognitive Process" data={cognitiveStats} />
+                <StatTable title="Option/Choice" data={optionStats} />
+            </div>
+        </div>
+    );
+};
+
+// --- Matrix Component with Drag and Drop ---
+
+export const BlueprintMatrix = ({ blueprint, curriculum, onUpdateItem, paperType, onMoveItem, readOnly }: any) => {
+    const sections = paperType.sections.sort((a: any, b: any) => a.marks - b.marks);
+
+    // Drag Handlers
+    const handleDragStart = (e: React.DragEvent, item: BlueprintItem) => {
+        if (readOnly) return;
+        e.dataTransfer.setData('text/plain', item.id);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+    const handleDragOver = (e: React.DragEvent) => {
+        if (readOnly) return;
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const getMarkColor = (marks: number) => {
+        switch (marks) {
+            case 1: return 'bg-blue-50 border-blue-200 text-blue-900';
+            case 2: return 'bg-green-50 border-green-200 text-green-900';
+            case 3: return 'bg-yellow-50 border-yellow-200 text-yellow-900';
+            case 4: return 'bg-orange-50 border-orange-200 text-orange-900';
+            case 5: return 'bg-purple-50 border-purple-200 text-purple-900';
+            case 6: return 'bg-pink-50 border-pink-200 text-pink-900';
+            default: return 'bg-gray-50 border-gray-200 text-gray-900';
+        }
+    };
+
+    const getKnowledgeBorderClass = (level: KnowledgeLevel) => {
+        switch (level) {
+            case KnowledgeLevel.BASIC: return 'border-l-4 border-l-green-500';
+            case KnowledgeLevel.AVERAGE: return 'border-l-4 border-l-yellow-500';
+            case KnowledgeLevel.PROFOUND: return 'border-l-4 border-l-red-500';
+            default: return 'border-l-4 border-l-gray-300';
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, unitId: string, subUnitId: string, sectionId: string) => {
+        if (readOnly) return;
+        e.preventDefault();
+        const itemId = e.dataTransfer.getData('text/plain');
+        onMoveItem(itemId, unitId, sectionId, subUnitId);
+    };
+
+    const getCellItems = (unitId: string, subUnitId: string, sectionId: string) => {
+        return blueprint.items.filter((i: any) => i.unitId === unitId && i.subUnitId === subUnitId && i.sectionId === sectionId);
+    };
+
+    return (
+        <div className="overflow-x-auto">
+            <div className="text-center mb-6">
+                <h2 className="text-xl font-bold uppercase border-b-2 border-black inline-block px-4 pb-1">Blue Print</h2>
+                <div className="flex justify-between mt-4 text-sm font-bold px-10">
+                    <span>Class: {blueprint.classLevel}</span>
+                    <span>Subject: {blueprint.subject}</span>
+                    <span>Set: {blueprint.setId || 'A'}</span>
+                    <span>Max Marks: {blueprint.totalMarks}</span>
+                </div>
+            </div>
+
+            <table className="w-full text-sm border-collapse border border-gray-800">
+                <thead>
+                    <tr className="bg-gray-900 text-white">
+                        <th className="border border-gray-800 p-3 w-10">#</th>
+                        <th className="border border-gray-800 p-3 text-left">UNIT COMPONENT</th>
+                        <th className="border border-gray-800 p-3 text-left">LESSON/TOPIC</th>
+                        <th className="border border-gray-800 p-3 text-center bg-yellow-400 text-black font-bold">MARKS</th>
+                        {sections.map((s: any, i: number) => (
+                            <th key={s.id} className="border border-gray-800 p-3 text-center">
+                                {s.marks} Marks <br /> <span className="text-[10px] text-gray-400 uppercase">Count: {s.count}</span>
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {curriculum.units.map((unit: any) => {
+                        return unit.subUnits.map((subUnit: any, sIdx: number) => {
+                            const isFirstSubUnit = sIdx === 0;
+                            const subUnitItems = blueprint.items.filter((i: any) => i.unitId === unit.id && i.subUnitId === subUnit.id);
+                            const subUnitTotal = subUnitItems.reduce((a: number, b: any) => a + b.totalMarks, 0);
+
+                            return (
+                                <tr key={subUnit.id} className="hover:bg-gray-50">
+                                    {isFirstSubUnit && (
+                                        <td className="border border-gray-800 p-3 text-center font-bold text-gray-500 bg-white align-middle" rowSpan={unit.subUnits.length}>
+                                            {unit.unitNumber}
+                                        </td>
+                                    )}
+                                    {isFirstSubUnit && (
+                                        <td className="border border-gray-800 p-3 font-bold text-blue-800 bg-white align-middle" rowSpan={unit.subUnits.length}>
+                                            {unit.name}
+                                            {(() => {
+                                                const unitTotalForPercent = blueprint.items
+                                                    .filter((i: any) => i.unitId === unit.id)
+                                                    .reduce((acc: number, curr: any) => acc + curr.totalMarks, 0);
+                                                const unitPercent = Math.round((unitTotalForPercent / blueprint.totalMarks) * 100);
+
+                                                return (
+                                                    <div className="text-xs text-gray-500 font-normal mt-1 no-print">
+                                                        {unitPercent}% ({unitTotalForPercent})
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
+                                    )}
+                                    <td className="border border-gray-800 p-3 italic text-gray-700 bg-white">
+                                        {subUnit.name}
+                                    </td>
+                                    <td className="border border-gray-800 p-3 text-center font-bold text-lg bg-yellow-50 text-orange-600">
+                                        {subUnitTotal || ''}
+                                    </td>
+
+                                    {sections.map((s: any) => {
+                                        const items = getCellItems(unit.id, subUnit.id, s.id);
+                                        return (
+                                            <td
+                                                key={s.id}
+                                                className="border border-gray-800 p-1 align-top h-16 min-w-[100px] relative group transition-colors"
+                                                onDragOver={handleDragOver}
+                                                onDrop={(e) => handleDrop(e, unit.id, subUnit.id, s.id)}
+                                            >
+                                                <div className="flex flex-wrap gap-1 justify-center">
+                                                    {items.map((item: any) => (
+                                                        <React.Fragment key={item.id}>
+                                                            <div
+                                                                draggable={!readOnly}
+                                                                onDragStart={(e) => handleDragStart(e, item)}
+                                                                onClick={() => !readOnly && setEditingItemId(item.id)}
+                                                                className={`p-1.5 rounded-sm text-xs text-center border shadow-sm w-full relative group transition-all
+                                                                    ${!readOnly ? 'hover:shadow-md cursor-pointer' : 'cursor-default'}
+                                                                    ${getMarkColor(item.marksPerQuestion)}
+                                                                    ${getKnowledgeBorderClass(item.knowledgeLevel)}
+                                                                `}
+                                                            >
+                                                                <div className="font-bold flex justify-between items-center px-1">
+                                                                    <span>{item.questionCount}Q {item.hasInternalChoice ? '(A)' : ''}</span>
+                                                                    <span className="text-[10px] opacity-75">({item.totalMarks}M)</span>
+                                                                </div>
+                                                                <div className="text-[9px] leading-tight mt-1 opacity-90 flex justify-between gap-1">
+                                                                    <span title={item.knowledgeLevel}>{item.knowledgeLevel[0]}</span>
+                                                                    <span title={item.cognitiveProcess}>{item.cognitiveProcess.split(' ')[0]}</span>
+                                                                    <span>{item.itemFormat}</span>
+                                                                    {item.hasInternalChoice && <span className="font-bold text-blue-600" title="Option A">OR</span>}
+                                                                </div>
+
+                                                                {/* Shared Mini Editor Popover - Attached to Card A */}
+                                                                {editingItemId === item.id && (
+                                                                    <div className="absolute top-full left-0 mt-1 bg-white border shadow-xl rounded p-3 z-50 w-64 text-left space-y-3" onClick={(e) => e.stopPropagation()}>
+                                                                        <div className="flex justify-between items-center border-b pb-1">
+                                                                            <div className="text-xs font-bold text-gray-700">Edit Question Properties</div>
+                                                                            <button onClick={() => setEditingItemId(null)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                                                                        </div>
+
+                                                                        {/* Global Option Toggle */}
+                                                                        <div className="flex items-center justify-between bg-blue-50 p-2 rounded">
+                                                                            <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Internal Choice (OR)</label>
+                                                                            <button
+                                                                                onClick={() => onUpdateItem(item.id, 'hasInternalChoice', !item.hasInternalChoice)}
+                                                                                className={`w-8 h-4 rounded-full p-0.5 transition-colors ${item.hasInternalChoice ? 'bg-blue-600' : 'bg-gray-300'}`}
+                                                                            >
+                                                                                <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${item.hasInternalChoice ? 'translate-x-4' : 'translate-x-0'}`} />
+                                                                            </button>
+                                                                        </div>
+
+                                                                        {/* Option A Section */}
+                                                                        <div className="space-y-2">
+                                                                            <div className="text-[10px] font-bold text-blue-600 uppercase">Option A Settings</div>
+                                                                            <div className="grid grid-cols-2 gap-2">
+                                                                                <div>
+                                                                                    <label className="block text-[9px] text-gray-500">Knowledge</label>
+                                                                                    <select
+                                                                                        value={item.knowledgeLevel}
+                                                                                        onChange={(e) => onUpdateItem(item.id, 'knowledgeLevel', e.target.value)}
+                                                                                        className={`w-full text-xs border rounded p-1 ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
+                                                                                        disabled={item.marksPerQuestion === 1}
+                                                                                    >
+                                                                                        {Object.values(KnowledgeLevel).map(v => <option key={v} value={v}>{v}</option>)}
+                                                                                    </select>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="block text-[9px] text-gray-500">Cognitive</label>
+                                                                                    <select value={item.cognitiveProcess} onChange={(e) => onUpdateItem(item.id, 'cognitiveProcess', e.target.value)} className="w-full text-xs border rounded p-1">
+                                                                                        {Object.values(CognitiveProcess).map(v => <option key={v} value={v}>{v.split(' ')[0]}</option>)}
+                                                                                    </select>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="block text-[9px] text-gray-500">Format</label>
+                                                                                <select value={item.itemFormat} onChange={(e) => onUpdateItem(item.id, 'itemFormat', e.target.value)} className="w-full text-xs border rounded p-1">
+                                                                                    {Object.values(ItemFormat).map(f => <option key={f} value={f}>{f}</option>)}
+                                                                                </select>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Option B Section (Conditional) */}
+                                                                        {item.hasInternalChoice && (
+                                                                            <div className="space-y-2 pt-2 border-t">
+                                                                                <div className="text-[10px] font-bold text-purple-600 uppercase">Option B Settings</div>
+                                                                                <div className="grid grid-cols-2 gap-2">
+                                                                                    <div>
+                                                                                        <label className="block text-[9px] text-gray-500">Knowledge</label>
+                                                                                        <select
+                                                                                            value={item.knowledgeLevelB || item.knowledgeLevel}
+                                                                                            onChange={(e) => onUpdateItem(item.id, 'knowledgeLevelB', e.target.value)}
+                                                                                            className={`w-full text-xs border rounded p-1 ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
+                                                                                            disabled={item.marksPerQuestion === 1}
+                                                                                        >
+                                                                                            {Object.values(KnowledgeLevel).map(v => <option key={v} value={v}>{v}</option>)}
+                                                                                        </select>
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <label className="block text-[9px] text-gray-500">Cognitive</label>
+                                                                                        <select value={item.cognitiveProcessB || item.cognitiveProcess} onChange={(e) => onUpdateItem(item.id, 'cognitiveProcessB', e.target.value)} className="w-full text-xs border rounded p-1">
+                                                                                            {Object.values(CognitiveProcess).map(v => <option key={v} value={v}>{v.split(' ')[0]}</option>)}
+                                                                                        </select>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="block text-[9px] text-gray-500">Format</label>
+                                                                                    <select value={item.itemFormatB || item.itemFormat} onChange={(e) => onUpdateItem(item.id, 'itemFormatB', e.target.value)} className="w-full text-xs border rounded p-1">
+                                                                                        {Object.values(ItemFormat).map(f => <option key={f} value={f}>{f}</option>)}
+                                                                                    </select>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+                                                                        <div className="text-right pt-2">
+                                                                            <button onClick={(e) => { e.stopPropagation(); setEditingItemId(null); }} className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-700">Done</button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Duplicate Card for Option B */}
+                                                            {item.hasInternalChoice && (
+                                                                <div
+                                                                    onClick={() => !readOnly && setEditingItemId(item.id)}
+                                                                    className={`p-1.5 rounded-sm text-xs text-center border shadow-sm w-full mt-1 relative transition-all
+                                                                        ${!readOnly ? 'hover:shadow-md cursor-pointer' : 'cursor-default'}
+                                                                        ${getMarkColor(item.marksPerQuestion)}
+                                                                        ${getKnowledgeBorderClass(item.knowledgeLevelB || item.knowledgeLevel)}
+                                                                        bg-purple-50/30 border-dashed
+                                                                    `}
+                                                                >
+                                                                    <div className="font-bold flex justify-between items-center px-1">
+                                                                        <span className="text-purple-700">{item.questionCount}Q (B)</span>
+                                                                        <span className="text-[10px] opacity-75">({item.totalMarks}M)</span>
+                                                                    </div>
+                                                                    <div className="text-[9px] leading-tight mt-1 opacity-90 flex justify-between gap-1">
+                                                                        <span title={item.knowledgeLevelB || item.knowledgeLevel}>{(item.knowledgeLevelB || item.knowledgeLevel)[0]}</span>
+                                                                        <span title={item.cognitiveProcessB || item.cognitiveProcess}>{(item.cognitiveProcessB || item.cognitiveProcess).split(' ')[0]}</span>
+                                                                        <span>{item.itemFormatB || item.itemFormat}</span>
+                                                                        <span className="font-bold text-purple-600">OR</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            );
+                        });
+                    })}
+                    <tr className="bg-indigo-900 text-white font-bold h-16">
+                        <td className="border border-indigo-900 p-3 text-right uppercase tracking-wider" colSpan={3}>Total Aggregates</td>
+                        <td className="border border-indigo-900 p-3 text-center text-2xl bg-yellow-400 text-black">{blueprint.totalMarks}</td>
+                        {sections.map((s: any) => {
+                            const sectionTotal = blueprint.items.filter((i: any) => i.sectionId === s.id).reduce((a: number, b: any) => a + b.questionCount, 0);
+                            const sectionTotalMarks = blueprint.items.filter((i: any) => i.sectionId === s.id).reduce((a: number, b: any) => a + b.totalMarks, 0);
+                            return (
+                                <td key={s.id} className="border border-indigo-900 p-2 text-center align-middle">
+                                    <div className="text-xl">{sectionTotal}</div>
+                                    <div className="text-[10px] opacity-75 font-normal">{sectionTotalMarks} Marks</div>
+                                </td>
+                            );
+                        })}
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
+// --- User Dashboard ---
+
+const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void }) => {
+    const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
+    const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
+    const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
+    const [showReports, setShowReports] = useState(false);
+    const [showQuestions, setShowQuestions] = useState(false);
+    const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
+    const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
+
+    const [selectedClass, setSelectedClass] = useState<ClassLevel>(ClassLevel._10);
+    const [selectedSubject, setSelectedSubject] = useState<SubjectType>(SubjectType.TAMIL_AT);
+    const [selectedTerm, setSelectedTerm] = useState<ExamTerm>(ExamTerm.FIRST);
+    const [selectedSet, setSelectedSet] = useState<string>('Set A');
+    const [selectedPaperType, setSelectedPaperType] = useState<string>('');
+    const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2025-2026');
+    const [currentBlueprint, setCurrentBlueprint] = useState<Blueprint | null>(null);
+    const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
+    const [isConfigExpanded, setIsConfigExpanded] = useState(true);
+    const printRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setBlueprints(getAllAccessibleBlueprints(user.id));
+        setPaperTypes(getQuestionPaperTypes());
+    }, [view, user.id]);
+
+    useEffect(() => {
+        if (view === 'create' || view === 'edit') {
+            const cur = getCurriculum(selectedClass, selectedSubject);
+            const filtered = getFilteredCurriculum(cur || null, selectedTerm);
+            setCurriculum(filtered);
+        }
+    }, [selectedClass, selectedSubject, selectedTerm, view]);
+
+    // Automatically collapse config if confirmed
+    useEffect(() => {
+        if (currentBlueprint?.isConfirmed) {
+            setIsConfigExpanded(false);
+        } else {
+            setIsConfigExpanded(true);
+        }
+    }, [currentBlueprint?.isConfirmed]);
+
+    const handleCreateNew = () => {
+        setCurrentBlueprint(null);
+        setSelectedClass(ClassLevel._10);
+        setSelectedSubject(SubjectType.TAMIL_AT);
+        setSelectedSubject(SubjectType.TAMIL_AT);
+        setSelectedTerm(ExamTerm.FIRST);
+        setSelectedSet('Set A');
+        setSelectedAcademicYear('2025-2026');
+        setSelectedPaperType('');
+        setShowReports(false);
+        setShowQuestions(false);
+        setView('create');
+    };
+
+    const handleEdit = (bp: Blueprint) => {
+        if (bp.isLocked) {
+            alert("This question paper is locked by the admin and cannot be edited.");
+            return;
+        }
+        setCurrentBlueprint(bp);
+        setSelectedClass(bp.classLevel);
+        setSelectedSubject(bp.subject);
+        setSelectedSubject(bp.subject);
+        setSelectedTerm(bp.examTerm);
+        setSelectedSet(bp.setId || 'Set A');
+        setSelectedPaperType(bp.questionPaperTypeId || '');
+        setShowReports(false);
+        setShowQuestions(false);
+        setView('edit');
+    };
+
+    const handleDelete = (id: string) => {
+        const bp = blueprints.find(b => b.id === id);
+        if (bp?.isLocked) {
+            alert("This question paper is locked by the admin and cannot be deleted.");
+            return;
+        }
+        if (window.confirm("Are you sure you want to delete this blueprint?")) {
+            deleteBlueprint(id);
+            setBlueprints(getBlueprints());
+        }
+    };
+
+    const handleGenerate = () => {
+        if (!curriculum) return alert("Curriculum not found for selected Class/Subject!");
+        if (!selectedPaperType) return alert("Please select a Question Paper Type.");
+
+        const items = generateBlueprintTemplate(curriculum, selectedTerm, selectedPaperType);
+        const paperType = paperTypes.find(p => p.id === selectedPaperType);
+
+        const newBlueprint: Blueprint = {
+            id: Math.random().toString(36).substr(2, 9),
+            examTerm: selectedTerm,
+            classLevel: selectedClass,
+            subject: selectedSubject,
+            questionPaperTypeId: selectedPaperType,
+            questionPaperTypeName: paperType?.name || 'Unknown',
+            totalMarks: paperType?.totalMarks || 0,
+            items,
+            createdAt: new Date().toISOString(),
+            setId: selectedSet,
+            academicYear: selectedAcademicYear,
+            ownerId: user.id,
+            sharedWith: [],
+            isConfirmed: false
+        };
+        setCurrentBlueprint(newBlueprint);
+    };
+
+    const handleRegeneratePattern = () => {
+        if (!currentBlueprint || !curriculum) return;
+        if (!window.confirm("This will replace all current questions with a new random pattern. Continue?")) return;
+        const newItems = generateBlueprintTemplate(curriculum, currentBlueprint.examTerm, currentBlueprint.questionPaperTypeId);
+        setCurrentBlueprint({ ...currentBlueprint, items: newItems, isConfirmed: false });
+    };
+
+    const handleConfirmPattern = () => {
+        if (!currentBlueprint) return;
+        const confirmedBlueprint = { ...currentBlueprint, isConfirmed: true };
+        setCurrentBlueprint(confirmedBlueprint);
+        saveBlueprint(confirmedBlueprint);
+        alert("Blueprint pattern confirmed!");
+    };
+
+    const handleSaveToDB = () => {
+        if (!currentBlueprint) return;
+        saveBlueprint(currentBlueprint);
+        alert("Blueprint saved successfully!");
+    };
+
+    const handleDownloadPDF = async (type: 'all' | 'report1' | 'report2' | 'report3' | 'answerKey' = 'all') => {
+        if (!printRef.current) return;
+
+        let pdf = new jsPDF('p', 'mm', 'a4');
+        const MARGIN = 10;
+        const pdfWidthPortrait = 210;
+        const pdfHeightPortrait = 297;
+        const contentWidthPortrait = pdfWidthPortrait - (MARGIN * 2);
+
+        let firstPage = true;
+
+        const addPortraitPage = async (id: string) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (!firstPage) pdf.addPage('a4', 'p');
+            const canvas = await html2canvas(el, {
+                scale: 2.5,
+                useCORS: true,
+                logging: false,
+                windowWidth: 794
+            });
+            const img = canvas.toDataURL('image/png');
+            const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
+            pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, Math.min(imgHeight, 275));
+            firstPage = false;
+        };
+
+        if (type === 'report2' || type === 'report3') {
+            pdf = new jsPDF('l', 'mm', 'a4');
+        }
+
+        if (type === 'all' || type === 'report1') {
+            const pageIds = ['report-page-1', 'report-page-2'];
+            for (const id of pageIds) await addPortraitPage(id);
+        }
+
+        if (type === 'all' || type === 'report2') {
+            const pdfWidthLandscape = 297;
+            const pdfHeightLandscape = 210;
+            const contentWidthLandscape = pdfWidthLandscape - (MARGIN * 2);
+            const contentHeightLandscape = pdfHeightLandscape - (MARGIN * 2);
+
+            let pageIdx = 0;
+            while (true) {
+                const el = document.getElementById(`report-item-analysis-page-${pageIdx}`);
+                if (!el) break;
+                if (!firstPage) pdf.addPage('a4', 'l');
+                const canvas = await html2canvas(el, {
+                    scale: 3,
+                    useCORS: true,
+                    logging: false,
+                    windowWidth: 1920,
+                    backgroundColor: '#ffffff'
+                });
+                const img = canvas.toDataURL('image/png');
+                let imgWidth = contentWidthLandscape;
+                let imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                if (imgHeight > contentHeightLandscape) {
+                    const ratio = contentHeightLandscape / imgHeight;
+                    imgHeight = contentHeightLandscape;
+                    imgWidth = imgWidth * ratio;
+                    pdf.addImage(img, 'PNG', MARGIN + (contentWidthLandscape - imgWidth) / 2, MARGIN, imgWidth, imgHeight);
+                } else {
+                    pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidth, imgHeight);
+                }
+                firstPage = false;
+                pageIdx++;
+            }
+        }
+
+        if (type === 'all' || type === 'report3') {
+            const pdfWidthLandscape = 297;
+            const pdfHeightLandscape = 210;
+            const contentWidthLandscape = pdfWidthLandscape - (MARGIN * 2);
+            const contentHeightLandscape = pdfHeightLandscape - (MARGIN * 2);
+
+            const matrixEl = document.getElementById('report-page-blueprint-matrix');
+            if (matrixEl) {
+                if (!firstPage) pdf.addPage('a4', 'l');
+                const canvas = await html2canvas(matrixEl, {
+                    scale: 3,
+                    useCORS: true,
+                    logging: false,
+                    windowWidth: 1920,
+                    backgroundColor: '#ffffff'
+                });
+                const img = canvas.toDataURL('image/png');
+                let imgWidth = contentWidthLandscape;
+                let imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                if (imgHeight > contentHeightLandscape) {
+                    const ratio = contentHeightLandscape / imgHeight;
+                    imgHeight = contentHeightLandscape;
+                    imgWidth = imgWidth * ratio;
+                    pdf.addImage(img, 'PNG', MARGIN + (contentWidthLandscape - imgWidth) / 2, MARGIN, imgWidth, imgHeight);
+                } else {
+                    pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidth, imgHeight);
+                }
+                firstPage = false;
+            }
+        }
+
+        if (type === 'all' || type === 'answerKey') {
+            const akEl = document.getElementById('report-answer-key');
+            if (akEl) {
+                if (!firstPage) pdf.addPage('a4', 'p');
+                const canvas = await html2canvas(akEl, {
+                    scale: 2.5,
+                    useCORS: true,
+                    logging: false,
+                    windowWidth: 794
+                });
+                const img = canvas.toDataURL('image/png');
+                const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
+                pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, Math.min(imgHeight, 275));
+                firstPage = false;
+            }
+        }
+
+        pdf.save(`blueprint_report_${currentBlueprint.id}.pdf`);
+    };
+
+    const updateItem = (id: string, field: keyof BlueprintItem, value: any) => {
+        if (!currentBlueprint) return;
+        const updatedItems = currentBlueprint.items.map(i => {
+            if (i.id === id) {
+                const updated = { ...i, [field]: value };
+
+                // User Requirement: 1-mark (option) questions must be Awareness/Knowledge level (BASIC)
+                if (updated.marksPerQuestion === 1) {
+                    updated.knowledgeLevel = KnowledgeLevel.BASIC;
+                    updated.knowledgeLevelB = KnowledgeLevel.BASIC;
+                }
+
+                // User Requirement: Options (A and B) must be at the same knowledge level
+                if (updated.hasInternalChoice) {
+                    if (field === 'knowledgeLevel') {
+                        updated.knowledgeLevelB = value as KnowledgeLevel;
+                    } else if (field === 'knowledgeLevelB') {
+                        updated.knowledgeLevel = value as KnowledgeLevel;
+                    }
+                }
+
+                return updated;
+            }
+            return i;
+        });
+        setCurrentBlueprint({ ...currentBlueprint, items: updatedItems });
+    };
+
+    const moveItem = (itemId: string, newUnitId: string, newSectionId: string, newSubUnitId?: string) => {
+        if (!currentBlueprint || !curriculum) return;
+        const paperType = paperTypes.find(p => p.id === currentBlueprint.questionPaperTypeId);
+        const newSection = paperType?.sections.find(s => s.id === newSectionId);
+        const newUnit = curriculum.units.find(u => u.id === newUnitId);
+
+        if (!newSection || !newUnit) return;
+
+        const updatedItems = currentBlueprint.items.map(item => {
+            if (item.id === itemId) {
+                // Update all relevant fields based on new location
+                return {
+                    ...item,
+                    unitId: newUnitId,
+                    sectionId: newSectionId,
+                    // Assign to specific sub-unit if provided, else first sub-unit of new unit by default
+                    subUnitId: newSubUnitId || newUnit.subUnits[0]?.id || 'unknown',
+                    // Update marks based on the new section column
+                    marksPerQuestion: newSection.marks,
+                    totalMarks: newSection.marks * item.questionCount,
+                    // Reset format and knowledge to defaults for this mark level
+                    itemFormat: getDefaultFormat(newSection.marks),
+                    knowledgeLevel: getDefaultKnowledge(newSection.marks)
+                };
+            }
+            return item;
+        });
+        setCurrentBlueprint({ ...currentBlueprint, items: updatedItems });
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50 pb-20">
+            <header className="bg-white shadow px-4 py-3 flex justify-between items-center sticky top-0 z-30 no-print">
+                <div className="flex items-center gap-2">
+                    {view !== 'list' && (
+                        <button onClick={() => setView('list')} className="mr-2 text-gray-500 hover:text-blue-600">
+                            <ChevronLeft />
+                        </button>
+                    )}
+                    <h1 className="font-bold text-blue-700 flex items-center text-lg">
+                        <FileText className="mr-2" /> Blueprint System
+                    </h1>
+                </div>
+                <div className="flex items-center gap-4">
+                    <span className="text-sm font-medium text-gray-700 hidden sm:inline">{user.name}</span>
+                    <button onClick={onLogout} title="Logout"><LogOut size={20} className="text-gray-500 hover:text-red-500" /></button>
+                </div>
+            </header>
+
+            <div className="max-w-7xl mx-auto p-4">
+
+                {/* LIST VIEW */}
+                {view === 'list' && (
+                    <div>
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-800">Blueprints</h2>
+                                {/* Filter Tabs */}
+                                <div className="flex gap-2 mt-3">
+                                    <button
+                                        onClick={() => setFilterView('all')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filterView === 'all'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        All
+                                    </button>
+                                    <button
+                                        onClick={() => setFilterView('owned')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filterView === 'owned'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        My Blueprints
+                                    </button>
+                                    <button
+                                        onClick={() => setFilterView('shared')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filterView === 'shared'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        Shared with Me
+                                    </button>
+                                </div>
+                            </div>
+                            <button onClick={handleCreateNew} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center">
+                                <Plus className="mr-2" /> Create New
+                            </button>
+                        </div>
+
+                        {(() => {
+                            const filteredBlueprints = blueprints.filter(bp => {
+                                if (bp.isHidden) return false;
+                                if (filterView === 'owned') return bp.ownerId === user.id;
+                                if (filterView === 'shared') return bp.ownerId !== user.id;
+                                return true;
+                            });
+
+                            return filteredBlueprints.length === 0 ? (
+                                <div className="bg-white p-12 text-center rounded shadow text-gray-500">
+                                    <List size={48} className="mx-auto mb-4 opacity-20" />
+                                    <p>
+                                        {filterView === 'owned' && 'No blueprints created yet. Create your first one!'}
+                                        {filterView === 'shared' && 'No blueprints shared with you yet.'}
+                                        {filterView === 'all' && 'No blueprints found. Create your first one!'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded shadow overflow-hidden">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-gray-100 border-b">
+                                            <tr>
+                                                <th className="p-4 font-semibold text-gray-600">Status</th>
+                                                <th className="p-4 font-semibold text-gray-600">Date</th>
+                                                <th className="p-4 font-semibold text-gray-600">Paper Type</th>
+                                                <th className="p-4 font-semibold text-gray-600">Class</th>
+                                                <th className="p-4 font-semibold text-gray-600">Subject</th>
+                                                <th className="p-4 font-semibold text-gray-600">Term</th>
+                                                <th className="p-4 font-semibold text-gray-600">Set</th>
+                                                <th className="p-4 font-semibold text-gray-600 text-center">Marks</th>
+                                                <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredBlueprints.map(bp => {
+                                                const isOwner = bp.ownerId === user.id;
+                                                const ownerUser = !isOwner ? getUsers().find(u => u.id === bp.ownerId) : null;
+
+                                                return (
+                                                    <tr key={bp.id} className="border-b hover:bg-gray-50">
+                                                        <td className="p-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                {isOwner ? (
+                                                                    <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit">
+                                                                        <UserCircle size={12} />
+                                                                        Owner
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit" title={`Shared by ${ownerUser?.name || 'Unknown'}`}>
+                                                                        <Share2 size={12} />
+                                                                        Shared
+                                                                    </span>
+                                                                )}
+                                                                {bp.isConfirmed ? (
+                                                                    <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit">
+                                                                        <CheckCircle size={12} />
+                                                                        Confirmed
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit">
+                                                                        <Clock size={12} />
+                                                                        Draft
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-sm text-gray-500">{new Date(bp.createdAt).toLocaleDateString()}</td>
+                                                        <td className="p-4 font-medium text-blue-600">
+                                                            {bp.questionPaperTypeName || 'N/A'}
+                                                            {!isOwner && ownerUser && (
+                                                                <div className="text-xs text-gray-500 mt-1">by {ownerUser.name}</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-4">Class {bp.classLevel}</td>
+                                                        <td className="p-4">{bp.subject}</td>
+                                                        <td className="p-4 text-sm">{bp.examTerm}</td>
+                                                        <td className="p-4 text-sm">{bp.setId || 'Set A'}</td>
+                                                        <td className="p-4 text-center">{bp.totalMarks}</td>
+                                                        <td className="p-4 text-right">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => handleEdit(bp)}
+                                                                    className={`${bp.isLocked ? 'text-gray-400' : 'text-blue-600'} hover:underline flex items-center gap-1`}
+                                                                    title={bp.isLocked ? "Locked by Admin" : "Edit Paper"}
+                                                                >
+                                                                    {bp.isLocked && <Lock size={14} />}
+                                                                    Edit
+                                                                </button>
+                                                                {isOwner && (
+                                                                    <>
+                                                                        <button
+                                                                            onClick={() => setSharingBlueprintId(bp.id)}
+                                                                            className="text-green-600 hover:underline flex items-center gap-1"
+                                                                            title="Share this blueprint"
+                                                                        >
+                                                                            <Share2 size={14} />
+                                                                            Share
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDelete(bp.id)}
+                                                                            className={`${bp.isLocked ? 'text-gray-300' : 'text-red-500'} hover:underline`}
+                                                                            disabled={bp.isLocked}
+                                                                        >
+                                                                            Delete
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                )}
+
+                {/* CREATE / EDIT VIEW */}
+                {(view === 'create' || view === 'edit') && (
+                    <div className="space-y-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 no-print overflow-hidden">
+                            <div
+                                className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
+                                onClick={() => setIsConfigExpanded(!isConfigExpanded)}
+                            >
+                                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                    <Settings size={20} className="text-blue-600" />
+                                    {view === 'create' ? 'Create Configuration' : 'Edit Configuration'}
+                                    {currentBlueprint?.isConfirmed && (
+                                        <span className="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded ml-2 uppercase">Confirmed</span>
+                                    )}
+                                </h3>
+                                <div className="text-gray-400">
+                                    {isConfigExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+                                </div>
+                            </div>
+
+                            {isConfigExpanded && (
+                                <div className="p-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Question Paper Type <span className="text-red-500">*</span></label>
+                                            <select
+                                                disabled={view === 'edit' || currentBlueprint?.isConfirmed}
+                                                value={selectedPaperType}
+                                                onChange={e => setSelectedPaperType(e.target.value)}
+                                                className="w-full border p-2 rounded bg-gray-50 focus:border-blue-500 outline-none disabled:opacity-60"
+                                            >
+                                                <option value="">Select Type</option>
+                                                {paperTypes.map(pt => (
+                                                    <option key={pt.id} value={pt.id}>{pt.name} ({pt.totalMarks} Marks)</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Class</label>
+                                            <select
+                                                disabled={view === 'edit' || currentBlueprint?.isConfirmed}
+                                                value={selectedClass}
+                                                onChange={e => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)}
+                                                className="w-full border p-2 rounded bg-gray-50 disabled:opacity-60"
+                                            >
+                                                {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Subject</label>
+                                            <select
+                                                disabled={view === 'edit' || currentBlueprint?.isConfirmed}
+                                                value={selectedSubject}
+                                                onChange={e => setSelectedSubject(e.target.value as SubjectType)}
+                                                className="w-full border p-2 rounded bg-gray-50 disabled:opacity-60"
+                                            >
+                                                {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Term</label>
+                                            <select
+                                                disabled={view === 'edit' || currentBlueprint?.isConfirmed}
+                                                value={selectedTerm}
+                                                onChange={e => setSelectedTerm(e.target.value as ExamTerm)}
+                                                className="w-full border p-2 rounded bg-gray-50 disabled:opacity-60"
+                                            >
+                                                {Object.values(ExamTerm).map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Set</label>
+                                            <select
+                                                className="w-full border p-2 rounded bg-gray-50 focus:border-blue-500 outline-none disabled:opacity-60"
+                                                disabled={view === 'edit' || currentBlueprint?.isConfirmed}
+                                                value={selectedSet}
+                                                onChange={(e) => setSelectedSet(e.target.value)}
+                                            >
+                                                <option value="Set A">Set A</option>
+                                                <option value="Set B">Set B</option>
+                                                <option value="Set C">Set C</option>
+                                                <option value="Set D">Set D</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                                            <input
+                                                type="text"
+                                                className="w-full border p-2 rounded disabled:opacity-60"
+                                                disabled={currentBlueprint?.isConfirmed}
+                                                value={selectedAcademicYear}
+                                                onChange={(e) => setSelectedAcademicYear(e.target.value)}
+                                                placeholder="e.g. 2025-2026"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {view === 'create' && !currentBlueprint?.isConfirmed && (
+                                        <div className="mt-4 text-right">
+                                            <button onClick={handleGenerate} className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700">
+                                                Generate Matrix
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {currentBlueprint && curriculum && (
+                            <div className="space-y-6">
+                                {/* Toolbar */}
+                                <div className="sticky top-[53px] z-20 bg-white/90 backdrop-blur-md py-2 px-3 border-b flex justify-between items-center no-print shadow-md gap-2 transition-all">
+                                    <div className="flex gap-2 overflow-x-auto">
+                                        <button
+                                            onClick={() => { setShowReports(false); setShowQuestions(false); }}
+                                            className={`px-3 py-1.5 md:px-4 md:py-2 rounded text-sm md:text-base whitespace-nowrap transition-all font-medium ${!showReports && !showQuestions ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} `}
+                                        >
+                                            Matrix
+                                        </button>
+                                        {currentBlueprint.isConfirmed && (
+                                            <>
+                                                <button
+                                                    onClick={() => { setShowQuestions(true); setShowReports(false); }}
+                                                    className={`px-3 py-1.5 md:px-4 md:py-2 rounded text-sm md:text-base whitespace-nowrap transition-all font-medium ${showQuestions ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} `}
+                                                >
+                                                    <span className="hidden md:inline">Question Entry</span>
+                                                    <span className="md:hidden">Q-Entry</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => { setShowReports(true); setShowQuestions(false); }}
+                                                    className={`px-3 py-1.5 md:px-4 md:py-1.5 rounded text-sm md:text-base whitespace-nowrap transition-all font-medium ${showReports ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} `}
+                                                >
+                                                    Reports
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {!showReports && !showQuestions && !currentBlueprint.isConfirmed && (
+                                            <>
+                                                <button
+                                                    onClick={handleRegeneratePattern}
+                                                    className="bg-orange-500 text-white px-3 py-1.5 md:px-4 md:py-2 rounded shadow-md hover:bg-orange-600 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"
+                                                    title="Regenerate with different pattern"
+                                                >
+                                                    <RefreshCw className="mr-1 md:mr-2" size={18} />
+                                                    <span className="hidden md:inline">New Pattern</span>
+                                                    <span className="md:hidden">Shuff</span>
+                                                </button>
+                                                <button
+                                                    onClick={handleConfirmPattern}
+                                                    className="bg-blue-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow-md hover:bg-blue-700 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"
+                                                >
+                                                    <CheckCircle className="mr-1 md:mr-2" size={18} />
+                                                    <span className="hidden md:inline">Confirm</span>
+                                                    <span className="md:hidden">Confirm</span>
+                                                </button>
+                                            </>
+                                        )}
+                                        <button onClick={handleSaveToDB} className="bg-green-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow hover:bg-green-700 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all">
+                                            <Save className="mr-1 md:mr-2" size={18} />
+                                            <span className="hidden md:inline">Save Blueprint</span>
+                                            <span className="md:hidden">Save</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div ref={printRef} className={`bg-white rounded shadow ${showReports ? 'p-0' : 'p-6'}`}>
+                                    {/* Conditional Rendering of Views */}
+                                    {(() => {
+                                        const activeCurriculum = getFilteredCurriculum(curriculum, currentBlueprint?.examTerm || selectedTerm) || curriculum;
+                                        
+                                        return (
+                                            <>
+                                                {!showReports && !showQuestions && (
+                                                    <BlueprintMatrix
+                                                        blueprint={currentBlueprint}
+                                                        curriculum={activeCurriculum}
+                                                        onUpdateItem={updateItem}
+                                                        onMoveItem={moveItem}
+                                                        paperType={paperTypes.find(p => p.id === currentBlueprint.questionPaperTypeId)}
+                                                        readOnly={currentBlueprint.isConfirmed}
+                                                    />
+                                                )}
+
+                                                {showQuestions && (
+                                                    <QuestionEntryForm
+                                                        blueprint={currentBlueprint}
+                                                        onUpdateItem={updateItem}
+                                                        paperType={paperTypes.find(p => p.id === currentBlueprint.questionPaperTypeId)}
+                                                    />
+                                                )}
+
+                                                {showReports && (
+                                                    <ReportsView
+                                                        blueprint={currentBlueprint}
+                                                        curriculum={activeCurriculum}
+                                                        onDownloadPDF={handleDownloadPDF}
+                                                    />
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+
+
+                                    {!showReports && currentBlueprint && (
+                                        <div className="mt-8 pt-8 border-t px-6 pb-6">
+                                            <SummaryTable items={currentBlueprint.items} />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex justify-center gap-4 no-print border-t pt-6">
+                                    <button onClick={() => window.print()} className="bg-gray-700 text-white px-6 py-2 rounded flex items-center hover:bg-gray-800">
+                                        <Printer className="mr-2" /> Print View
+                                    </button>
+                                    {!showReports && (
+                                        <button onClick={() => handleDownloadPDF('all')} className="bg-red-600 text-white px-6 py-2 rounded flex items-center hover:bg-red-700">
+                                            <Download className="mr-2" /> Download Full PDF
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {view === 'create' && !currentBlueprint && (
+                            <div className="text-center p-8 text-gray-500 bg-gray-100 rounded border-dashed border-2">
+                                Select a Question Paper Type to begin.
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Sharing Modal */}
+            {sharingBlueprintId && (
+                <BlueprintSharingModal
+                    blueprint={blueprints.find(bp => bp.id === sharingBlueprintId)!}
+                    currentUserId={user.id}
+                    onClose={() => setSharingBlueprintId(null)}
+                    onShareComplete={() => {
+                        setBlueprints(getAllAccessibleBlueprints(user.id));
+                    }}
+                />
+            )}
+        </div>
+    );
+};
+
+// ... [Main App remains] ...
+const App = () => {
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    useEffect(() => { const saved = localStorage.getItem('currentUser'); if (saved) setCurrentUser(JSON.parse(saved)); }, []);
+    const handleLogin = (user: User) => { setCurrentUser(user); localStorage.setItem('currentUser', JSON.stringify(user)); };
+    const handleLogout = () => { setCurrentUser(null); localStorage.removeItem('currentUser'); };
+    if (!currentUser) return <Login onLogin={handleLogin} />;
+    if (currentUser.role === Role.ADMIN) return <AdminPortal user={currentUser} onLogout={handleLogout} />;
+    return <UserDashboard user={currentUser} onLogout={handleLogout} />;
+};
 export default App;
