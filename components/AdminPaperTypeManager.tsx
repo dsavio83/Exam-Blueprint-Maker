@@ -19,7 +19,7 @@ const AdminPaperTypeManager = () => {
         description: '',
         sections: []
     });
-    const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1 };
+    const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1, optionCount: 0 };
 
     useEffect(() => { setTypes(getQuestionPaperTypes()); }, []);
 
@@ -157,6 +157,16 @@ const AdminPaperTypeManager = () => {
                                             <span className="text-[10px] text-purple-400 font-bold">TOTAL:</span>
                                             <span className="text-sm font-black text-purple-700">{s.count * s.marks}</span>
                                         </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] uppercase font-bold text-gray-400">Qns w/ Options:</span>
+                                            <input 
+                                                type="number" 
+                                                className="border w-12 p-1 rounded text-center text-sm" 
+                                                value={s.optionCount || 0} 
+                                                onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} 
+                                                title="Number of questions in this section that have internal choices"
+                                            />
+                                        </div>
                                         <div className="ml-auto flex items-center">
                                             <button onClick={() => removeSection(idx)} className="text-red-300 hover:text-red-500 p-1 hover:bg-red-50 rounded transition-colors" title="Remove Section"><Trash2 size={16} /></button>
                                         </div>
@@ -213,7 +223,7 @@ const AdminPaperTypeManager = () => {
                             <div className="flex-1 space-y-2 mb-4 bg-gray-50/50 p-2 rounded-lg">
                                 {t.sections.slice(0, 3).map((s, i) => (
                                     <div key={i} className="text-[11px] text-gray-600 flex justify-between border-b border-gray-100 pb-1">
-                                        <span>{s.count} qns × {s.marks}M</span>
+                                        <span>{s.count} qns × {s.marks}M {s.optionCount ? `(${s.optionCount} Opt)` : ''}</span>
                                         <span className="font-bold text-gray-400">{s.marks * s.count}M</span>
                                     </div>
                                 ))}

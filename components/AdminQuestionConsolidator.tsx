@@ -10,6 +10,7 @@ const AdminQuestionConsolidator = () => {
     const [selectedBlueprintId, setSelectedBlueprintId] = useState<string>('');
     const [consolidatedText, setConsolidatedText] = useState('');
     const [copied, setCopied] = useState(false);
+    const [showAnswers, setShowAnswers] = useState(true);
 
     const stripHtml = (html: string) => {
         if (!html) return "";
@@ -20,18 +21,33 @@ const AdminQuestionConsolidator = () => {
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<\/p>/gi, '\n')
             .replace(/<\/div>/gi, '\n')
-            .replace(/<li>/gi, '\n• ')
-            .replace(/<\/li>/gi, '\n');
+            .replace(/<tr\s*\/?>/gi, '\n')
+            .replace(/<td\s*\/?>|<th\s*\/?>/gi, ' | ');
 
         tmp.innerHTML = processedHtml;
+
+        // Handle lists specifically before getting textContent for better numbering
+        const lists = tmp.querySelectorAll('ol, ul');
+        lists.forEach(list => {
+            const isOrdered = list.tagName.toLowerCase() === 'ol';
+            const items = list.querySelectorAll('li');
+            items.forEach((li, idx) => {
+                const prefix = isOrdered ? `${idx + 1}. ` : '• ';
+                li.prepend(document.createTextNode(prefix));
+                li.append(document.createTextNode('\n'));
+            });
+        });
+
         let text = tmp.textContent || tmp.innerText || "";
 
-        // 2. Fix clumped options: Detect Tamil (அ, ஆ, இ, ஈ) or English (a, b, c, d) options 
-        // that are stuck to the previous character and move them to a new line.
-        // Pattern: Any non-newline character followed by (option character + bracket)
-        text = text.replace(/([^\n])\s*([அஆஇஈA-Da-d]\))/g, '$1\n$2');
+        // 2. Handle options (அ, ஆ, இ, ஈ or A, B, C, D)
+        // Ensure they start on a new line and use (X) format
+        text = text.replace(/([^\n])\s*(\([அஆஇஈA-Da-d]\))/g, '$1\n$2'); // Existing (அ)
+        text = text.replace(/([^\n])\s*([அஆஇஈA-Da-d]\))/g, '$1\n($2)'); // அ) -> (அ)
+        text = text.replace(/^([அஆஇஈA-Da-d]\))/gm, '($1)'); // அ) at start -> (அ)
+        text = text.replace(/\(\(([அஆஇஈA-Da-d])\)\)/g, '($1)'); // Cleanup double brackets
 
-        // 3. Clean up formatting: remove excessive whitespace and leading/trailing newlines
+        // 4. Clean up formatting: remove excessive whitespace and leading/trailing newlines
         return text
             .split('\n')
             .map(line => line.trim())
@@ -61,21 +77,33 @@ const AdminQuestionConsolidator = () => {
         if (!bp) return;
 
         const paperType = paperTypes.find(p => p.id === bp.questionPaperTypeId);
+        const isTamilSubject = bp.subject.toLowerCase().includes('tamil');
 
         let text = '';
-        text += `========================================\n`;
-        text += `PAPER: ${bp.questionPaperTypeName}\n`;
-        text += `SUBJECT: ${bp.subject}\n`;
-        text += `CLASS: ${bp.classLevel}\n`;
-        text += `TERM: ${bp.examTerm}\n`;
-        text += `========================================\n\n`;
+        let answerKeyText = '';
+
+        // HEADER BLOCK
+        text += `============================================================\n`;
+        text += `சமக்ர சிக்ஷா கேரளம் - ${bp.examTerm}\n`;
+        text += `SUBJECT: ${bp.subject} | CLASS: ${bp.classLevel} | MARKS: ${bp.totalMarks}\n`;
+        text += `TIME: 90 Minutes\n`;
+        text += `============================================================\n\n`;
+
+        answerKeyText += `============================================================\n`;
+        answerKeyText += `ANSWER KEY: ${bp.subject}\n`;
+        answerKeyText += `CLASS: ${bp.classLevel} | ${bp.examTerm}\n`;
+        answerKeyText += `============================================================\n\n`;
 
         if (paperType) {
             let questionNumberOffset = 0;
-            paperType.sections.forEach((section) => {
+            paperType.sections.forEach((section, sIdx) => {
                 const sectionItems = bp.items.filter(item => item.sectionId === section.id);
 
                 if (sectionItems.length > 0) {
+                    text += `------------------------------------------------------------\n`;
+                    text += `PART - ${String.fromCharCode(65 + sIdx)} (${section.marks} marks each)\n`;
+                    text += `------------------------------------------------------------\n`;
+
                     if (section.instruction) {
                         text += `${section.instruction}\n\n`;
                     }
@@ -83,41 +111,72 @@ const AdminQuestionConsolidator = () => {
                     sectionItems.forEach((item, itemIdx) => {
                         const qNo = questionNumberOffset + itemIdx + 1;
                         const qText = stripHtml(item.questionText || '');
-                        if (qText) {
-                            text += `${qNo}. ${qText}\n`;
-                            if (item.answerText) {
-                                text += `Ans: ${stripHtml(item.answerText)}\n`;
-                            }
+                        const marks = item.marksPerQuestion || 1;
 
-                            if (item.hasInternalChoice && item.questionTextB) {
-                                text += `OR\n`;
-                                text += `${qNo}B. ${stripHtml(item.questionTextB)}\n`;
-                                if (item.answerTextB) {
-                                    text += `Ans B: ${stripHtml(item.answerTextB)}\n`;
+                        if (qText) {
+                            if (item.hasInternalChoice) {
+                                // Header line: question number + note
+                                text += `${qNo}. ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்\n`;
+                                // Option A
+                                text += `   (அ) ${qText.split('\n').join('\n       ')} [${marks}]\n`;
+
+                                // Option B
+                                if (item.questionTextB) {
+                                    text += `               (அல்லது)\n`;
+                                    text += `   (ஆ) ${stripHtml(item.questionTextB).split('\n').join('\n       ')} [${marks}]\n`;
                                 }
+
+                                // Answers for Key
+                                answerKeyText += `${qNo}. (அ) ${stripHtml(item.answerText || '---')}\n`;
+                                if (item.answerTextB) {
+                                    answerKeyText += `    (ஆ) ${stripHtml(item.answerTextB)}\n`;
+                                }
+                            } else {
+                                text += `${qNo}. ${qText.split('\n').join('\n    ')} [${marks}]\n`;
+                                answerKeyText += `${qNo}. ${stripHtml(item.answerText || '---')}\n`;
                             }
                             text += `\n`;
                         }
                     });
                     questionNumberOffset += sectionItems.length;
+                    answerKeyText += `\n`;
                 }
             });
         } else {
             // Fallback strategy if paperType is missing
             bp.items.forEach((item, itemIdx) => {
+                const qNo = itemIdx + 1;
                 const qText = stripHtml(item.questionText || '');
+                const marks = item.marksPerQuestion || 1;
+                
                 if (qText) {
-                    text += `${itemIdx + 1}. ${qText}\n`;
-                    if (item.answerText) {
-                        text += `Ans: ${stripHtml(item.answerText)}\n`;
+                    if (item.hasInternalChoice) {
+                        text += `${qNo}. ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்\n`;
+                        text += `   (அ) ${qText.split('\n').join('\n       ')} [${marks}]\n`;
+                        if (item.questionTextB) {
+                            text += `               (அல்லது)\n`;
+                            text += `   (ஆ) ${stripHtml(item.questionTextB).split('\n').join('\n       ')} [${marks}]\n`;
+                        }
+                        answerKeyText += `${qNo}. (அ) ${stripHtml(item.answerText || '---')}\n`;
+                        if (item.answerTextB) {
+                            answerKeyText += `    (ஆ) ${stripHtml(item.answerTextB)}\n`;
+                        }
+                    } else {
+                        text += `${qNo}. ${qText.split('\n').join('\n    ')} [${marks}]\n`;
+                        answerKeyText += `${qNo}. ${stripHtml(item.answerText || '---')}\n`;
                     }
                     text += `\n`;
                 }
             });
         }
 
+        if (showAnswers) {
+            text += `\n\n`;
+            text += answerKeyText;
+        }
+
         setConsolidatedText(text);
-    }, [selectedBlueprintId, blueprints, paperTypes]);
+    }, [selectedBlueprintId, blueprints, paperTypes, showAnswers]);
 
     const handleCopy = () => {
         if (!consolidatedText) return;
@@ -136,7 +195,17 @@ const AdminQuestionConsolidator = () => {
                     <p className="text-sm text-gray-500">Select a question paper to view and copy all questions.</p>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
+                        <input
+                            type="checkbox"
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            checked={showAnswers}
+                            onChange={(e) => setShowAnswers(e.target.checked)}
+                        />
+                        <span className="text-sm font-medium text-gray-700">Include Answer Key</span>
+                    </label>
+
                     <div className="relative flex-1 md:w-64">
                         <select
                             value={selectedBlueprintId}
@@ -158,12 +227,12 @@ const AdminQuestionConsolidator = () => {
                     <button
                         onClick={handleCopy}
                         disabled={!consolidatedText}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${!consolidatedText ? 'bg-gray-100 text-gray-400 cursor-not-allowed' :
-                            copied ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
+                        className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${!consolidatedText ? 'bg-gray-100 text-gray-400 cursor-not-allowed' :
+                            copied ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md transform active:scale-95'
                             }`}
                     >
                         {copied ? <Check size={18} /> : <Copy size={18} />}
-                        {copied ? 'Copied!' : 'Copy'}
+                        {copied ? 'Copied!' : 'Copy All'}
                     </button>
                 </div>
             </div>

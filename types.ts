@@ -102,6 +102,7 @@ export interface QuestionPatternSection {
   count: number;
   instruction?: string; // Direction for the user (e.g., 'Answer any 5')
   massViewHeader?: string; // Optional header for Mass View
+  optionCount?: number; // Number of questions in this section that should have internal choice
 }
 
 export interface QuestionPaperType {

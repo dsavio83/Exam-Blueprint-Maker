@@ -15,6 +15,8 @@ import AdminQuestionConsolidator from './AdminQuestionConsolidator';
 import AnswerKeyView from './AnswerKeyView';
 import { getCurriculum, getFilteredCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate } from '../services/db';
 import { BlueprintMatrix, QuestionEntryForm, ReportsView, SummaryTable } from '../App';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) => {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'config' | 'papertype' | 'users' | 'discourses' | 'blueprints' | 'consolidated'>('dashboard');
@@ -56,10 +58,152 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         alert("Blueprint saved successfully!");
     };
 
-    const updateItem = (id: string, field: keyof BlueprintItem, value: any) => {
+    const updateItem = (updatedItem: BlueprintItem) => {
         if (!viewingBlueprint) return;
-        const updatedItems = viewingBlueprint.items.map(i => i.id === id ? { ...i, [field]: value } : i);
-        setViewingBlueprint({ ...viewingBlueprint, items: updatedItems });
+        const newItems = viewingBlueprint.items.map(item =>
+            item.id === updatedItem.id ? updatedItem : item
+        );
+        setViewingBlueprint({ ...viewingBlueprint, items: newItems });
+    };
+
+    const handleDownloadPDF = async (type: 'all' | 'report1' | 'report2' | 'report3' | 'answerKey' = 'all') => {
+        if (!viewingBlueprint) return;
+        const MARGIN = 10;
+        const pdfWidthPortrait = 210;
+        const contentWidthPortrait = pdfWidthPortrait - (MARGIN * 2);
+
+        let pdf = new jsPDF('p', 'mm', 'a4');
+        let firstPage = true;
+
+        const addPortraitPage = async (id: string) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (!firstPage) pdf.addPage('a4', 'p');
+            const canvas = await html2canvas(el, {
+                scale: 2.5,
+                useCORS: true,
+                logging: false,
+                windowWidth: 1024,
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const tamilElements = clonedDoc.querySelectorAll('.tamil-font');
+                    tamilElements.forEach(el => {
+                        (el as HTMLElement).style.fontFamily = "'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif";
+                    });
+                }
+            });
+            const img = canvas.toDataURL('image/png');
+            const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
+            pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, imgHeight);
+            firstPage = false;
+        };
+
+        const chunkItems = (items: BlueprintItem[], size: number) => {
+            const chunks = [];
+            for (let i = 0; i < items.length; i += size) {
+                chunks.push(items.slice(i, i + size));
+            }
+            return chunks;
+        };
+        const chunkedItems = chunkItems(viewingBlueprint.items, 15);
+
+        if (type === 'report2' || type === 'report3') {
+            pdf = new jsPDF('l', 'mm', 'a4');
+        }
+
+        if (type === 'all' || type === 'report1') {
+            const pageIds = ['report-page-1', 'report-page-2'];
+            for (const id of pageIds) await addPortraitPage(id);
+        }
+
+        if (type === 'all' || type === 'report2') {
+            const pdfWidthLandscape = 297;
+            const pdfHeightLandscape = 210;
+            const contentWidthLandscape = pdfWidthLandscape - (MARGIN * 2);
+            const contentHeightLandscape = pdfHeightLandscape - (MARGIN * 2);
+
+            let pageIdx = 0;
+            while (true) {
+                const el = document.getElementById(`report-item-analysis-page-${pageIdx}`);
+                if (!el) break;
+                if (!firstPage) pdf.addPage('a4', 'l');
+                const canvas = await html2canvas(el, {
+                    scale: 2.5,
+                    useCORS: true,
+                    logging: false,
+                    windowWidth: 1600,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc) => {
+                        const headers = clonedDoc.querySelectorAll('th, .table-header-cell');
+                        headers.forEach(h => {
+                            (h as HTMLElement).style.backgroundColor = h.classList.contains('bg-blue-600') ? '#2563eb' :
+                                h.classList.contains('bg-gray-100') ? '#f3f4f6' : '#f9fafb';
+                            (h as HTMLElement).style.color = h.classList.contains('bg-blue-600') ? '#ffffff' : '#000000';
+                            (h as HTMLElement).style.visibility = 'visible';
+                            (h as HTMLElement).style.opacity = '1';
+                        });
+                    }
+                });
+                const img = canvas.toDataURL('image/png');
+                let imgWidth = contentWidthLandscape;
+                let imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                if (imgHeight > contentHeightLandscape) {
+                    const ratio = contentHeightLandscape / imgHeight;
+                    imgHeight = contentHeightLandscape;
+                    imgWidth = imgWidth * ratio;
+                    pdf.addImage(img, 'PNG', MARGIN + (contentWidthLandscape - imgWidth) / 2, MARGIN, imgWidth, imgHeight);
+                } else {
+                    pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidth, imgHeight);
+                }
+                firstPage = false;
+                pageIdx++;
+            }
+        }
+
+        if (type === 'all' || type === 'report3') {
+            const matrixEl = document.getElementById('report-page-blueprint-matrix');
+            if (matrixEl) {
+                const canvas = await html2canvas(matrixEl, {
+                    scale: 2.5,
+                    useCORS: true,
+                    logging: false,
+                    windowWidth: 1920,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc) => {
+                        const headers = clonedDoc.querySelectorAll('th');
+                        headers.forEach(h => {
+                            (h as HTMLElement).style.backgroundColor = h.classList.contains('bg-orange-200') ? '#fed7aa' :
+                                h.classList.contains('bg-orange-100') ? '#ffedd5' :
+                                    h.classList.contains('bg-blue-50') ? '#eff6ff' :
+                                        h.classList.contains('bg-green-50') ? '#f0fdf4' :
+                                            h.classList.contains('bg-gray-100') ? '#f3f4f6' : '#f9fafb';
+                            (h as HTMLElement).style.color = '#000000';
+                            (h as HTMLElement).style.opacity = '1';
+                            (h as HTMLElement).style.visibility = 'visible';
+                        });
+                    }
+                });
+                const img = canvas.toDataURL('image/png');
+                const pxToMm = 0.264583;
+                const imgWidthMm = 1920 * pxToMm;
+                const imgHeightMm = (canvas.height / 2.5) * pxToMm;
+                const pageWidth = imgWidthMm + (MARGIN * 2);
+                const pageHeight = imgHeightMm + (MARGIN * 2);
+
+                if (!firstPage) pdf.addPage([pageWidth, pageHeight], 'l');
+                else pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: [pageWidth, pageHeight] });
+
+                pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidthMm, imgHeightMm);
+                firstPage = false;
+            }
+        }
+
+        if (type === 'all' || type === 'answerKey') {
+            await addPortraitPage('report-answer-key');
+        }
+
+        pdf.save(`Blueprint_Report_${viewingBlueprint.classLevel}_${viewingBlueprint.subject}_${type}.pdf`);
     };
 
     const moveItem = (itemId: string, newUnitId: string, newSectionId: string, newSubUnitId?: string) => {
@@ -217,6 +361,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                             <ReportsView
                                 blueprint={viewingBlueprint}
                                 curriculum={curriculum}
+                                onDownloadPDF={handleDownloadPDF}
                             />
                         )}
 

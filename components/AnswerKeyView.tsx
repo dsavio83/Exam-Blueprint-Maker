@@ -5,9 +5,10 @@ import { Blueprint, Curriculum, Unit } from '../types';
 interface AnswerKeyViewProps {
     blueprint: Blueprint;
     curriculum: Curriculum | null;
+    isPdf?: boolean;
 }
 
-const AnswerKeyView = ({ blueprint, curriculum }: AnswerKeyViewProps) => {
+const AnswerKeyView = ({ blueprint, curriculum, isPdf = false }: AnswerKeyViewProps) => {
     // Helper for unit order
     const unitOrderMap = new Map<string, number>();
     curriculum?.units.forEach((u: Unit) => {
@@ -69,7 +70,7 @@ const AnswerKeyView = ({ blueprint, curriculum }: AnswerKeyViewProps) => {
     const termEnglish = blueprint.examTerm === 'First Term Exam' ? 'First' : blueprint.examTerm === 'Second Term Exam' ? 'Second' : 'Third';
 
     return (
-        <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 paper-container max-w-4xl mx-auto">
+        <div className={isPdf ? 'bg-white' : 'bg-white p-8 rounded-xl shadow-lg border border-gray-200 paper-container max-w-4xl mx-auto'}>
             {/* Answer Key Header - Synced with Report 1 */}
             <div className="mb-6 font-sans">
                 <div className="flex justify-between items-start mb-4">
@@ -80,8 +81,8 @@ const AnswerKeyView = ({ blueprint, curriculum }: AnswerKeyViewProps) => {
                     <div className="bg-black text-white rounded-full px-4 py-1 font-bold text-sm">GI {qpCode}</div>
                 </div>
                 <div className="text-center mb-2">
-                    <h2 className="text-lg font-bold text-black tamil-font">{termTamil} பருவ மதிப்பீடு {academicYear}</h2>
-                    <h3 className="text-md font-bold uppercase text-black">{termEnglish} Term Evaluation {academicYear}</h3>
+                    <h2 className="text-lg font-bold text-black tamil-font">{termTamil} பருவ தொகுத்தறி மதிப்பீடு {academicYear}</h2>
+                    <h3 className="text-md font-bold uppercase text-black">{termEnglish} Term Summative Assessment {academicYear}</h3>
                 </div>
                 <div className="text-center mb-4">
                     <h2 className="text-lg font-bold text-black tamil-font">{subjectTitle.tamil}</h2>
@@ -90,13 +91,15 @@ const AnswerKeyView = ({ blueprint, curriculum }: AnswerKeyViewProps) => {
                 <div className="flex justify-between items-end border-b-2 border-black pb-2 mt-4 font-bold text-lg text-black">
                     <div className="w-1/3">Std. : {blueprint.classLevel}</div>
                     <div className="text-right w-2/3">
-                        <div className="mb-1 tamil-font">நேரம் : 1½ மணி</div>
+                        <div className="mb-1 tamil-font">நேரம் : 90 நிமிடங்கள்</div>
                         <div className="tamil-font">மதிப்பெண் : {blueprint.totalMarks}</div>
                     </div>
                 </div>
 
-                <div className="mt-6 text-center text-pink-600 font-bold text-xl italic underline tamil-font">
-                    Proforma for Scoring Key & Marking Scheme
+                <div className="mt-8 text-center">
+                    <h3 className="text-xl font-bold text-pink-600 underline italic tamil-font">
+                        Proforma for Scoring Key & Marking Scheme
+                    </h3>
                 </div>
             </div>
 
@@ -112,44 +115,67 @@ const AnswerKeyView = ({ blueprint, curriculum }: AnswerKeyViewProps) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedItems.map((item, index) => (
-                            <tr key={item.id} className="min-h-[60px] text-black">
-                                <td className="border border-black p-3 text-center font-bold">{index + 1}</td>
-                                <td className="border border-black p-3 text-center font-bold">{item.marksPerQuestion}</td>
-                                <td className="border border-black p-3 text-left">
-                                    <div className="space-y-4">
-                                        {/* Option A */}
-                                        {item.hasInternalChoice && (
-                                            <div className="text-xs font-bold text-blue-600 mb-1 uppercase tracking-tighter">Option A</div>
-                                        )}
-                                        <div className="tamil-font leading-relaxed">
-                                            {item.answerText ? (
-                                                <div dangerouslySetInnerHTML={{ __html: item.answerText }} />
-                                            ) : (
-                                                <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
-                                            )}
-                                        </div>
-
-                                        {/* Option B if internal choice exists */}
-                                        {item.hasInternalChoice && (
-                                            <div className="mt-4 pt-4 border-t border-dashed border-gray-400">
-                                                <div className="text-xs font-bold text-blue-600 mb-1 uppercase tracking-tighter">Option B</div>
-                                                <div className="tamil-font leading-relaxed">
-                                                    {item.answerTextB ? (
-                                                        <div dangerouslySetInnerHTML={{ __html: item.answerTextB }} />
-                                                    ) : (
-                                                        <span className="text-gray-400 italic font-normal text-xs">(Option B விடை இன்னும் சேர்க்கப்படவில்லை)</span>
-                                                    )}
-                                                </div>
+                        {sortedItems.map((item, index) => {
+                            if (!item.hasInternalChoice) {
+                                // Normal single row
+                                return (
+                                    <tr key={item.id} className="min-h-[60px] text-black">
+                                        <td className="border border-black p-3 text-center font-bold">{index + 1}</td>
+                                        <td className="border border-black p-3 text-center font-bold">{item.marksPerQuestion}</td>
+                                        <td className="border border-black p-3 text-left">
+                                            <div className="tamil-font leading-relaxed">
+                                                {item.answerText ? (
+                                                    <div dangerouslySetInnerHTML={{ __html: item.answerText }} />
+                                                ) : (
+                                                    <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="border border-black p-3">
-                                    {/* Placeholder for further information */}
-                                </td>
-                            </tr>
-                        ))}
+                                        </td>
+                                        <td className="border border-black p-3"></td>
+                                    </tr>
+                                );
+                            }
+
+                            // Internal choice: two separate rows — அ and ஆ
+                            return (
+                                <React.Fragment key={item.id}>
+                                    {/* Row அ */}
+                                    <tr className="min-h-[60px] text-black">
+                                        <td className="border border-black p-3 text-center font-bold text-blue-700">
+                                            {index + 1}<span className="tamil-font font-bold ml-1 text-[14px]">(அ)</span>
+                                        </td>
+                                        <td className="border border-black p-3 text-center font-bold">{item.marksPerQuestion}</td>
+                                        <td className="border border-black p-3 text-left">
+                                            <div className="tamil-font leading-relaxed">
+                                                {item.answerText ? (
+                                                    <div dangerouslySetInnerHTML={{ __html: item.answerText }} />
+                                                ) : (
+                                                    <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="border border-black p-3"></td>
+                                    </tr>
+                                    {/* Row ஆ */}
+                                    <tr className="min-h-[60px] text-black bg-purple-50/20">
+                                        <td className="border border-black p-3 text-center font-bold text-purple-700">
+                                            {index + 1}<span className="tamil-font font-bold ml-1 text-[14px]">(ஆ)</span>
+                                        </td>
+                                        <td className="border border-black p-3 text-center font-bold">{item.marksPerQuestion}</td>
+                                        <td className="border border-black p-3 text-left">
+                                            <div className="tamil-font leading-relaxed">
+                                                {item.answerTextB ? (
+                                                    <div dangerouslySetInnerHTML={{ __html: item.answerTextB }} />
+                                                ) : (
+                                                    <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="border border-black p-3"></td>
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -175,12 +201,10 @@ const AnswerKeyView = ({ blueprint, curriculum }: AnswerKeyViewProps) => {
                         max-width: none !important;
                         padding: 0 !important;
                     }
-                    .tamil-font {
-                        font-family: inherit;
-                    }
                 }
                 .tamil-font {
                     line-height: 1.8;
+                    font-family: 'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif;
                 }
             `}} />
         </div>

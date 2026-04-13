@@ -88,31 +88,31 @@ const INITIAL_PAPER_TYPES: QuestionPaperType[] = [
   {
     id: 'pt1', name: 'Type 1', totalMarks: 40, description: 'Variation A',
     sections: [
-      { id: 's1', marks: 1, count: 4, instruction: 'I. 1 முதல் 4 வரையுள்ள அனைத்து வினாக்களுக்கும் சரியான விடையைத் தேர்ந்தெடுத்து எழுதுக. (1 மதிப்பெண் வீதம்) (4 x 1 = 4)' },
-      { id: 's2', marks: 2, count: 4, instruction: 'II. 5 முதல் 8 வரையுள்ள அனைத்து வினாக்களுக்கு ஓரிரு வரிகளில் விடையளிக்க. (2 மதிப்பெண் வீதம்) (4 x 2 = 8)' },
-      { id: 's3', marks: 3, count: 4, instruction: 'III. 9 முதல் 12 வரையுள்ள அனைத்து வினாக்களுக்கும் விடையளிக்கவும். (3 மதிப்பெண் வீதம்) (4 x 3 = 12)' },
-      { id: 's4', marks: 5, count: 2, instruction: 'IV. 13, 14 ஆகிய வினாக்களுக்கு விடையளிக்கவும். (5 மதிப்பெண் வீதம்) (2 x 5 = 10)' },
-      { id: 's5', marks: 6, count: 1, instruction: 'V. பின்வரும் வினாவிற்கு விடையளிக்கவும். (6 மதிப்பெண் வீதம்) (1 x 6 = 6)' }
+      { id: 's1', marks: 1, count: 4, optionCount: 0, instruction: 'I. 1 முதல் 4 வரையுள்ள அனைத்து வினாக்களுக்கும் சரியான விடையைத் தேர்ந்தெடுத்து எழுதுக. (1 மதிப்பெண் வீதம்) (4 x 1 = 4)' },
+      { id: 's2', marks: 2, count: 4, optionCount: 0, instruction: 'II. 5 முதல் 8 வரையுள்ள அனைத்து வினாக்களுக்கு ஓரிரு வரிகளில் விடையளிக்க. (2 மதிப்பெண் வீதம்) (4 x 2 = 8)' },
+      { id: 's3', marks: 3, count: 4, optionCount: 4, instruction: 'III. 9 முதல் 12 வரையுள்ள அனைத்து வினாக்களுக்கும் விடையளிக்கவும். (3 மதிப்பெண் வீதம்) (4 x 3 = 12)' },
+      { id: 's4', marks: 5, count: 2, optionCount: 2, instruction: 'IV. 13, 14 ஆகிய வினாக்களுக்கு விடையளிக்கவும். (5 மதிப்பெண் வீதம்) (2 x 5 = 10)' },
+      { id: 's5', marks: 6, count: 1, optionCount: 1, instruction: 'V. பின்வரும் வினாவிற்கு விடையளிக்கவும். (6 மதிப்பெண் வீதம்) (1 x 6 = 6)' }
     ]
   },
   {
     id: 'pt2', name: 'Type 2', totalMarks: 40, description: 'Variation B',
     sections: [
-      { id: 's1', marks: 1, count: 2, instruction: 'I. 1 முதல் 2 வரையுள்ள அனைத்து வினாக்களுக்கும் சரியான விடையைத் தேர்ந்தெடுத்து எழுதுக. (1 மதிப்பெண் வீதம்) (2 x 1 = 2)' },
-      { id: 's2', marks: 2, count: 2, instruction: 'II. 3 முதல் 4 வரையுள்ள அனைத்து வினாக்களுக்கு ஓரிரு வரிகளில் விடையளிக்க. (2 மதிப்பெண் வீதம்) (2 x 2 = 4)' },
-      { id: 's3', marks: 3, count: 6, instruction: 'III. 5 முதல் 10 வரையுள்ள அனைத்து வினாக்களுக்கும் விடையளிக்கவும். (3 மதிப்பெண் வீதம்)  (3 x 6 = 18)' },
-      { id: 's4', marks: 5, count: 2, instruction: 'IV. 11, 12 ஆகிய வினாக்களுக்கு விடையளிக்கவும். (5 மதிப்பெண் வீதம்) (5 x 2 = 10)' },
-      { id: 's5', marks: 6, count: 1, instruction: 'V. பின்வரும் வினாவிற்கு விடையளிக்கவும். (6 மதிப்பெண் வீதம்) (1 x 6 = 6)' }
+      { id: 's1', marks: 1, count: 2, optionCount: 0, instruction: 'I. 1 முதல் 2 வரையுள்ள அனைத்து வினாக்களுக்கும் சரியான விடையைத் தேர்ந்தெடுத்து எழுதுக. (1 மதிப்பெண் வீதம்) (2 x 1 = 2)' },
+      { id: 's2', marks: 2, count: 2, optionCount: 0, instruction: 'II. 3 முதல் 4 வரையுள்ள அனைத்து வினாக்களுக்கு ஓரிரு வரிகளில் விடையளிக்க. (2 மதிப்பெண் வீதம்) (2 x 2 = 4)' },
+      { id: 's3', marks: 3, count: 6, optionCount: 6, instruction: 'III. 5 முதல் 10 வரையுள்ள அனைத்து வினாக்களுக்கும் விடையளிக்கவும். (3 மதிப்பெண் வீதம்)  (3 x 6 = 18)' },
+      { id: 's4', marks: 5, count: 2, optionCount: 2, instruction: 'IV. 11, 12 ஆகிய வினாக்களுக்கு விடையளிக்கவும். (5 மதிப்பெண் வீதம்) (5 x 2 = 10)' },
+      { id: 's5', marks: 6, count: 1, optionCount: 1, instruction: 'V. பின்வரும் வினாவிற்கு விடையளிக்கவும். (6 மதிப்பெண் வீதம்) (1 x 6 = 6)' }
     ]
   },
   {
     id: 'pt3', name: 'Type 3', totalMarks: 40, description: 'Variation C',
     sections: [
-      { id: 's1', marks: 1, count: 4, instruction: 'I. 1 முதல் 4 வரையுள்ள அனைத்து வினாக்களுக்கும் சரியான விடையைத் தேர்ந்தெடுத்து எழுதுக. (1 மதிப்பெண் வீதம்) (4 x 1 = 4)' },
-      { id: 's2', marks: 2, count: 3, instruction: 'II. 5 முதல் 7 வரையுள்ள அனைத்து வினாக்களுக்கு ஓரிரு வரிகளில் விடையளிக்க. (2 மதிப்பெண் வீதம்) (2 x 3 = 6)' },
-      { id: 's3', marks: 3, count: 3, instruction: 'III. 8 முதல் 10 வரையுள்ள அனைத்து வினாக்களுக்கும் விடையளிக்கவும். (3 மதிப்பெண் வீதம்) (3 x 3 = 9)' },
-      { id: 's4', marks: 5, count: 3, instruction: 'IV. 11 முதல் 13 வரையுள்ள வினாக்களுக்கு விடையளிக்கவும். (5 மதிப்பெண் வீதம்) (5 x 3 = 15)' },
-      { id: 's5', marks: 6, count: 1, instruction: 'V. பின்வரும் வினாவிற்கு விடையளிக்கவும். (6 மதிப்பெண் வீதம்) (1 x 6 = 6)' }
+      { id: 's1', marks: 1, count: 4, optionCount: 0, instruction: 'I. 1 முதல் 4 வரையுள்ள அனைத்து வினாக்களுக்கும் சரியான விடையைத் தேர்ந்தெடுத்து எழுதுக. (1 மதிப்பெண் வீதம்) (4 x 1 = 4)' },
+      { id: 's2', marks: 2, count: 3, optionCount: 0, instruction: 'II. 5 முதல் 7 வரையுள்ள அனைத்து வினாக்களுக்கு ஓரிரு வரிகளில் விடையளிக்க. (2 மதிப்பெண் வீதம்) (2 x 3 = 6)' },
+      { id: 's3', marks: 3, count: 3, optionCount: 3, instruction: 'III. 8 முதல் 10 வரையுள்ள அனைத்து வினாக்களுக்கும் விடையளிக்கவும். (3 மதிப்பெண் வீதம்) (3 x 3 = 9)' },
+      { id: 's4', marks: 5, count: 3, optionCount: 3, instruction: 'IV. 11 முதல் 13 வரையுள்ள வினாக்களுக்கு விடையளிக்கவும். (5 மதிப்பெண் வீதம்) (5 x 3 = 15)' },
+      { id: 's5', marks: 6, count: 1, optionCount: 1, instruction: 'V. பின்வரும் வினாவிற்கு விடையளிக்கவும். (6 மதிப்பெண் வீதம்) (1 x 6 = 6)' }
     ]
   },
 ];
@@ -665,6 +665,12 @@ export const generateBlueprintTemplate = (
         : 'general';
       usageTracker[alloc.unit.id]++;
 
+      // Handle internal choice based on section definition
+      const section = paperType.sections.find(s => s.id === token.sectionId);
+      const sectionOptionCount = section?.optionCount || 0;
+      const currentSectionCount = items.filter(i => i.sectionId === token.sectionId && i.hasInternalChoice).length;
+      const hasInternalChoice = currentSectionCount < sectionOptionCount;
+
       items.push({
         id: Math.random().toString(36).substr(2, 9),
         unitId: alloc.unit.id,
@@ -677,7 +683,7 @@ export const generateBlueprintTemplate = (
         cognitiveProcess: CognitiveProcess.CP2,
         itemFormat: getDefaultFormat(token.mark),
         questionType: assignQuestionType(token.mark),
-        hasInternalChoice: token.mark >= 5, // Default options for 5+ marks
+        hasInternalChoice: hasInternalChoice,
         knowledgeLevelB: KnowledgeLevel.BASIC,
         cognitiveProcessB: CognitiveProcess.CP2,
         itemFormatB: getDefaultFormat(token.mark),

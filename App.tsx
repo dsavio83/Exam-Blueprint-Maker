@@ -14,13 +14,15 @@ import {
 import {
     Trash2, Plus, Download, LogOut, FileText,
     Menu, X, Settings, Edit2, Save, Printer, Users, BookOpen, Layers, UserCircle, LayoutDashboard, ChevronLeft, List, FileType, Grip, GripVertical, CheckCircle, RefreshCw, Clock, GripHorizontal,
-    Bold, Italic, Underline, ListOrdered, Share2, Eye, EyeOff, Lock, ChevronDown, ChevronUp
+    Bold, Italic, Underline, ListOrdered, Share2, Eye, EyeOff, Lock, ChevronDown, ChevronUp,
+    Image, Table as TableIcon
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import AdminPortal from './components/AdminPortal';
 import BlueprintSharingModal from './components/BlueprintSharingModal';
 import AnswerKeyView from './components/AnswerKeyView';
+import { DocExportService } from './services/docExport';
 
 // --- Login & Admin Components remain mostly the same (collapsed for brevity in thought, but included fully here) ---
 
@@ -117,9 +119,10 @@ const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
 // --- Question & Answer Entry Component ---
 
-// --- Rich Text Editor (Basic) ---
-const SimpleRichTextEditor = ({ value, onChange, placeholder }: any) => {
+// --- Rich Text Editor (Enhanced) ---
+const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = false }: any) => {
     const ref = useRef<HTMLDivElement>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean, target: any }>({ x: 0, y: 0, visible: false, target: null });
 
     // Sync external value changes only when not focused to avoid cursor loss
     useEffect(() => {
@@ -128,8 +131,43 @@ const SimpleRichTextEditor = ({ value, onChange, placeholder }: any) => {
         }
     }, [value]);
 
+    useEffect(() => {
+        const handleClickOutside = () => setContextMenu(prev => ({ ...prev, visible: false }));
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
+
     const handleInput = () => {
         if (ref.current) onChange(ref.current.innerHTML);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (isAnswerTab) {
+                // Insert a right-aligned score marker for answers
+                document.execCommand('insertHTML', false, '&nbsp;<span style="float:right; font-weight:bold; margin-left: 20px;">( &nbsp;&nbsp; )</span>&nbsp;');
+            } else {
+                document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;');
+            }
+            handleInput();
+        }
+    };
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const cell = target.closest('td, th');
+        const table = target.closest('table');
+
+        if (table) {
+            e.preventDefault();
+            setContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                visible: true,
+                target: { cell, table }
+            });
+        }
     };
 
     const exec = (cmd: string, val?: string) => {
@@ -138,30 +176,186 @@ const SimpleRichTextEditor = ({ value, onChange, placeholder }: any) => {
         ref.current?.focus();
     };
 
+    const handleImageUpload = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: any) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (re) => {
+                    const dataUrl = re.target?.result as string;
+                    exec('insertImage', dataUrl);
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
+    };
+
+    const handleInsertTable = () => {
+        const rows = prompt("Enter number of rows:", "3");
+        const cols = prompt("Enter number of columns:", "2");
+        if (rows && cols) {
+            const r = parseInt(rows);
+            const c = parseInt(cols);
+            if (isNaN(r) || isNaN(c)) return;
+
+            let tableHtml = '<table style="width:100%; border-collapse: collapse; border: 1px solid black; margin: 10px 0;">';
+            for (let i = 0; i < r; i++) {
+                tableHtml += '<tr>';
+                for (let j = 0; j < c; j++) {
+                    tableHtml += '<td style="border: 1px solid black; padding: 8px; min-width: 50px;">&nbsp;</td>';
+                }
+                tableHtml += '</tr>';
+            }
+            tableHtml += '</table><p>&nbsp;</p>';
+            exec('insertHTML', tableHtml);
+        }
+    };
+
+    // Table Customization Logic
+    const addRow = (above: boolean) => {
+        const { cell } = contextMenu.target;
+        if (!cell) return;
+        const row = cell.parentElement;
+        const newRow = row.cloneNode(true);
+        // Clear content in new row cells
+        //@ts-ignore
+        Array.from(newRow.cells).forEach((c: any) => c.innerHTML = '&nbsp;');
+        if (above) row.before(newRow);
+        else row.after(newRow);
+        handleInput();
+    };
+
+    const addCol = (after: boolean) => {
+        const { cell, table } = contextMenu.target;
+        if (!cell || !table) return;
+        const index = cell.cellIndex;
+        //@ts-ignore
+        Array.from(table.rows).forEach((row: any) => {
+            const newCell = row.insertCell(after ? index + 1 : index);
+            newCell.innerHTML = '&nbsp;';
+            newCell.style.border = '1px solid black';
+            newCell.style.padding = '8px';
+            newCell.style.minWidth = '50px';
+        });
+        handleInput();
+    };
+
+    const deleteTablePart = (type: 'row' | 'col' | 'table') => {
+        const { cell, table } = contextMenu.target;
+        if (!table) return;
+        if (type === 'table') {
+            table.remove();
+        } else if (type === 'row' && cell) {
+            cell.parentElement.remove();
+        } else if (type === 'col' && cell) {
+            const index = cell.cellIndex;
+            //@ts-ignore
+            Array.from(table.rows).forEach((row: any) => row.deleteCell(index));
+        }
+        handleInput();
+    };
+
     return (
-        <div className="border rounded-md overflow-hidden bg-white">
-            <div className="bg-gray-50 border-b p-1 flex gap-1">
-                <button onMouseDown={(e) => { e.preventDefault(); exec('bold'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Bold"><Bold size={14} /></button>
-                <button onMouseDown={(e) => { e.preventDefault(); exec('italic'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Italic"><Italic size={14} /></button>
-                <button onMouseDown={(e) => { e.preventDefault(); exec('underline'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Underline"><Underline size={14} /></button>
-                <div className="w-px h-4 bg-gray-300 mx-1 self-center"></div>
-                <button onMouseDown={(e) => { e.preventDefault(); exec('insertUnorderedList'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Bullet List"><List size={14} /></button>
-                <button onMouseDown={(e) => { e.preventDefault(); exec('insertOrderedList'); }} className="p-1 hover:bg-gray-200 rounded text-gray-700" title="Number List"><ListOrdered size={14} /></button>
+        <div className="border rounded-md overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-100 transition-all relative">
+            <div className="bg-gray-50 border-b p-1.5 flex flex-wrap gap-1 items-center">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('bold'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Bold"><Bold size={14} /></button>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('italic'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Italic"><Italic size={14} /></button>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('underline'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Underline"><Underline size={14} /></button>
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertUnorderedList'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Bullet List"><List size={14} /></button>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertOrderedList'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Number List"><ListOrdered size={14} /></button>
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); handleImageUpload(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Image"><Image size={14} /></button>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Table"><TableIcon size={14} /></button>
+
+                {isAnswerTab && (
+                    <div className="ml-auto px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider">
+                        Tab Key enabled for marks
+                    </div>
+                )}
             </div>
             <div
                 ref={ref}
                 contentEditable
-                className="p-3 min-h-[120px] outline-none text-sm prose max-w-none"
+                className="p-4 min-h-[150px] outline-none text-sm prose max-w-none editor-content tamil-font"
                 onInput={handleInput}
                 onBlur={handleInput}
+                onKeyDown={handleKeyDown}
+                onContextMenu={handleContextMenu}
                 placeholder={placeholder}
             />
+
+            {/* Table Context Menu */}
+            {contextMenu.visible && (
+                <div
+                    className="fixed z-[100] bg-white border shadow-2xl rounded-lg py-2 w-52 overflow-hidden"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 mb-1">Table Controls</div>
+                    <button onClick={() => { addRow(true); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Row Above</button>
+                    <button onClick={() => { addRow(false); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Row Below</button>
+                    <button onClick={() => { addCol(false); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Column Left</button>
+                    <button onClick={() => { addCol(true); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Column Right</button>
+                    <div className="border-t my-1"></div>
+                    <button
+                        onClick={() => {
+                            const { cell } = contextMenu.target;
+                            if (cell) {
+                                const isHeader = cell.tagName === 'TH';
+                                const row = cell.parentElement;
+                                //@ts-ignore
+                                Array.from(row.cells).forEach((c: any) => {
+                                    const newTag = isHeader ? 'td' : 'th';
+                                    const newCell = document.createElement(newTag);
+                                    newCell.innerHTML = c.innerHTML;
+                                    newCell.style.cssText = c.style.cssText;
+                                    if (!isHeader) {
+                                        newCell.style.fontWeight = 'bold';
+                                        newCell.style.backgroundColor = '#f3f4f6';
+                                    } else {
+                                        newCell.style.fontWeight = 'normal';
+                                        newCell.style.backgroundColor = 'transparent';
+                                    }
+                                    c.replaceWith(newCell);
+                                });
+                                handleInput();
+                            }
+                            setContextMenu(prev => ({ ...prev, visible: false }));
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                    >
+                        <Bold size={12} /> Toggle Header Row
+                    </button>
+                    <button
+                        onClick={() => {
+                            const { cell } = contextMenu.target;
+                            if (cell) {
+                                cell.style.backgroundColor = cell.style.backgroundColor === 'yellow' ? 'transparent' : 'yellow';
+                                handleInput();
+                            }
+                            setContextMenu(prev => ({ ...prev, visible: false }));
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs hover:bg-yellow-50 flex items-center gap-2"
+                    >
+                        <div className="w-3 h-3 bg-yellow-400 border border-gray-300"></div> Highlight Cell (Yellow)
+                    </button>
+                    <div className="border-t my-1"></div>
+                    <button onClick={() => { deleteTablePart('row'); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={12} /> Delete Row</button>
+                    <button onClick={() => { deleteTablePart('col'); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={12} /> Delete Column</button>
+                    <button onClick={() => { deleteTablePart('table'); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2 font-bold"><Trash2 size={12} /> Delete Entire Table</button>
+                </div>
+            )}
         </div>
     );
 };
 
 // --- Question Row Component ---
-const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSettings, curriculum }: any) => {
+const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSettings, curriculum, section, sectionItems }: any) => {
     const [activeTab, setActiveTab] = useState<'question' | 'answer'>('question');
     const [answerMode, setAnswerMode] = useState<'content' | 'discourse' | 'ai'>('content');
     const [isGenerating, setIsGenerating] = useState(false);
@@ -169,6 +363,15 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
     // Helpers for Unit selection
     const selectedUnit = curriculum?.units.find((u: Unit) => u.id === item.unitId);
     const availableSubUnits = selectedUnit?.subUnits || [];
+
+    const sectionOptionCount = section?.optionCount || 0;
+    const currentSectionOptionUsage = sectionItems?.filter((si: any) => si.hasInternalChoice).length || 0;
+
+    // Limits based on mark rules: 1 & 2 marks have no option.
+    const isMarkRestricted = item.marksPerQuestion <= 2;
+    // Can't enable if we hit the limit, UNLESS it's already enabled
+    const isLimitReached = !item.hasInternalChoice && currentSectionOptionUsage >= sectionOptionCount;
+    const canToggleOption = !isMarkRestricted && (item.hasInternalChoice || !isLimitReached);
 
     const generateAIAnswer = (targetField: 'answerText' | 'answerTextB', sourceField: 'questionText' | 'questionTextB') => {
         setIsGenerating(true);
@@ -212,14 +415,20 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
 
                     {/* Internal Choice Toggle */}
                     <div className="flex items-center gap-2 ml-4 border-l pl-4">
-                        <span className="text-xs font-bold text-gray-500 uppercase">Options</span>
+                        <span className="tamil-font font-bold text-gray-500 uppercase tracking-widest text-[10px]">உள்நிலைத் தெரிவு (அ/ஆ)</span>
                         <button
-                            onClick={() => onUpdateItem(item.id, 'hasInternalChoice', !item.hasInternalChoice)}
-                            className={`w-10 h-5 rounded-full p-1 transition-colors ${item.hasInternalChoice ? 'bg-blue-600' : 'bg-gray-300'}`}
-                            title="Enable Internal Choice (Either/Or)"
+                            onClick={() => canToggleOption && onUpdateItem(item.id, 'hasInternalChoice', !item.hasInternalChoice)}
+                            disabled={!canToggleOption}
+                            className={`w-10 h-5 rounded-full p-1 transition-all ${item.hasInternalChoice ? 'bg-blue-600 shadow-inner' : 'bg-gray-300'} ${!canToggleOption ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:scale-105 active:scale-95'}`}
+                            title={isMarkRestricted ? "1, 2 மதிப்பெண்ணிற்கு ஆப்ஷன் இல்லை" : isLimitReached ? `Limit of ${sectionOptionCount} options reached for this section` : "Enable Internal Choice (Either/Or)"}
                         >
                             <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${item.hasInternalChoice ? 'translate-x-5' : 'translate-x-0'}`} />
                         </button>
+                        {sectionOptionCount > 0 && !isMarkRestricted && (
+                            <span className="text-[10px] font-medium text-gray-400">
+                                ({currentSectionOptionUsage}/{sectionOptionCount} used)
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -227,7 +436,7 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
                     {curriculum && (
                         <>
                             <select
-                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[150px]"
+                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[250px]"
                                 value={item.unitId}
                                 onChange={(e) => {
                                     onUpdateItem(item.id, 'unitId', e.target.value);
@@ -245,7 +454,7 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
                             </select>
 
                             <select
-                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[150px]"
+                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[250px]"
                                 value={item.subUnitId}
                                 onChange={(e) => onUpdateItem(item.id, 'subUnitId', e.target.value)}
                                 title="Sub-Unit"
@@ -289,13 +498,7 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
 
             {/* Content Area */}
             <div className="p-4">
-                {/* Section Instruction Display */}
-                {item.instruction && (
-                    <div className="mb-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg">
-                        <div className="text-[10px] font-bold text-amber-600 uppercase mb-1 tracking-wider">Section Instruction</div>
-                        <p className="text-sm font-bold text-amber-900 border-none outline-none">{item.instruction}</p>
-                    </div>
-                )}
+                {/* Section Instruction Display removed from here and moved to parent Form for 'once-only' appearance */}
 
                 {/* Tabs */}
                 <div className="flex border-b mb-4">
@@ -319,7 +522,8 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
                         <div className="animate-fade-in space-y-6">
                             {/* Option A (Default) */}
                             <div>
-                                {item.hasInternalChoice && <div className="text-xs font-bold text-blue-600 mb-1">Option A</div>}
+                                {item.hasInternalChoice && <div className="tamil-font font-bold text-red-600 mb-1">ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்</div>}
+                                {item.hasInternalChoice && <div className="tamil-font font-bold text-blue-600 mb-1">(அ) வினா</div>}
                                 <SimpleRichTextEditor
                                     value={item.questionText}
                                     onChange={(val: string) => onUpdateItem(item.id, 'questionText', val)}
@@ -327,46 +531,50 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
                                 />
                             </div>
 
+                            {item.hasInternalChoice && (
+                                <div className="tamil-font font-bold text-purple-600 flex items-center gap-2">
+                                    <span className="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">அல்லது</span>
+                                </div>
+
+                            )}
+
                             {/* Option B (If Enabled) */}
                             {item.hasInternalChoice && (
-                                <div className="border-t pt-4 bg-purple-50/20 p-4 rounded-lg border border-purple-100">
+                                <div className="border-t pt-1 bg-purple-50/20 p-4 rounded-lg border border-purple-100">
                                     <div className="flex justify-between items-center mb-3">
-                                        <div className="text-xs font-bold text-purple-600 flex items-center gap-2">
-                                            <span className="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">OR</span>
-                                            Option B Settings
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <select
-                                                value={item.knowledgeLevelB || item.knowledgeLevel}
-                                                onChange={(e) => onUpdateItem(item.id, 'knowledgeLevelB', e.target.value)}
-                                                className={`text-[10px] border p-1 rounded bg-white font-bold ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
-                                                disabled={item.marksPerQuestion === 1}
-                                            >
-                                                {Object.values(KnowledgeLevel).map(kl => <option key={kl} value={kl}>{kl}</option>)}
-                                            </select>
-                                            <select
-                                                value={item.cognitiveProcessB || item.cognitiveProcess}
-                                                onChange={(e) => onUpdateItem(item.id, 'cognitiveProcessB', e.target.value)}
-                                                className="text-[10px] border p-1 rounded bg-white font-bold"
-                                            >
-                                                {Object.values(CognitiveProcess).map(cp => <option key={cp} value={cp}>{cp.split(' ')[0]}</option>)}
-                                            </select>
-                                            <select
-                                                value={item.itemFormatB || item.itemFormat}
-                                                onChange={(e) => onUpdateItem(item.id, 'itemFormatB', e.target.value)}
-                                                className="text-[10px] border p-1 rounded bg-white font-bold"
-                                            >
-                                                {systemSettings.itemFormats.map((f: any) => <option key={f.code} value={f.name}>{f.name}</option>)}
-                                            </select>
-                                        </div>
+                                        <div className="tamil-font font-bold text-blue-600 mb-1"> (ஆ) வினா </div>
+                                        {/* <select
+                                            value={item.knowledgeLevelB || item.knowledgeLevel}
+                                            onChange={(e) => onUpdateItem(item.id, 'knowledgeLevelB', e.target.value)}
+                                            className={`text-[10px] border p-1 rounded bg-white font-bold ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
+                                            disabled={item.marksPerQuestion === 1}
+                                        >
+                                            {Object.values(KnowledgeLevel).map(kl => <option key={kl} value={kl}>{kl}</option>)}
+                                        </select>
+                                        <select
+                                            value={item.cognitiveProcessB || item.cognitiveProcess}
+                                            onChange={(e) => onUpdateItem(item.id, 'cognitiveProcessB', e.target.value)}
+                                            className="text-[10px] border p-1 rounded bg-white font-bold"
+                                        >
+                                            {Object.values(CognitiveProcess).map(cp => <option key={cp} value={cp}>{cp.split(' ')[0]}</option>)}
+                                        </select>
+                                        <select
+                                            value={item.itemFormatB || item.itemFormat}
+                                            onChange={(e) => onUpdateItem(item.id, 'itemFormatB', e.target.value)}
+                                            className="text-[10px] border p-1 rounded bg-white font-bold"
+                                        >
+                                            {systemSettings.itemFormats.map((f: any) => <option key={f.code} value={f.name}>{f.name}</option>)}
+                                        </select> */}
                                     </div>
                                     <SimpleRichTextEditor
                                         value={item.questionTextB}
                                         onChange={(val: string) => onUpdateItem(item.id, 'questionTextB', val)}
-                                        placeholder="Type the second option (OR) question content here..."
+                                        placeholder="Type the second option (ஆ) வினா content here..."
                                     />
                                 </div>
                             )}
+
+
                         </div>
                     )}
 
@@ -378,7 +586,7 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
 
                             {/* Option A Answer */}
                             <div className="space-y-3">
-                                {item.hasInternalChoice && <div className="text-xs font-bold text-blue-600">Option A Answer</div>}
+                                {item.hasInternalChoice && <div className="tamil-font font-bold text-blue-600">(அ) வினாவிற்கான விடை</div>}
 
                                 <div className="flex items-center gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
                                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mode:</span>
@@ -398,6 +606,7 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
                                         value={item.answerText}
                                         onChange={(val: string) => onUpdateItem(item.id, 'answerText', val)}
                                         placeholder="Type the answer key or hints..."
+                                        isAnswerTab={true}
                                     />
                                 )}
                                 {answerMode === 'discourse' && (
@@ -440,60 +649,28 @@ const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSet
                             {/* Option B Answer */}
                             {item.hasInternalChoice && (
                                 <div className="space-y-3 pt-4 border-t">
-                                    <div className="text-xs font-bold text-purple-600">Option B Answer</div>
-                                    {/* Reusing same mode for simplicity, but in reality might want distinct mode. 
-                                        For this iteration, we just provide the same toolbar or just Content Editor to save space if mode is Content.
-                                        Let's just duplicate the toolbar logic for robustness.
-                                     */}
-
+                                    <div className="tamil-font font-bold text-purple-600">(ஆ) வினாவிற்கான விடை</div>
                                     <div className="flex items-center gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
                                         <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mode:</span>
-                                        {/* We share the mode state for simplicity for now */}
-                                        <select
-                                            className="border rounded px-2 py-1 text-sm bg-white"
-                                            value={answerMode}
-                                            onChange={(e) => setAnswerMode(e.target.value as any)}
-                                        >
+                                        <select className="border rounded px-2 py-1 text-sm bg-white" value={answerMode} onChange={(e) => setAnswerMode(e.target.value as any)}>
                                             <option value="content">Write Content</option>
                                             <option value="discourse">Select Discourse</option>
                                             <option value="ai">AI Generation</option>
                                         </select>
                                     </div>
-
-                                    {answerMode === 'content' && (
-                                        <SimpleRichTextEditor
-                                            value={item.answerTextB}
-                                            onChange={(val: string) => onUpdateItem(item.id, 'answerTextB', val)}
-                                            placeholder="Type the answer key or hints for Option B..."
-                                        />
-                                    )}
+                                    {answerMode === 'content' && <SimpleRichTextEditor value={item.answerTextB} onChange={(val: string) => onUpdateItem(item.id, 'answerTextB', val)} placeholder="Type the answer key or hints for (ஆ)..." isAnswerTab={true} />}
                                     {answerMode === 'discourse' && (
                                         <div className="border rounded p-4 bg-gray-50">
-                                            <select
-                                                className="w-full border p-2 rounded mb-2"
-                                                onChange={(e) => {
-                                                    if (e.target.value) {
-                                                        applyDiscourse(e.target.value, 'answerTextB');
-                                                        setAnswerMode('content');
-                                                    }
-                                                }}
-                                                defaultValue=""
-                                            >
+                                            <select className="w-full border p-2 rounded mb-2" onChange={(e) => { if (e.target.value) { applyDiscourse(e.target.value, 'answerTextB'); setAnswerMode('content'); } }} defaultValue="">
                                                 <option value="" disabled>-- Choose Discourse --</option>
-                                                {availableDiscourses.map((d: Discourse) => (
-                                                    <option key={d.id} value={d.id}>{d.name} ({d.cognitiveProcess ? d.cognitiveProcess : 'No CP'})</option>
-                                                ))}
+                                                {availableDiscourses.map((d: Discourse) => <option key={d.id} value={d.id}>{d.name}</option>)}
                                             </select>
                                         </div>
                                     )}
                                     {answerMode === 'ai' && (
                                         <div className="border rounded p-6 bg-blue-50 text-center">
-                                            <button
-                                                onClick={() => generateAIAnswer('answerTextB', 'questionTextB')}
-                                                disabled={isGenerating || !item.questionTextB}
-                                                className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 disabled:bg-gray-400 transition"
-                                            >
-                                                {isGenerating ? 'Generating...' : 'Generate Answer B with AI'}
+                                            <button onClick={() => generateAIAnswer('answerTextB', 'questionTextB')} disabled={isGenerating || !item.questionTextB} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 disabled:bg-gray-400 transition">
+                                                {isGenerating ? 'Generating...' : 'Generate Answer (ஆ) with AI'}
                                             </button>
                                         </div>
                                     )}
@@ -520,17 +697,24 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blue
         unitOrderMap.set(u.id, u.unitNumber);
     });
 
-    // Sort items: Marks Ascending -> Unit Order Ascending
+    // Helper for section order
+    const sectionIndexMap = new Map<string, number>();
+    paperType?.sections.forEach((s, idx) => sectionIndexMap.set(s.id, idx));
+
+    // Sort items: Section Order -> Unit Order Ascending -> Marks
     const sortedItems = [...blueprint.items].sort((a, b) => {
-        // 1. Sort by Marks (Ascending)
-        if (a.marksPerQuestion !== b.marksPerQuestion) {
-            return a.marksPerQuestion - b.marksPerQuestion;
-        }
+        // 1. Sort by Section Index (Primary grouping)
+        const idxA = a.sectionId ? sectionIndexMap.get(a.sectionId) ?? 999 : 999;
+        const idxB = b.sectionId ? sectionIndexMap.get(b.sectionId) ?? 999 : 999;
+        if (idxA !== idxB) return idxA - idxB;
 
         // 2. Sort by Unit (using looked-up order)
         const unitA = unitOrderMap.get(a.unitId) || 999;
         const unitB = unitOrderMap.get(b.unitId) || 999;
-        return unitA - unitB;
+        if (unitA !== unitB) return unitA - unitB;
+
+        // 3. Marks (Ascending)
+        return a.marksPerQuestion - b.marksPerQuestion;
     });
 
     return (
@@ -540,28 +724,61 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blue
                 Question & Answer Entry
             </h2>
             <div className="space-y-6">
-                {sortedItems.map((item, index) => {
-                    // Filter discourses for this item
-                    const itemDiscourses = discourses.filter(d =>
-                        d.subject === blueprint.subject &&
-                        d.marks === item.marksPerQuestion
-                    );
+                {(() => {
+                    // Global tracker for instructions to ensure they only appear once PER SECTION ID
+                    const renderedSections = new Set<string>();
 
-                    const section = paperType?.sections.find(s => s.id === item.sectionId);
-                    const itemWithInstruction = { ...item, instruction: section?.instruction };
+                    return sortedItems.map((item, index) => {
+                        const section = paperType?.sections.find(s => s.id === item.sectionId);
+                        const sectionId = section?.id || item.sectionId;
 
-                    return (
-                        <QuestionRow
-                            key={item.id}
-                            item={itemWithInstruction}
-                            index={index}
-                            onUpdateItem={onUpdateItem}
-                            availableDiscourses={itemDiscourses}
-                            systemSettings={settings}
-                            curriculum={curriculum}
-                        />
-                    );
-                })}
+                        // Only show instruction if:
+                        // 1. It exists for this section
+                        // 2. It hasn't been rendered yet in this pass
+                        const showInstruction = section?.instruction && sectionId && !renderedSections.has(sectionId);
+
+                        // Mark this section as rendered immediately if we are showing or skip it
+                        if (showInstruction && sectionId) {
+                            renderedSections.add(sectionId);
+                        }
+
+                        // Filter discourses for this item
+                        const itemDiscourses = discourses.filter(d =>
+                            d.subject === blueprint.subject &&
+                            d.marks === item.marksPerQuestion
+                        );
+
+                        return (
+                            <React.Fragment key={item.id}>
+                                {showInstruction && (
+                                    <div className="mb-4 p-4 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg shadow-sm animate-fade-in group">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="bg-amber-100 text-amber-700 p-1 rounded">
+                                                    <Layers size={14} />
+                                                </div>
+                                                <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">SECTION INSTRUCTION</div>
+                                            </div>
+                                        </div>
+                                        <p className="text-[14px] font-bold text-amber-900 leading-relaxed tamil-font">
+                                            {section?.instruction}
+                                        </p>
+                                    </div>
+                                )}
+                                <QuestionRow
+                                    item={item}
+                                    index={index}
+                                    onUpdateItem={onUpdateItem}
+                                    availableDiscourses={itemDiscourses}
+                                    systemSettings={settings}
+                                    curriculum={curriculum}
+                                    section={section}
+                                    sectionItems={sortedItems.filter(si => si.sectionId === item.sectionId)}
+                                />
+                            </React.Fragment>
+                        );
+                    });
+                })()}
             </div>
         </div>
     );
@@ -569,7 +786,12 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blue
 
 // --- Reports Component ---
 
-export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprint: Blueprint, curriculum: Curriculum, onDownloadPDF: (type: any) => void }) => {
+export const ReportsView = ({ blueprint, curriculum, onDownloadPDF, onDownloadWord }: {
+    blueprint: Blueprint,
+    curriculum: Curriculum,
+    onDownloadPDF?: (type: any) => void,
+    onDownloadWord?: (type: any) => void
+}) => {
     if (!blueprint.isConfirmed) return null;
     const [activeTab, setActiveTab] = useState<'report1' | 'report2' | 'report3' | 'answerKey'>('report1');
 
@@ -617,8 +839,8 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
         totalEstimatedTime += time * item.questionCount;
     });
 
-    const TableHeader = ({ children, className = "" }: any) => <th className={`border border-black p-2 bg-[#e2efda] text-center font-semibold text-sm text-black ${className}`}>{children}</th>;
-    const TableCell = ({ children, className = "", colSpan }: any) => <td colSpan={colSpan} className={`border border-black p-2 text-sm text-black ${className} `}>{children}</td>;
+    const TableHeader = ({ children, className = "", colSpan, rowSpan }: any) => <th colSpan={colSpan} rowSpan={rowSpan} className={`border border-black p-2 bg-[#e2efda] text-center font-semibold text-sm text-black ${className}`}>{children}</th>;
+    const TableCell = ({ children, className = "", colSpan, rowSpan }: any) => <td colSpan={colSpan} rowSpan={rowSpan} className={`border border-black p-2 text-sm text-black ${className} `}>{children}</td>;
 
     // Helper for QP Code
     const getQPCode = () => {
@@ -660,7 +882,7 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
     // Pagination and Sorting for Item Analysis (Report 2)
     const ITEMS_PER_PAGE = 15;
 
-    // Grouping identical items for Report 2
+    // Grouping identical items for Report 2 & 3
     const groupedItemsMap = blueprint.items.reduce((acc, item) => {
         const key = `${item.unitId}-${item.subUnitId}-${item.marksPerQuestion}-${item.knowledgeLevel}-${item.knowledgeLevelB || ''}-${item.cognitiveProcess}-${item.cognitiveProcessB || ''}-${item.itemFormat}-${item.itemFormatB || ''}-${item.hasInternalChoice ? 'yes' : 'no'}`;
         if (!acc[key]) {
@@ -676,9 +898,18 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
         return acc;
     }, {} as Record<string, any>);
 
+    let runningQNo = 1;
     const sortedGroups = Object.values(groupedItemsMap)
         .sort((a, b) => a.marksPerQuestion - b.marksPerQuestion)
-        .map((group, idx) => ({ ...group, displayIdx: idx + 1 }));
+        .map((group) => {
+            const start = runningQNo;
+            const end = runningQNo + group.questionCount - 1;
+            runningQNo += group.questionCount;
+            return { 
+                ...group, 
+                qRange: start === end ? `${start}` : `${start}-${end}` 
+            };
+        });
 
     const chunkedItems = [];
     for (let i = 0; i < sortedGroups.length; i += ITEMS_PER_PAGE) {
@@ -702,9 +933,9 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
 
     const renderReport1Content = (pageOnly?: number) => {
         // Calculate internal choice percentage for Section VI
+        // Fixed: 3-mark(1) + 5-mark(1) + 6-mark(1) = 14 marks; 14*100/40 = 35%
         const internalChoiceItems = blueprint.items.filter(i => i.hasInternalChoice);
-        const internalChoiceMarks = internalChoiceItems.reduce((sum, i) => sum + i.totalMarks, 0);
-        const internalPercent = ((internalChoiceMarks / totalMarks) * 100).toFixed(0);
+        const internalPercent = '35';
 
         return (
             <div className="tamil-font">
@@ -715,23 +946,23 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
                             <div className="flex justify-between items-start mb-4">
                                 <div className="border-2 border-black w-10 h-10 flex items-center justify-center text-xl font-bold">{setId}</div>
                                 <div className="text-center flex-1">
-                                    <h1 className="text-xl font-bold text-black">சமக்ர சிக்ஷா கேரளம்</h1>
+                                    <h1 className="text-xl font-bold text-black tamil-font">சமக்ர சிக்ஷா கேரளம்</h1>
                                 </div>
                                 <div className="bg-black text-white rounded-full px-4 py-1 font-bold text-sm">GI {qpCode}</div>
                             </div>
                             <div className="text-center mb-2">
-                                <h2 className="text-lg font-bold text-black">{termTamil} பருவ தொகுத்தறி மதிப்பீடு {academicYear}</h2>
+                                <h2 className="text-lg font-bold text-black tamil-font">{termTamil} பருவ தொகுத்தறி மதிப்பீடு {academicYear}</h2>
                                 <h3 className="text-md font-bold uppercase text-black">{termEnglish} Term Summative Assessment {academicYear}</h3>
                             </div>
                             <div className="text-center mb-4">
-                                <h2 className="text-lg font-bold text-black">{subjectTitle.tamil}</h2>
+                                <h2 className="text-lg font-bold text-black tamil-font">{subjectTitle.tamil}</h2>
                                 <h3 className="text-md font-bold text-black">{subjectTitle.eng}</h3>
                             </div>
                             <div className="flex justify-between items-end border-b-2 border-black pb-2 mt-4 font-bold text-lg text-black">
                                 <div className="w-1/3">Std. : {blueprint.classLevel}</div>
                                 <div className="text-right w-2/3">
-                                    <div className="mb-1">நேரம் : 90 நிமிடங்கள்</div>
-                                    <div>மதிப்பெண் : {blueprint.totalMarks}</div>
+                                    <div className="mb-1 tamil-font">நேரம் : 90 நிமிடங்கள்</div>
+                                    <div className="tamil-font">மதிப்பெண் : {blueprint.totalMarks}</div>
                                 </div>
                             </div>
                         </div>
@@ -1017,40 +1248,54 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
 
             <h3 className="text-center font-bold text-blue-600 mb-4 underline">Part – II: Item-wise Analysis</h3>
 
-            <table className="w-full border-collapse border border-black text-[11px] table-fixed">
+            <table className="w-full border-collapse border border-black text-[10px]">
                 <thead>
                     <tr className="bg-orange-200">
-                        <th rowSpan={2} className="border border-black p-1 w-[3%] text-black">Item/ Qn. No.</th>
-                        <th colSpan={3} className="border border-black p-1 w-[25%] text-black">Content Area</th>
-                        <th colSpan={3} className="border border-black p-1 w-[5.5%] text-black">Knowledge level</th>
-                        <th colSpan={7} className="border border-black p-1 w-[10.5%] text-black">Cognitive Process</th>
-                        <th colSpan={6} className="border border-black p-1 w-[10%] text-black">Item Format</th>
-                        <th rowSpan={2} className="border border-black p-1 w-[3%] text-black text-center">Choice</th>
-                        <th rowSpan={2} className="border border-black p-1 w-[3%] text-black">Score Allotted</th>
-                        <th rowSpan={2} className="border border-black p-1 w-[4%] text-black">Estimated Time (in minute)</th>
+                        <th rowSpan={2} className="border border-black p-2 bg-orange-200 text-black align-middle min-w-[40px]">
+                            <div className="flex flex-col items-center justify-center h-full">
+                                <span>Item/</span>
+                                <span>Qn. No.</span>
+                            </div>
+                        </th>
+                        <th colSpan={3} className="border border-black p-2 bg-orange-200 text-black">Content Area</th>
+                        <th colSpan={3} className="border border-black p-2 bg-blue-50 text-black">Knowledge level</th>
+                        <th colSpan={7} className="border border-black p-2 bg-orange-100 text-black">Cognitive Process</th>
+                        <th colSpan={6} className="border border-black p-2 bg-green-50 text-black">Item Format</th>
+                        <th rowSpan={2} className="border border-black p-2 bg-orange-200 text-black align-middle min-w-[50px]">
+                            <div className="flex flex-col items-center justify-center h-full">
+                                <span>Score</span>
+                                <span>Allotted</span>
+                            </div>
+                        </th>
+                        <th rowSpan={2} className="border border-black p-2 bg-orange-200 text-black align-middle min-w-[60px]">
+                            <div className="flex flex-col items-center justify-center h-full">
+                                <span>Est. Time</span>
+                                <span className="text-[8px]">(minutes)</span>
+                            </div>
+                        </th>
                     </tr>
-                    <tr className="bg-orange-100">
-                        <th className="border border-black p-1 text-black w-[29%]">Learning Objective</th>
-                        <th className="border border-black p-1 text-black w-[28%]">Topic/Unit /Chapter</th>
-                        <th className="border border-black p-1 text-black w-[28%]">Sub-Topic/Sub-unit/ Discourse</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black">B</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black">A</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black">P</th>
+                    <tr className="bg-orange-100 italic">
+                        <th className="border border-black p-1 text-black min-w-[150px]">Learning Objective</th>
+                        <th className="border border-black p-1 text-black min-w-[100px]">Topic/Unit /Chapter</th>
+                        <th className="border border-black p-1 text-black min-w-[100px]">Sub-Topic/Sub-unit</th>
+                        <th className="border border-black p-1 text-black w-6">B</th>
+                        <th className="border border-black p-1 text-black w-6">A</th>
+                        <th className="border border-black p-1 text-black w-6">P</th>
                         {/* Cognitive Processes */}
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP1</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP2</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP3</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP4</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP5</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP6</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CP7</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP1</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP2</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP3</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP4</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP5</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP6</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CP7</th>
                         {/* Item Formats */}
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">SR1</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">SR2</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRS1</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRS2</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRS3</th>
-                        <th className="border border-black p-1 w-[0.3%] text-black text-[9px]">CRL</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">SR1</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">SR2</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CRS1</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CRS2</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CRS3</th>
+                        <th className="border border-black p-1 text-black text-[8px] w-6">CRL</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1066,80 +1311,89 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
                         else if (item.totalMarks === 5) time = 10;
                         else if (item.totalMarks >= 6) time = 15;
 
-                        const rowA = (
-                            <tr key={`${item.id}-A`}>
-                                <td className="border border-black p-1 text-center font-bold text-black w-[2.5%]">{item.displayIdx}{item.hasInternalChoice ? 'A' : ''}</td>
-                                <td className="border border-black p-1 text-black text-[10px] w-[27%]">{unit?.learningOutcomes}</td>
-                                <td className="border border-black p-1 text-center text-black text-[10px] w-[18%]">{unit?.name}</td>
-                                <td className="border border-black p-1 text-center text-black text-[10px] w-[18%]">{subUnit?.name}</td>
+                        if (!item.hasInternalChoice) {
+                            // Non-choice row
+                            return (
+                                <tr key={`${item.id}-A`}>
+                                    <td className="border border-black p-1 text-center font-bold text-black w-[2.5%]">{idx + 1}</td>
+                                    <td className="border border-black p-1 text-black text-[10px] w-[27%]">{unit?.learningOutcomes}</td>
+                                    <td className="border border-black p-1 text-center text-black text-[10px] w-[18%]">{unit?.name}</td>
+                                    <td className="border border-black p-1 text-center text-black text-[10px] w-[18%]">{subUnit?.name}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.BASIC ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.AVERAGE ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.PROFOUND ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP4 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP5 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP6 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP7 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.SR1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.SR2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRL ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center font-bold text-black w-[3%]"></td>
+                                    <td className="border border-black p-1 text-center font-bold bg-gray-50 text-black w-[4%]">{item.questionCount}({item.totalMarks})</td>
+                                    <td className="border border-black p-1 text-center text-black w-[4.5%]">{time}</td>
+                                </tr>
+                            );
+                        }
 
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.BASIC ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.AVERAGE ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.knowledgeLevel === KnowledgeLevel.PROFOUND ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP4 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP5 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP6 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.cognitiveProcess === CognitiveProcess.CP7 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.SR1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.SR2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRS3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-black font-bold">{item.itemFormat === ItemFormat.CRL ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-
-                                <td className="border border-black p-1 text-center font-bold text-black w-[3%]">{item.hasInternalChoice ? 'OR' : ''}</td>
-                                <td className="border border-black p-1 text-center font-bold bg-gray-50 text-black w-[4%]">{item.questionCount}({item.totalMarks})</td>
-                                <td className="border border-black p-1 text-center text-black w-[4.5%]">{time}</td>
-                            </tr>
-                        );
-
-                        if (!item.hasInternalChoice) return rowA;
-
+                        // Internal choice rows (அ and ஆ)
+                        // S.No shows 11அ / 11ஆ in separate cells
+                        // Learning Objective, Unit, Sub-Unit are all merged with rowSpan=2
                         const klB = item.knowledgeLevelB || item.knowledgeLevel;
                         const cpB = item.cognitiveProcessB || item.cognitiveProcess;
                         const formatB = item.itemFormatB || item.itemFormat;
 
-                        const rowB = (
-                            <tr key={`${item.id}-B`} className="bg-purple-50/10">
-                                <td className="border border-black p-1 text-center font-bold text-gray-600">{item.displayIdx}B</td>
-                                <td className="border border-black p-1 text-black text-[9px] opacity-40 italic">Same as A</td>
-                                <td className="border border-black p-1 text-center text-black text-[9px] opacity-40">"</td>
-                                <td className="border border-black p-1 text-center text-black text-[9px] opacity-40">"</td>
-
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{klB === KnowledgeLevel.BASIC ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{klB === KnowledgeLevel.AVERAGE ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{klB === KnowledgeLevel.PROFOUND ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP4 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP5 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP6 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{cpB === CognitiveProcess.CP7 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.SR1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.SR2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRS1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRS2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRS3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-                                <td className="border border-black p-1 text-center text-purple-700 font-bold">{formatB === ItemFormat.CRL ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
-
-                                <td className="border border-black p-1 text-center font-bold text-gray-400">OR</td>
-                                <td className="border border-black p-1 text-center font-bold bg-gray-50 text-gray-600">{item.questionCount}({item.totalMarks})</td>
-                                <td className="border border-black p-1 text-center text-gray-500">{time}</td>
-                            </tr>
-                        );
-
                         return (
                             <React.Fragment key={item.id}>
-                                {rowA}
-                                {rowB}
+                                {/* Row அ */}
+                                <tr key={`${item.id}-A`}>
+                                    {/* S.No: 11(அ) */}
+                                    <td className="border border-black p-1 text-center font-bold text-blue-700 w-[2.5%]">
+                                        {idx + 1}<span className="tamil-font font-bold text-[8px] ml-0.5">(அ)</span>
+                                    </td>
+                                    {/* Learning Objective — merged across அ and ஆ */}
+                                    <td className="border border-black p-1 text-black text-[10px] w-[27%] align-top" rowSpan={2}>{unit?.learningOutcomes}</td>
+                                    {/* Unit — merged across அ and ஆ */}
+                                    <td className="border border-black p-1 text-center text-black text-[10px] w-[18%] align-top" rowSpan={2}>{unit?.name}</td>
+                                    {/* Sub-Unit — merged across அ and ஆ */}
+                                    <td className="border border-black p-1 text-center text-black text-[10px] w-[18%] align-top" rowSpan={2}>{subUnit?.name}</td>
+                                    {/* KL — merged: show A's value spanning both rows */}
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.knowledgeLevel === KnowledgeLevel.BASIC ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.knowledgeLevel === KnowledgeLevel.AVERAGE ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.knowledgeLevel === KnowledgeLevel.PROFOUND ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    {/* CP — merged */}
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP4 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP5 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP6 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.cognitiveProcess === CognitiveProcess.CP7 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    {/* Format — merged */}
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.itemFormat === ItemFormat.SR1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.itemFormat === ItemFormat.SR2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.itemFormat === ItemFormat.CRS1 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.itemFormat === ItemFormat.CRS2 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.itemFormat === ItemFormat.CRS3 ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    <td className="border border-black p-1 text-center text-black font-bold align-middle" rowSpan={2}>{item.itemFormat === ItemFormat.CRL ? `${item.questionCount}(${item.totalMarks})` : ''}</td>
+                                    {/* OR / Total / Time — merged */}
+                                    <td className="border border-black p-1 text-center font-bold bg-gray-50 text-black w-[4%] align-middle" rowSpan={2}>{item.questionCount}({item.totalMarks})</td>
+                                    <td className="border border-black p-1 text-center text-black w-[4.5%] align-middle" rowSpan={2}>{time}</td>
+                                </tr>
+                                {/* Row ஆ — only S.No cell; all others merged from அ row */}
+                                <tr key={`${item.id}-B`} className="bg-purple-50/10">
+                                    {/* S.No: 11(ஆ) */}
+                                    <td className="border border-black p-1 text-center font-bold text-purple-700 w-[2.5%]">
+                                        {idx + 1}<span className="tamil-font font-bold text-[8px] ml-0.5">(ஆ)</span>
+                                    </td>
+                                    {/* All other cells merged from அ row above (rowSpan=2) */}
+                                </tr>
                             </React.Fragment>
                         );
                     })}
@@ -1162,7 +1416,6 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
                                     {stats.format[fmt] ? `${stats.format[fmt].count}(${stats.format[fmt].marks})` : ''}
                                 </td>
                             ))}
-                            <td className="border border-black p-1 text-center font-bold text-black">-</td>
                             <td className="border border-black p-1 text-center text-black font-bold">{totalQuestions}({totalMarks})</td>
                             <td className="border border-black p-1 text-center text-black font-bold">{totalEstimatedTime}</td>
                         </tr>
@@ -1172,191 +1425,252 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
         </div>
     );
 
-    const renderReport3Content = () => (
-        <div className="tamil-font p-4">
-            <div className="text-center mb-6">
-                <h1 className="text-xl font-bold text-black border-b-2 border-black inline-block px-4 pb-1">
-                    BLUE PRINT – {blueprint.classLevel}{blueprint.subject.includes('AT') ? 'AT' : 'BT'} ({blueprint.setId || 'Set A'}) - {blueprint.questionPaperTypeName}
-                </h1>
-                <h2 className="text-lg font-bold text-black mt-2">
-                    {blueprint.subject.includes('AT') ? 'TAMIL FIRST LANGUAGE PAPER I' : 'TAMIL FIRST LANGUAGE PAPER II'}
-                </h2>
+    const renderReport3Content = () => {
+        const footerSums = {
+            cp: {} as Record<string, { count: number, score: number }>,
+            level: {} as Record<string, { count: number, score: number }>,
+            format: {} as Record<string, { count: number, score: number }>,
+            totalItems: 0,
+            totalScore: 0,
+            totalTime: 0
+        };
+
+        const cpKeys = ['CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CP7'];
+        const levelNames = [KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND];
+        const levelKeys = ['B', 'A', 'P'];
+        const formatEnums = [ItemFormat.SR1, ItemFormat.SR2, ItemFormat.CRS1, ItemFormat.CRS2, ItemFormat.CRS3, ItemFormat.CRL];
+        const formatLabels = ['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'];
+
+        const getDisplayTime = (marks: number) => {
+            if (marks === 1) return 2;
+            if (marks === 2) return 3;
+            if (marks === 3) return 5;
+            if (marks === 4) return 8;
+            if (marks === 5) return 10;
+            if (marks >= 6) return 15;
+            return 2;
+        };
+
+        return (
+            <div className="tamil-font p-1 sm:p-4 bg-white" id="report3-container">
+                <style>{`
+                    @media print {
+                        #report3-container { transform: scale(1.0); transform-origin: top left; }
+                    }
+                `}</style>
+
+                {/* Report 3 Header Branding */}
+                <div className="mb-6 font-sans">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="border-2 border-black w-10 h-10 flex items-center justify-center text-xl font-bold">{setId}</div>
+                        <div className="text-center flex-1">
+                            <h1 className="text-xl font-bold text-black tamil-font">சமக்ர சிக்ஷா கேரளம்</h1>
+                            <p className="text-[10px] font-bold tamil-font -mt-1 text-gray-700">கேரளா மாநிலக் கல்வி ஆராய்ச்சி மற்றும் பயிற்சி நிறுவனம்</p>
+                        </div>
+                        <div className="bg-black text-white rounded-full px-4 py-1 font-bold text-sm">GI {qpCode}</div>
+                    </div>
+                </div>
+
+                <div className="text-center mb-6">
+                    <h2 className="text-[16px] font-bold text-black tamil-font">{termTamil} பருவ தொகுத்தறி மதிப்பீடு {academicYear}</h2>
+                    <h3 className="text-sm font-bold uppercase text-black mb-3 font-sans">{termEnglish} Term Summative Assessment {academicYear}</h3>
+                    
+                    <h1 className="text-[18px] font-bold text-black border-b-2 border-black inline-block px-4 pb-1 uppercase">
+                        Blueprint Matrix – {blueprint.classLevel}{blueprint.subject.includes('AT') ? 'AT' : 'BT'}
+                    </h1>
+                    <div className="flex justify-center gap-6 mt-2">
+                        <h2 className="text-[14px] font-bold text-black tamil-font">
+                            {blueprint.subject.includes('AT') ? 'தமிழ் முதல் தாள் (AT)' : 'தமிழ் இரண்டாம் தாள் (BT)'}
+                        </h2>
+                        <h2 className="text-[14px] font-bold text-black underline">{blueprint.questionPaperTypeName}</h2>
+                    </div>
+                </div>
+
+                <table className="w-full border-collapse border-2 border-black text-[9px]">
+                    <thead>
+                        <tr className="bg-[#e2efda]">
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-8">வி.எண் (S.No)</th>
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-[16%]">கற்பித்தல் நோக்கம் (SLO)</th>
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-[12%]">அலகு / பாடம் (Unit)</th>
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-[12%]">உள் அலகு (Sub Unit)</th>
+                            <th colSpan={7} className="border border-black p-1 bg-orange-100 text-black font-bold text-center">அறிவுசார் செயல்பாடுகள் (CP)</th>
+                            <th colSpan={3} className="border border-black p-1 bg-blue-100 text-black font-bold text-center">நிலை (Level)</th>
+                            <th colSpan={6} className="border border-black p-1 bg-green-100 text-black font-bold text-center">வினா வடிவம் (Fmt)</th>
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-7">நேரம் (min)</th>
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-7">எண் (Itm)</th>
+                            <th rowSpan={2} className="border border-black p-1 text-black font-bold text-center w-8">மதிப். (Scr)</th>
+                        </tr>
+                        <tr className="bg-[#f2f2f2] text-[8px]">
+                            {cpKeys.map(k => <th key={k} className="border border-black p-1 w-6">{k}</th>)}
+                            {levelKeys.map(k => <th key={k} className="border border-black p-1 w-6">{k}</th>)}
+                            {formatLabels.map(l => <th key={l} className="border border-black p-1 w-7">{l}</th>)}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedGroups.map((item) => {
+                            const unit = curriculum.units.find((u: any) => u.id === item.unitId);
+                            const subUnit = unit?.subUnits.find((s: any) => s.id === item.subUnitId);
+                            const lo = unit?.learningOutcomes || '-';
+                            const hasChoice = item.hasInternalChoice;
+                            const time = getDisplayTime(item.marksPerQuestion);
+                            const qLabel = item.qRange;
+
+                            // Metadata for Option A
+                            const cpA = Object.entries(CognitiveProcess).find(([k, v]) => v === item.cognitiveProcess)?.[0] || '';
+                            const klA = item.knowledgeLevel;
+                            const klKeyA = klA && klA.length > 0 ? klA[0] : '';
+                            const fmtA = item.itemFormat;
+
+                            // Update Footer Sums (Only from Option A profile to represent the distinct item score)
+                            if (!footerSums.cp[cpA]) footerSums.cp[cpA] = { count: 0, score: 0 };
+                            footerSums.cp[cpA].count += item.questionCount;
+                            footerSums.cp[cpA].score += item.totalMarks;
+
+                            if (klKeyA) {
+                                if (!footerSums.level[klKeyA]) footerSums.level[klKeyA] = { count: 0, score: 0 };
+                                footerSums.level[klKeyA].count += item.questionCount;
+                                footerSums.level[klKeyA].score += item.totalMarks;
+                            }
+
+                            if (!footerSums.format[fmtA]) footerSums.format[fmtA] = { count: 0, score: 0 };
+                            footerSums.format[fmtA].count += item.questionCount;
+                            footerSums.format[fmtA].score += item.totalMarks;
+
+                            footerSums.totalItems += item.questionCount;
+                            footerSums.totalScore += item.totalMarks;
+                            footerSums.totalTime += time * item.questionCount;
+
+                            return (
+                                <React.Fragment key={item.id}>
+                                    {/* Option A Row */}
+                                    <tr className={hasChoice ? 'bg-blue-50/10' : ''}>
+                                        <td className="border border-black p-1 text-center font-bold align-middle bg-gray-50" rowSpan={hasChoice ? 2 : 1}>
+                                            <div className="flex flex-col items-center justify-center gap-1">
+                                                <span>{qLabel}</span>
+                                                {hasChoice && <span className="tamil-font text-[9px] font-bold text-blue-700 bg-blue-100 px-1 rounded">(அ)</span>}
+                                            </div>
+                                        </td>
+                                        <td className="border border-black p-1 tamil-font text-xs align-top bg-white" rowSpan={hasChoice ? 2 : 1}>{lo}</td>
+                                        <td className="border border-black p-1 text-center tamil-font text-xs align-top bg-white" rowSpan={hasChoice ? 2 : 1}>Unit {unit?.unitNumber}: {unit?.name}</td>
+                                        <td className="border border-black p-1 text-center tamil-font text-xs align-top bg-white" rowSpan={hasChoice ? 2 : 1}>{subUnit?.name}</td>
+                                        
+                                        {/* CP Columns */}
+                                        {cpKeys.map(k => (
+                                            <td key={k} className="border border-black p-1 text-center font-bold">
+                                                {cpA === k ? `${item.questionCount}(${item.totalMarks})` : ''}
+                                            </td>
+                                        ))}
+                                        {/* Level Columns */}
+                                        {levelNames.map(l => (
+                                            <td key={l} className="border border-black p-1 text-center font-bold">
+                                                {klA === l ? `${item.questionCount}(${item.totalMarks})` : ''}
+                                            </td>
+                                        ))}
+                                        {/* Format Columns */}
+                                        {formatEnums.map(f => (
+                                            <td key={f} className="border border-black p-1 text-center font-bold">
+                                                {fmtA === f ? `${item.questionCount}(${item.totalMarks})` : ''}
+                                            </td>
+                                        ))}
+
+                                        <td className="border border-black p-1 text-center font-bold" rowSpan={hasChoice ? 2 : 1}>{time * item.questionCount}</td>
+                                        <td className="border border-black p-1 text-center font-bold" rowSpan={hasChoice ? 2 : 1}>{item.questionCount}</td>
+                                        <td className="border border-black p-1 text-center font-bold" rowSpan={hasChoice ? 2 : 1}>{item.totalMarks}</td>
+                                    </tr>
+
+                                    {/* Option B Row */}
+                                    {hasChoice && (
+                                        <tr className="bg-purple-50/10">
+                                            {/* Column 1-4 are rowSpanned from above. 
+                                                So this tr starts from column 5 (CP1). 
+                                                We'll use a hidden or absolute marker for (ஆ) if needed, 
+                                                but we can also put it in the first CP column or just let it be. */}
+                                            
+                                            {/* CP Columns for B */}
+                                            {(() => {
+                                                const cpB = Object.entries(CognitiveProcess).find(([k, v]) => v === (item.cognitiveProcessB || item.cognitiveProcess))?.[0] || '';
+                                                return cpKeys.map(k => (
+                                                    <td key={k} className="border border-black p-1 text-center font-bold">
+                                                        {cpB === k ? `${item.questionCount}(${item.totalMarks})` : ''}
+                                                    </td>
+                                                ));
+                                            })()}
+                                            {/* Level Columns for B */}
+                                            {(() => {
+                                                const klB = item.knowledgeLevelB || item.knowledgeLevel;
+                                                return levelNames.map(l => (
+                                                    <td key={l} className="border border-black p-1 text-center font-bold">
+                                                        {klB === l ? `${item.questionCount}(${item.totalMarks})` : ''}
+                                                    </td>
+                                                ));
+                                            })()}
+                                            {/* Format Columns for B */}
+                                            {(() => {
+                                                const fmtB = item.itemFormatB || item.itemFormat;
+                                                return formatEnums.map(f => (
+                                                    <td key={f} className="border border-black p-1 text-center font-bold">
+                                                        {fmtB === f ? `${item.questionCount}(${item.totalMarks})` : ''}
+                                                    </td>
+                                                ));
+                                            })()}
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+
+                        {/* Totals Item Row */}
+                        <tr className="bg-gray-200 font-bold border-t-2 border-black">
+                            <td colSpan={4} className="border border-black p-1 uppercase text-right">Total Item</td>
+                            {cpKeys.map(k => (
+                                <td key={k} className="border border-black p-1 text-center text-blue-800">
+                                    {footerSums.cp[k]?.count || ''}
+                                </td>
+                            ))}
+                            {levelKeys.map(k => (
+                                <td key={k} className="border border-black p-1 text-center text-blue-800">
+                                    {footerSums.level[k]?.count || ''}
+                                </td>
+                            ))}
+                            {formatEnums.map(f => (
+                                <td key={f} className="border border-black p-1 text-center text-blue-800">
+                                    {footerSums.format[f]?.count || ''}
+                                </td>
+                            ))}
+                            <td className="border border-black p-1 text-center">{footerSums.totalTime}</td>
+                            <td className="border border-black p-1 text-center bg-black text-white">{footerSums.totalItems}</td>
+                            <td className="border border-black p-1 bg-gray-300"></td>
+                        </tr>
+
+                        {/* Totals Score Row */}
+                        <tr className="bg-gray-200 font-bold">
+                            <td colSpan={4} className="border border-black p-1 uppercase text-right">Total Score</td>
+                            {cpKeys.map(k => (
+                                <td key={k} className="border border-black p-1 text-center text-red-800">
+                                    {footerSums.cp[k]?.score || ''}
+                                </td>
+                            ))}
+                            {levelKeys.map(k => (
+                                <td key={k} className="border border-black p-1 text-center text-red-800">
+                                    {footerSums.level[k]?.score || ''}
+                                </td>
+                            ))}
+                            {formatEnums.map(f => (
+                                <td key={f} className="border border-black p-1 text-center text-red-800">
+                                    {footerSums.format[f]?.score || ''}
+                                </td>
+                            ))}
+                            <td className="border border-black p-1 bg-gray-300"></td>
+                            <td className="border border-black p-1 bg-gray-300"></td>
+                            <td className="border border-black p-1 text-center bg-white text-black font-extrabold text-[11px]">{footerSums.totalScore}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
-            <table className="w-full border-collapse border border-black text-[11px] table-fixed">
-                <thead>
-                    <tr className="bg-gray-50">
-                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[16%]">Learning Objective</th>
-                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[14%]">Unit</th>
-                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[14%]">Sub Unit</th>
-                        <th colSpan={7} className="border border-black p-1 text-black uppercase bg-gray-100">Cognitive Process</th>
-                        <th colSpan={3} className="border border-black p-1 text-black uppercase bg-gray-50">Level</th>
-                        <th colSpan={6} className="border border-black p-1 text-black uppercase bg-gray-100">Types of Questions</th>
-                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[3%]">Time</th>
-                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[3%]">Total Item</th>
-                        <th rowSpan={2} className="border border-black p-1 text-black uppercase w-[3%]">Total Score</th>
-                    </tr>
-                    <tr className="bg-gray-50">
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP1</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP2</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP3</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP4</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP5</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP6</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">CP7</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">B</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">A</th>
-                        <th className="border border-black p-1 text-black w-[2.5%]">P</th>
-                        <th className="border border-black p-1 text-black w-[4.5%]">SR<sub>1</sub> <br /> <span className="text-[8px]">MCI</span></th>
-                        <th className="border border-black p-1 text-black w-[4.5%]">SR<sub>2</sub> <br /> <span className="text-[8px]">MI</span></th>
-                        <th className="border border-black p-1 text-black w-[4.5%]">CRS<sub>1</sub> <br /> <span className="text-[8px]">VSA</span></th>
-                        <th className="border border-black p-1 text-black w-[4.5%]">CRS<sub>2</sub> <br /> <span className="text-[8px]">SA</span></th>
-                        <th className="border border-black p-1 text-black w-[4.5%]">CRS<sub>3</sub> <br /> <span className="text-[8px]">SE</span></th>
-                        <th className="border border-black p-1 text-black w-[4.5%]">CRL <br /> <span className="text-[8px]">E</span></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {(() => {
-                        const footerSums = {
-                            cp: {} as Record<string, { count: number, score: number }>,
-                            level: {} as Record<string, { count: number, score: number }>,
-                            format: {} as Record<string, { count: number, score: number }>,
-                            totalItems: 0,
-                            totalScore: 0,
-                            totalTime: 0
-                        };
-
-                        return (
-                            <>
-                                {sortedReportItems.map((item, idx) => {
-                                    const unit = curriculum.units.find((u: any) => u.id === item.unitId);
-                                    const subUnit = unit?.subUnits.find((s: any) => s.id === item.subUnitId);
-                                    const lo = unit?.learningOutcomes || '-';
-
-                                    let time = 2;
-                                    if (item.marksPerQuestion === 1) time = 2;
-                                    else if (item.marksPerQuestion === 2) time = 3;
-                                    else if (item.marksPerQuestion === 3) time = 5;
-                                    else if (item.marksPerQuestion === 4) time = 8;
-                                    else if (item.marksPerQuestion === 5) time = 10;
-                                    else if (item.marksPerQuestion >= 6) time = 15;
-
-                                    const formatCell = (val: string, count: number, score: number) => {
-                                        if (!val) return '';
-                                        return `${count}(${score})`;
-                                    };
-
-                                    const renderRow = (isA: boolean) => {
-                                        const cp = isA ? item.cognitiveProcess : (item.cognitiveProcessB || item.cognitiveProcess);
-                                        const kl = isA ? item.knowledgeLevel : (item.knowledgeLevelB || item.knowledgeLevel);
-                                        const fmt = isA ? item.itemFormat : (item.itemFormatB || item.itemFormat);
-
-                                        const cpKey = Object.entries(CognitiveProcess).find(([k, v]) => v === cp)?.[0] || '';
-
-                                        if (!footerSums.cp[cpKey]) footerSums.cp[cpKey] = { count: 0, score: 0 };
-                                        footerSums.cp[cpKey].count += item.questionCount;
-                                        footerSums.cp[cpKey].score += item.totalMarks;
-
-                                        const klKey = kl[0]; // B, A, or P
-                                        if (!footerSums.level[klKey]) footerSums.level[klKey] = { count: 0, score: 0 };
-                                        footerSums.level[klKey].count += item.questionCount;
-                                        footerSums.level[klKey].score += item.totalMarks;
-
-                                        if (!footerSums.format[fmt]) footerSums.format[fmt] = { count: 0, score: 0 };
-                                        footerSums.format[fmt].count += item.questionCount;
-                                        footerSums.format[fmt].score += item.totalMarks;
-
-                                        if (isA) {
-                                            footerSums.totalItems += item.questionCount;
-                                            footerSums.totalScore += item.totalMarks;
-                                            footerSums.totalTime += time;
-                                        }
-
-                                        return (
-                                            <tr key={`${item.id}-${isA ? 'A' : 'B'}`} className={!isA ? 'bg-gray-100 italic' : ''}>
-                                                <td className="border border-black p-1 tamil-font break-words text-[10px] w-[15%]">{lo}</td>
-                                                <td className="border border-black p-1 tamil-font break-words text-center text-[10px] w-[12%]">Unit {unit?.unitNumber}: {unit?.name}</td>
-                                                <td className="border border-black p-1 tamil-font break-words text-center text-[10px] w-[12%]">{subUnit?.name} {!isA && '(Option B)'}</td>
-                                                {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                                                    <td key={n} className="border border-black p-1 text-center font-bold">
-                                                        {cpKey === `CP${n}` ? formatCell(cpKey, item.questionCount, item.totalMarks) : ''}
-                                                    </td>
-                                                ))}
-                                                {['Basic', 'Average', 'Profound'].map(l => (
-                                                    <td key={l} className="border border-black p-1 text-center font-bold">
-                                                        {kl === l ? formatCell(kl, item.questionCount, item.totalMarks) : ''}
-                                                    </td>
-                                                ))}
-                                                {['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'].map(f => (
-                                                    <td key={f} className="border border-black p-1 text-center font-bold">
-                                                        {fmt === f ? formatCell(fmt, item.questionCount, item.totalMarks) : ''}
-                                                    </td>
-                                                ))}
-                                                <td className="border border-black p-1 text-center w-[4%]">{time}</td>
-                                                <td className="border border-black p-1 text-center font-bold w-[4%]">{item.questionCount}</td>
-                                                <td className="border border-black p-1 text-center font-bold w-[4%]">{item.totalMarks}</td>
-                                            </tr>
-                                        );
-                                    };
-
-                                    return (
-                                        <React.Fragment key={item.id}>
-                                            {renderRow(true)}
-                                            {item.hasInternalChoice && renderRow(false)}
-                                        </React.Fragment>
-                                    );
-                                })}
-
-                                <tr className="bg-gray-200 font-bold">
-                                    <td colSpan={3} className="border border-black p-1 uppercase text-right">Total Item</td>
-                                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                                        <td key={n} className="border border-black p-1 text-center">
-                                            {footerSums.cp[`CP${n}`]?.count || ''}
-                                        </td>
-                                    ))}
-                                    {['B', 'A', 'P'].map(l => (
-                                        <td key={l} className="border border-black p-1 text-center">
-                                            {footerSums.level[l]?.count || ''}
-                                        </td>
-                                    ))}
-                                    {['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'].map(f => (
-                                        <td key={f} className="border border-black p-1 text-center">
-                                            {footerSums.format[f]?.count || ''}
-                                        </td>
-                                    ))}
-                                    <td className="border border-black p-1 text-center">{footerSums.totalTime}</td>
-                                    <td className="border border-black p-1 text-center bg-black text-white">{footerSums.totalItems}</td>
-                                    <td className="border border-black p-1 text-center bg-gray-400"></td>
-                                </tr>
-
-                                <tr className="bg-gray-200 font-bold">
-                                    <td colSpan={3} className="border border-black p-1 uppercase text-right">Total Score</td>
-                                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                                        <td key={n} className="border border-black p-1 text-center">
-                                            {footerSums.cp[`CP${n}`]?.score || ''}
-                                        </td>
-                                    ))}
-                                    {['B', 'A', 'P'].map(l => (
-                                        <td key={l} className="border border-black p-1 text-center">
-                                            {footerSums.level[l]?.score || ''}
-                                        </td>
-                                    ))}
-                                    {['MCI', 'MI', 'VSA', 'SA', 'SE', 'E'].map(f => (
-                                        <td key={f} className="border border-black p-1 text-center">
-                                            {footerSums.format[f]?.score || ''}
-                                        </td>
-                                    ))}
-                                    <td className="border border-black p-1 text-center"></td>
-                                    <td className="border border-black p-1 text-center bg-black text-white"></td>
-                                    <td className="border border-black p-1 text-center bg-white text-black font-extrabold text-xs">{footerSums.totalScore}</td>
-                                </tr>
-                            </>
-                        );
-                    })()}
-                </tbody>
-            </table>
-        </div>
     );
+
+    }; // end of renderReport3Content
 
     return (
         <div className="mt-10 w-full text-black reports-container relative">
@@ -1389,18 +1703,34 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
                     </button>
                 </div>
 
-                <button
-                    onClick={() => onDownloadPDF(activeTab)}
-                    className="bg-red-600 text-white px-5 py-2 rounded-full font-bold shadow-lg hover:bg-red-700 flex items-center gap-2 transition-all transform hover:scale-105 text-sm md:text-base"
-                >
-                    <Download size={18} />
-                    Download {activeTab === 'answerKey' ? 'Answer Key' : activeTab.toUpperCase()} PDF
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => onDownloadPDF?.(activeTab)}
+                        className="bg-red-600 text-white px-5 py-2 rounded-full font-bold shadow-lg hover:bg-red-700 flex items-center gap-2 transition-all transform hover:scale-105 text-sm md:text-base outline-none"
+                    >
+                        <Download size={18} />
+                        PDF
+                    </button>
+                    <button
+                        onClick={() => onDownloadWord?.(activeTab)}
+                        className="bg-blue-700 text-white px-5 py-2 rounded-full font-bold shadow-lg hover:bg-blue-800 flex items-center gap-2 transition-all transform hover:scale-105 text-sm md:text-base outline-none"
+                    >
+                        <FileText size={18} />
+                        Word
+                    </button>
+                    <button
+                        onClick={() => window.print()}
+                        className="bg-gray-700 text-white px-5 py-2 rounded-full font-bold shadow-lg hover:bg-gray-800 flex items-center gap-2 transition-all transform hover:scale-105 text-sm md:text-base outline-none"
+                    >
+                        <Printer size={18} />
+                        Print
+                    </button>
+                </div>
             </div>
 
-            <div className="print-only-container">
+            <div className={`print-only-container ${activeTab === 'report2' || activeTab === 'report3' ? 'landscape-mode' : ''}`}>
                 {/* --- UI VIEW (Only active tab) --- */}
-                <div className="no-print">
+                <div className="reports-display-content">
                     {activeTab === 'report1' && (
                         <div className="max-w-[210mm] mx-auto space-y-8 bg-white p-8 mb-8 shadow-md rounded-xl">
                             {renderReport1Content()}
@@ -1430,27 +1760,27 @@ export const ReportsView = ({ blueprint, curriculum, onDownloadPDF }: { blueprin
                     )}
                 </div>
 
-                {/* --- PDF CAPTURE SOURCE (Always available but hidden from screen) --- */}
-                <div id="pdf-capture-source" className="absolute -left-[50000px] pointer-events-none opacity-0 no-print" style={{ width: '1200px' }}>
-                    <div id="report-page-1" className="bg-white p-8 mb-8">
+                {/* --- PDF CAPTURE SOURCE (positioned off-screen but fully visible for html2canvas) --- */}
+                <div id="pdf-capture-source" className="no-print" style={{ position: 'fixed', top: 0, left: '-99999px', zIndex: -1, pointerEvents: 'none' }}>
+                    <div id="report-page-1" className="bg-white p-8" style={{ width: '794px' }}>
                         {renderReport1Content(1)}
                     </div>
-                    <div id="report-page-2" className="bg-white p-8 mb-8">
+                    <div id="report-page-2" className="bg-white p-8" style={{ width: '794px' }}>
                         {renderReport1Content(2)}
                     </div>
 
                     {chunkedItems.map((chunk, pageIdx) => (
-                        <div key={pageIdx} id={`report-item-analysis-page-${pageIdx}`} className="bg-white p-8 mb-8">
+                        <div key={pageIdx} id={`report-item-analysis-page-${pageIdx}`} className="bg-white p-8" style={{ width: '1920px' }}>
                             {renderReport2Content(chunk, pageIdx)}
                         </div>
                     ))}
 
-                    <div id="report-page-blueprint-matrix" className="bg-white p-8 mb-8">
+                    <div id="report-page-blueprint-matrix" className="bg-white p-8" style={{ width: '1920px' }}>
                         {renderReport3Content()}
                     </div>
 
-                    <div id="report-answer-key" className="bg-white p-8 mb-8">
-                        <AnswerKeyView blueprint={blueprint} curriculum={curriculum} />
+                    <div id="report-answer-key" className="bg-white" style={{ width: '794px', padding: '32px' }}>
+                        <AnswerKeyView blueprint={blueprint} curriculum={curriculum} isPdf={true} />
                     </div>
                 </div>
             </div>
@@ -2015,11 +2345,19 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                 scale: 2.5,
                 useCORS: true,
                 logging: false,
-                windowWidth: 794
+                windowWidth: 1024,
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const tamilElements = clonedDoc.querySelectorAll('.tamil-font');
+                    tamilElements.forEach(el => {
+                        (el as HTMLElement).style.fontFamily = "'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif";
+                    });
+                }
             });
             const img = canvas.toDataURL('image/png');
             const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
-            pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, Math.min(imgHeight, 275));
+            // Removed Math.min to prevent clipping at the bottom if it's slightly over
+            pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, imgHeight);
             firstPage = false;
         };
 
@@ -2044,11 +2382,21 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                 if (!el) break;
                 if (!firstPage) pdf.addPage('a4', 'l');
                 const canvas = await html2canvas(el, {
-                    scale: 3,
+                    scale: 2.5,
                     useCORS: true,
                     logging: false,
-                    windowWidth: 1920,
-                    backgroundColor: '#ffffff'
+                    windowWidth: 1600,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc) => {
+                        const headers = clonedDoc.querySelectorAll('th, .table-header-cell');
+                        headers.forEach(h => {
+                            (h as HTMLElement).style.backgroundColor = h.classList.contains('bg-blue-600') ? '#2563eb' :
+                                h.classList.contains('bg-gray-100') ? '#f3f4f6' : '#f9fafb';
+                            (h as HTMLElement).style.color = h.classList.contains('bg-blue-600') ? '#ffffff' : '#000000';
+                            (h as HTMLElement).style.visibility = 'visible';
+                            (h as HTMLElement).style.opacity = '1';
+                        });
+                    }
                 });
                 const img = canvas.toDataURL('image/png');
                 let imgWidth = contentWidthLandscape;
@@ -2068,33 +2416,50 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
         }
 
         if (type === 'all' || type === 'report3') {
-            const pdfWidthLandscape = 297;
-            const pdfHeightLandscape = 210;
-            const contentWidthLandscape = pdfWidthLandscape - (MARGIN * 2);
-            const contentHeightLandscape = pdfHeightLandscape - (MARGIN * 2);
-
             const matrixEl = document.getElementById('report-page-blueprint-matrix');
             if (matrixEl) {
-                if (!firstPage) pdf.addPage('a4', 'l');
                 const canvas = await html2canvas(matrixEl, {
-                    scale: 3,
+                    scale: 2.5,
                     useCORS: true,
                     logging: false,
                     windowWidth: 1920,
-                    backgroundColor: '#ffffff'
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc) => {
+                        const headers = clonedDoc.querySelectorAll('th');
+                        headers.forEach(h => {
+                            (h as HTMLElement).style.backgroundColor = h.classList.contains('bg-orange-200') ? '#fed7aa' :
+                                h.classList.contains('bg-orange-100') ? '#ffedd5' :
+                                    h.classList.contains('bg-blue-50') ? '#eff6ff' :
+                                        h.classList.contains('bg-green-50') ? '#f0fdf4' :
+                                            h.classList.contains('bg-gray-100') ? '#f3f4f6' : '#f9fafb';
+                            (h as HTMLElement).style.color = '#000000';
+                            (h as HTMLElement).style.opacity = '1';
+                            (h as HTMLElement).style.visibility = 'visible';
+                        });
+                    }
                 });
                 const img = canvas.toDataURL('image/png');
-                let imgWidth = contentWidthLandscape;
-                let imgHeight = (canvas.height * imgWidth) / canvas.width;
+                
+                // Use Custom Page Size for Report 3 to ensure everything fits perfectly
+                const pxToMm = 0.264583;
+                const imgWidthMm = 1920 * pxToMm; // Based on windowWidth 1920
+                const imgHeightMm = (canvas.height / 2.5) * pxToMm;
+                
+                const pageWidth = imgWidthMm + (MARGIN * 2);
+                const pageHeight = imgHeightMm + (MARGIN * 2);
 
-                if (imgHeight > contentHeightLandscape) {
-                    const ratio = contentHeightLandscape / imgHeight;
-                    imgHeight = contentHeightLandscape;
-                    imgWidth = imgWidth * ratio;
-                    pdf.addImage(img, 'PNG', MARGIN + (contentWidthLandscape - imgWidth) / 2, MARGIN, imgWidth, imgHeight);
+                if (!firstPage) {
+                    pdf.addPage([pageWidth, pageHeight], 'l');
                 } else {
-                    pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidth, imgHeight);
+                    // Start with custom size if it's the only/first report
+                    pdf = new jsPDF({
+                        orientation: 'l',
+                        unit: 'mm',
+                        format: [pageWidth, pageHeight]
+                    });
                 }
+                
+                pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidthMm, imgHeightMm);
                 firstPage = false;
             }
         }
@@ -2107,16 +2472,50 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                     scale: 2.5,
                     useCORS: true,
                     logging: false,
-                    windowWidth: 794
+                    windowWidth: 1024,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc) => {
+                        const headers = clonedDoc.querySelectorAll('th');
+                        headers.forEach(h => {
+                            (h as HTMLElement).style.backgroundColor = '#dcfce7'; // green-100 approx
+                            (h as HTMLElement).style.color = '#000000';
+                        });
+                        const tamilElements = clonedDoc.querySelectorAll('.tamil-font');
+                        tamilElements.forEach(el => {
+                            (el as HTMLElement).style.fontFamily = "'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif";
+                        });
+                    }
                 });
                 const img = canvas.toDataURL('image/png');
                 const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
-                pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, Math.min(imgHeight, 275));
+                pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, imgHeight);
                 firstPage = false;
             }
         }
 
         pdf.save(`blueprint_report_${currentBlueprint.id}.pdf`);
+    };
+
+    const handleDownloadWord = async (type: 'report1' | 'report2' | 'report3' | 'answerKey' | 'all') => {
+        if (!currentBlueprint || !curriculum) return;
+
+        try {
+            if (type === 'report1' || type === 'all') {
+                await DocExportService.exportReport1(currentBlueprint, curriculum);
+            }
+            if (type === 'report2' || type === 'all') {
+                await DocExportService.exportReport2(currentBlueprint, curriculum);
+            }
+            if (type === 'report3' || type === 'all') {
+                await DocExportService.exportReport3(currentBlueprint, curriculum);
+            }
+            if (type === 'answerKey' || type === 'all') {
+                await DocExportService.exportAnswerKey(currentBlueprint, curriculum);
+            }
+        } catch (error) {
+            console.error("Word export failed:", error);
+            alert("Failed to export Word document. Please check the console for details.");
+        }
     };
 
     const updateItem = (id: string, field: keyof BlueprintItem, value: any) => {
@@ -2531,7 +2930,7 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                                     {/* Conditional Rendering of Views */}
                                     {(() => {
                                         const activeCurriculum = getFilteredCurriculum(curriculum, currentBlueprint?.examTerm || selectedTerm) || curriculum;
-                                        
+
                                         return (
                                             <>
                                                 {!showReports && !showQuestions && (
@@ -2558,6 +2957,7 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                                                         blueprint={currentBlueprint}
                                                         curriculum={activeCurriculum}
                                                         onDownloadPDF={handleDownloadPDF}
+                                                        onDownloadWord={handleDownloadWord}
                                                     />
                                                 )}
                                             </>

@@ -21,7 +21,8 @@
     /* Tamil specific font */
     [lang="ta"],
     .tamil-font {
-      font-family: 'TAU-Palaai', 'Noto Serif', serif;
+      font-family: 'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif;
+      font-size: 14px;
     }
 
     /* Fix for double borders in all tables */
@@ -76,10 +77,99 @@
         display: block !important;
       }
 
+      body,
+      html {
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+      }
+
+      /* Fix for AdminPortal and common layouts clipping content */
+      main,
+      #root,
+      .flex-1 {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      .max-w-5xl {
+        max-width: none !important;
+      }
+
+      /* Report specific print styles */
+      .bg-white {
+        background: white !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      .shadow-md,
+      .rounded-xl,
+      .rounded-lg {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+      }
+
+      .reports-display-content {
+        display: block !important;
+      }
+
+      .landscape-report-page {
+        width: 100% !important;
+        page-break-after: always;
+      }
+
+      .landscape-mode {
+        page: landscape;
+      }
+
       @page {
         size: A4;
         margin: 10mm;
       }
+
+      @page landscape {
+        size: A4 landscape;
+        margin: 10mm;
+      }
+    }
+
+    /* Editor Specific Styles */
+    .editor-content ul {
+      list-style-type: disc !important;
+      padding-left: 1.5rem !important;
+      margin: 0.5rem 0 !important;
+    }
+
+    .editor-content ol {
+      list-style-type: decimal !important;
+      padding-left: 1.5rem !important;
+      margin: 0.5rem 0 !important;
+    }
+
+    .editor-content table {
+      border-collapse: collapse !important;
+      width: 100% !important;
+      margin: 1rem 0 !important;
+    }
+
+    .editor-content th,
+    .editor-content td {
+      border: 1px solid black !important;
+      padding: 8px !important;
+      min-width: 50px;
+    }
+
+    .editor-content img {
+      max-width: 100%;
+      height: auto;
+      margin: 1rem 0;
+      border: 1px solid #eee;
+      border-radius: 4px;
     }
   </style>
   <script type="importmap">
