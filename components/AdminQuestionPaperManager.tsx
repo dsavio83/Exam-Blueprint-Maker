@@ -15,57 +15,75 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedShareBp, setSelectedShareBp] = useState<string | null>(null);
     const [userSearchTerm, setUserSearchTerm] = useState('');
+    const [sharedUsers, setSharedUsers] = useState<User[]>([]);
 
     useEffect(() => {
         loadData();
     }, []);
 
-    const loadData = () => {
-        setBlueprints(getBlueprints());
-        const allUsers = getUsers();
+    useEffect(() => {
+        const loadSharedUsers = async () => {
+            if (!selectedShareBp) {
+                setSharedUsers([]);
+                return;
+            }
+            const data = await getSharedWithUsers(selectedShareBp);
+            setSharedUsers(data);
+        };
+        loadSharedUsers();
+    }, [selectedShareBp]);
+
+    const loadData = async () => {
+        const [allBlueprints, allUsers] = await Promise.all([
+            getBlueprints('all'),
+            getUsers()
+        ]);
+        setBlueprints(allBlueprints);
         setUsers(allUsers);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this question paper?')) {
-            deleteBlueprint(id);
-            loadData();
+            await deleteBlueprint(id);
+            await loadData();
         }
     };
 
-    const handleToggleLock = (id: string) => {
-        toggleBlueprintLock(id);
-        loadData();
+    const handleToggleLock = async (id: string) => {
+        await toggleBlueprintLock(id);
+        await loadData();
     };
 
-    const handleToggleHidden = (id: string) => {
-        toggleBlueprintHidden(id);
-        loadData();
+    const handleToggleHidden = async (id: string) => {
+        await toggleBlueprintHidden(id);
+        await loadData();
     };
 
-    const handleResetConfirmation = (id: string) => {
+    const handleResetConfirmation = async (id: string) => {
         if (window.confirm('Are you sure you want to reset the confirmation for this paper? This will allow users to edit the pattern again.')) {
-            resetBlueprintConfirmation(id);
-            loadData();
+            await resetBlueprintConfirmation(id);
+            await loadData();
         }
     };
 
-    const handleRemoveShare = (bpId: string, userId: string) => {
+    const handleRemoveShare = async (bpId: string, userId: string) => {
         if (window.confirm('Remove sharing access for this user?')) {
-            removeShare(bpId, userId);
-            loadData();
+            await removeShare(bpId, userId);
+            await loadData();
+            setSharedUsers(await getSharedWithUsers(bpId));
         }
     };
 
-    const handleAddShare = (bpId: string, toUserId: string) => {
+    const handleAddShare = async (bpId: string, toUserId: string) => {
         const bp = blueprints.find(b => b.id === bpId);
         if (!bp) return;
 
         const fromUserId = bp.ownerId || '1';
 
-        const success = shareBlueprint(bpId, fromUserId, toUserId);
+        const success = await shareBlueprint(bpId, fromUserId, toUserId);
         if (success) {
-            loadData();
+            await loadData();
+            setSharedUsers(await getSharedWithUsers(bpId));
             setUserSearchTerm('');
         } else {
             alert('Could not share. User might already have access.');
@@ -286,9 +304,7 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                     <Share2 size={16} /> Currently Shared With
                                 </h4>
                                 <div className="space-y-3">
-                                    {(() => {
-                                        const sharedUsers = getSharedWithUsers(selectedShareBp);
-                                        return sharedUsers.length > 0 ? (
+                                    {sharedUsers.length > 0 ? (
                                             sharedUsers.map(user => (
                                                 <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group hover:border-blue-200 hover:bg-blue-50/30 transition-all">
                                                     <div className="flex items-center gap-3">
@@ -314,8 +330,7 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                                 <Share2 size={32} className="mx-auto text-gray-200 mb-2" />
                                                 <p className="text-xs text-gray-500 italic">Not shared with anyone</p>
                                             </div>
-                                        );
-                                    })()}
+                                        )}
                                 </div>
                             </div>
 

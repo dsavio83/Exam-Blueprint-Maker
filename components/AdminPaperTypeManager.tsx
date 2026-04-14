@@ -21,9 +21,15 @@ const AdminPaperTypeManager = () => {
     });
     const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1, optionCount: 0 };
 
-    useEffect(() => { setTypes(getQuestionPaperTypes()); }, []);
+    useEffect(() => {
+        const load = async () => {
+            const data = await getQuestionPaperTypes();
+            setTypes(data);
+        };
+        load();
+    }, []);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.name) return alert("Name is required.");
         if (!formData.sections || formData.sections.length === 0) return alert("At least one section is required.");
 
@@ -41,17 +47,17 @@ const AdminPaperTypeManager = () => {
             : [...types, finalData];
 
         setTypes(newTypes);
-        saveQuestionPaperTypes(newTypes);
+        await saveQuestionPaperTypes(newTypes);
         setEditingId(null);
         setFormData({ name: '', description: '', sections: [] });
         setIsFormOpen(false);
     };
 
-    const handleDeleteType = (id: string) => {
+    const handleDeleteType = async (id: string) => {
         if (window.confirm("Are you sure you want to delete this paper type? This cannot be undone.")) {
             const newTypes = types.filter(t => t.id !== id);
             setTypes(newTypes);
-            saveQuestionPaperTypes(newTypes);
+            await saveQuestionPaperTypes(newTypes);
         }
     };
 

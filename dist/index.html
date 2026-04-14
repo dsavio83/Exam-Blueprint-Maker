@@ -25,24 +25,31 @@
       font-size: 14px;
     }
 
-    /* Force single borders in all tables */
+    /* Fix for double borders in all tables */
     table {
       border-collapse: collapse !important;
       border-spacing: 0 !important;
       width: 100% !important;
-      border: 1px solid black !important; /* Outer border */
     }
 
     th,
     td {
       border: 1px solid black !important;
-      padding: 8px; /* Consistent padding */
     }
 
-    /* Maintain black borders for report-like tables */
-    .bg-white table, .bg-white th, .bg-white td,
-    .bg-gray-100 table, .bg-gray-100 th, .bg-gray-100 td,
-    .reports-container table, .reports-container th, .reports-container td {
+    /* Maintain Tailwind-like borders for specific UI tables if needed,
+         but the user wants single borders everywhere.
+         Wait, let's be careful not to break the main dashboard table which uses gray-200.
+         Actually, the user said "அனைத்து டேபில் வியூவிலும்".
+      */
+    .bg-white table th,
+    .bg-white table td {
+      border-color: #000 !important;
+      /* Force black for report-like tables */
+    }
+
+    /* Reset for dashboard tables if they look too harsh */
+    .bg-gray-100 th {
       border-color: #000 !important;
     }
 
@@ -165,6 +172,7 @@
       border-radius: 4px;
     }
   </style>
+
   <script type="importmap">
 {
   "imports": {
@@ -177,11 +185,11 @@
   }
 }
 </script>
+  <script type="module" crossorigin src="/assets/index-vGUpTxgz.js"></script>
 </head>
 
 <body class="bg-gray-50 text-gray-900 antialiased select-none">
   <div id="root"></div>
-  <script type="module" src="./index.tsx"></script>
 </body>
 
 </html>

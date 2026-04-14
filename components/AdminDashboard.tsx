@@ -18,14 +18,24 @@ const AdminDashboard = () => {
     const [recentBlueprints, setRecentBlueprints] = useState<Blueprint[]>([]);
 
     useEffect(() => {
-        setStats({
-            users: getUsers().length,
-            blueprints: getBlueprints().length,
-            paperTypes: getQuestionPaperTypes().length,
-            configs: getExamConfigs().length
-        });
-        const sorted = [...getBlueprints()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setRecentBlueprints(sorted.slice(0, 5));
+        const loadStats = async () => {
+            const [users, blueprints, paperTypes, configs] = await Promise.all([
+                getUsers(),
+                getBlueprints('all'), 
+                getQuestionPaperTypes(),
+                getExamConfigs()
+            ]);
+            
+            setStats({
+                users: users.length,
+                blueprints: blueprints.length,
+                paperTypes: paperTypes.length,
+                configs: configs.length
+            });
+            const sorted = [...blueprints].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setRecentBlueprints(sorted.slice(0, 5));
+        };
+        loadStats();
     }, []);
 
     const StatCard = ({ title, count, icon: Icon, color }: any) => (

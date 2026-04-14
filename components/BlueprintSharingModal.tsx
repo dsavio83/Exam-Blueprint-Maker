@@ -26,49 +26,62 @@ const BlueprintSharingModal: React.FC<BlueprintSharingModalProps> = ({
         loadUsers();
     }, []);
 
-    const loadUsers = () => {
-        const users = getUsers();
-        // Filter out current user and admin users
-        const availableUsers = users.filter(u => u.id !== currentUserId && u.role !== 'ADMIN');
-        setAllUsers(availableUsers);
+    const loadUsers = async () => {
+        try {
+            const users = await getUsers();
+            // Filter out current user and admin users
+            const availableUsers = users.filter(u => u.id !== currentUserId && u.role !== 'ADMIN');
+            setAllUsers(availableUsers);
 
-        // Load already shared users
-        const shared = getSharedWithUsers(blueprint.id);
-        setSharedUsers(shared);
+            // Load already shared users
+            const shared = await getSharedWithUsers(blueprint.id);
+            setSharedUsers(shared);
+        } catch (err) {
+            console.error('Error loading users:', err);
+            setMessage({ type: 'error', text: 'Failed to load users' });
+        }
     };
 
-    const handleShare = () => {
+    const handleShare = async () => {
         if (!selectedUserId) {
             setMessage({ type: 'error', text: 'Please select a user to share with' });
             return;
         }
 
-        const success = shareBlueprint(blueprint.id, currentUserId, selectedUserId);
+        try {
+            const success = await shareBlueprint(blueprint.id, currentUserId, selectedUserId);
 
-        if (success) {
-            setMessage({ type: 'success', text: 'Blueprint shared successfully!' });
-            setSelectedUserId('');
-            loadUsers();
-            onShareComplete();
+            if (success) {
+                setMessage({ type: 'success', text: 'Blueprint shared successfully!' });
+                setSelectedUserId('');
+                loadUsers();
+                onShareComplete();
 
-            // Clear message after 2 seconds
-            setTimeout(() => setMessage(null), 2000);
-        } else {
-            setMessage({ type: 'error', text: 'Failed to share. Already shared or blueprint not found.' });
+                // Clear message after 2 seconds
+                setTimeout(() => setMessage(null), 2000);
+            } else {
+                setMessage({ type: 'error', text: 'Failed to share. Already shared or blueprint not found.' });
+            }
+        } catch (err) {
+            setMessage({ type: 'error', text: 'An error occurred during sharing.' });
         }
     };
 
-    const handleRemoveShare = (userId: string) => {
-        const success = removeShare(blueprint.id, userId);
+    const handleRemoveShare = async (userId: string) => {
+        try {
+            const success = await removeShare(blueprint.id, userId);
 
-        if (success) {
-            setMessage({ type: 'success', text: 'Share access removed successfully!' });
-            loadUsers();
-            onShareComplete();
+            if (success) {
+                setMessage({ type: 'success', text: 'Share access removed successfully!' });
+                loadUsers();
+                onShareComplete();
 
-            setTimeout(() => setMessage(null), 2000);
-        } else {
-            setMessage({ type: 'error', text: 'Failed to remove share access.' });
+                setTimeout(() => setMessage(null), 2000);
+            } else {
+                setMessage({ type: 'error', text: 'Failed to remove share access.' });
+            }
+        } catch (err) {
+            setMessage({ type: 'error', text: 'An error occurred while removing access.' });
         }
     };
 

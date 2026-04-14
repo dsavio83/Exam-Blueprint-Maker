@@ -17,6 +17,10 @@ const AdminDiscourseManager = () => {
 
     const handleCopyJSON = () => {
         const db = getDB();
+        if (!db) {
+            alert("Database not initialized yet.");
+            return;
+        }
         const json = JSON.stringify(db.discourses, null, 2);
         navigator.clipboard.writeText(json).then(() => alert("All Discourse data copied to clipboard! You can use this to update INITIAL_DISCOURSES in db.ts."));
     };
@@ -34,7 +38,11 @@ const AdminDiscourseManager = () => {
     });
 
     useEffect(() => {
-        setDiscourses(getDiscourses() || []);
+        const load = async () => {
+            const data = await getDiscourses();
+            setDiscourses(data || []);
+        };
+        load();
     }, []);
 
     const filteredDiscourses = (discourses || []).filter(d => {
@@ -43,7 +51,7 @@ const AdminDiscourseManager = () => {
         return true;
     });
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.name) return alert("Name is required");
 
         let newDiscourses = [...discourses];
@@ -56,7 +64,7 @@ const AdminDiscourseManager = () => {
             });
         }
         setDiscourses(newDiscourses);
-        saveDiscourses(newDiscourses);
+        await saveDiscourses(newDiscourses);
 
         // Update filters to show the saved item
         if (formData.subject) setFilterSubject(formData.subject);
@@ -73,11 +81,11 @@ const AdminDiscourseManager = () => {
         setIsFormOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!window.confirm("Delete this Discourse?")) return;
         const newDiscourses = discourses.filter(d => d.id !== id);
         setDiscourses(newDiscourses);
-        saveDiscourses(newDiscourses);
+        await saveDiscourses(newDiscourses);
     };
 
     const addRubric = () => {

@@ -26,25 +26,33 @@ const AnswerKeyView = ({ blueprint, curriculum, isPdf = false }: AnswerKeyViewPr
     });
 
     // Helper functions synced with ReportsView
-    const getQPCode = () => {
-        const cls = blueprint.classLevel === 8 ? '8' : blueprint.classLevel === 9 ? '9' : '10';
-        const sub = blueprint.subject.includes('AT') ? '02' : '12';
-        return `T${cls}${sub} `;
+    const getPaperCode = () => {
+        const subject = blueprint.subject.includes('BT') ? 'BT' : 'AT';
+        const codeMap: Record<string, string> = {
+            '10-AT': 'T1001',
+            '10-BT': 'T1012',
+            '9-AT': 'T901',
+            '9-BT': 'T912',
+            '8-AT': 'T801',
+            '8-BT': 'T812'
+        };
+        return codeMap[`${blueprint.classLevel}-${subject}`] || `T${blueprint.classLevel}${subject === 'AT' ? '01' : '12'}`;
     };
 
     const getSubjectTitle = () => {
         if (blueprint.subject.includes('AT')) {
-            return { tamil: 'தமிழ் முதல் தாள் (AT)', eng: 'First Language - Tamil Paper I' };
+            return { tamil: 'தமிழ் முதல் தாள்', eng: 'Tamil Language Paper I (AT)' };
         }
-        return { tamil: 'தமிழ் இரண்டாம் தாள் (BT)', eng: 'First Language - Tamil Paper II' };
+        return { tamil: 'தமிழ் இரண்டாம் தாள்', eng: 'Tamil Language Paper II (BT)' };
     };
 
-    const getTermTamil = () => {
+    const getTermHeading = () => {
+        const year = academicYear.replace(/^(\d{4})-(\d{2})$/, '$1-$2');
         switch (blueprint.examTerm) {
-            case 'First Term Exam': return 'முதல்';
-            case 'Second Term Exam': return 'இரண்டாம்';
-            case 'Third Term Exam': return 'மூன்றாம்';
-            default: return 'முதல்';
+            case 'First Term Exam': return `முதல்பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+            case 'Second Term Exam': return `இரண்டாம் பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+            case 'Third Term Exam': return `இறுதிப் பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+            default: return `முதல்பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
         }
     };
 
@@ -63,39 +71,38 @@ const AnswerKeyView = ({ blueprint, curriculum, isPdf = false }: AnswerKeyViewPr
     };
 
     const academicYear = blueprint.academicYear || getAcademicYear();
-    const qpCode = getQPCode();
+    const paperCode = getPaperCode();
     const subjectTitle = getSubjectTitle();
-    const termTamil = getTermTamil();
-    const setId = (blueprint.setId || 'Set A').replace('Set ', '');
-    const termEnglish = blueprint.examTerm === 'First Term Exam' ? 'First' : blueprint.examTerm === 'Second Term Exam' ? 'Second' : 'Third';
+    const termHeading = getTermHeading();
 
     return (
         <div className={isPdf ? 'bg-white' : 'bg-white p-8 rounded-xl shadow-lg border border-gray-200 paper-container max-w-4xl mx-auto'}>
-            {/* Answer Key Header - Synced with Report 1 */}
             <div className="mb-6 font-sans">
-                <div className="flex justify-between items-start mb-4">
-                    <div className="border-2 border-black w-10 h-10 flex items-center justify-center text-xl font-bold">{setId}</div>
-                    <div className="text-center flex-1">
+                <div className="border-y-2 border-black py-4 space-y-2">
+                    <div className="text-center">
+                        <div className="text-lg font-bold text-black">{paperCode}</div>
+                    </div>
+                    <div className="text-center">
                         <h1 className="text-xl font-bold text-black tamil-font">சமக்ர சிக்ஷா கேரளம்</h1>
                     </div>
-                    <div className="bg-black text-white rounded-full px-4 py-1 font-bold text-sm">GI {qpCode}</div>
-                </div>
-                <div className="text-center mb-2">
-                    <h2 className="text-lg font-bold text-black tamil-font">{termTamil} பருவ தொகுத்தறி மதிப்பீடு {academicYear}</h2>
-                    <h3 className="text-md font-bold uppercase text-black">{termEnglish} Term Summative Assessment {academicYear}</h3>
-                </div>
-                <div className="text-center mb-4">
-                    <h2 className="text-lg font-bold text-black tamil-font">{subjectTitle.tamil}</h2>
-                    <h3 className="text-md font-bold text-black">{subjectTitle.eng}</h3>
-                </div>
-                <div className="flex justify-between items-end border-b-2 border-black pb-2 mt-4 font-bold text-lg text-black">
-                    <div className="w-1/3">Std. : {blueprint.classLevel}</div>
-                    <div className="text-right w-2/3">
-                        <div className="mb-1 tamil-font">நேரம் : 90 நிமிடங்கள்</div>
-                        <div className="tamil-font">மதிப்பெண் : {blueprint.totalMarks}</div>
+                    <div className="text-center">
+                        <h2 className="text-lg font-bold text-black tamil-font">{termHeading}</h2>
+                    </div>
+                    <div className="text-center">
+                        <h2 className="text-lg font-bold text-black tamil-font">{subjectTitle.tamil}</h2>
+                        <h3 className="text-md font-bold text-black">{subjectTitle.eng}</h3>
+                    </div>
+                    <div className="flex justify-between text-black font-bold pt-2">
+                        <div>
+                            <div className="tamil-font">நேரம்: 90 நிமிடம்</div>
+                            <div className="tamil-font">சிந்தனை நேரம் : 15 நிமிடம்</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="tamil-font">வகுப்பு: {blueprint.classLevel}</div>
+                            <div className="tamil-font">மதிப்பெண்: {blueprint.totalMarks}</div>
+                        </div>
                     </div>
                 </div>
-
                 <div className="mt-8 text-center">
                     <h3 className="text-xl font-bold text-pink-600 underline italic tamil-font">
                         Proforma for Scoring Key & Marking Scheme
@@ -104,7 +111,7 @@ const AnswerKeyView = ({ blueprint, curriculum, isPdf = false }: AnswerKeyViewPr
             </div>
 
             {/* Answer Key Table */}
-            <div className="overflow-hidden border border-black rounded-sm">
+            <div className="overflow-hidden">
                 <table className="w-full border-collapse">
                     <thead>
                         <tr className="bg-green-100/50 text-black">

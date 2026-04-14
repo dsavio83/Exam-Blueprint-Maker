@@ -13,8 +13,9 @@ import AdminDiscourseManager from './AdminDiscourseManager';
 import AdminQuestionPaperManager from './AdminQuestionPaperManager';
 import AdminQuestionConsolidator from './AdminQuestionConsolidator';
 import AnswerKeyView from './AnswerKeyView';
-import { getCurriculum, getFilteredCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate } from '../services/db';
-import { BlueprintMatrix, QuestionEntryForm, ReportsView, SummaryTable } from '../App';
+import { getCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate, getDB, initDB, filterCurriculumByTerm } from '../services/db';
+import { BlueprintMatrix, ReportsView, SummaryTable } from '../App';
+import { QuestionEntryForm } from './QuestionEntryForm';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -32,17 +33,24 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     const printRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        setPaperTypes(getQuestionPaperTypes());
+        const load = async () => {
+            const types = await getQuestionPaperTypes();
+            setPaperTypes(types);
+        };
+        load();
     }, []);
 
     useEffect(() => {
-        if (viewingBlueprint) {
-            const cur = getCurriculum(viewingBlueprint.classLevel, viewingBlueprint.subject);
-            const filtered = getFilteredCurriculum(cur || null, viewingBlueprint.examTerm);
-            setCurriculum(filtered);
-        } else {
-            setCurriculum(null);
-        }
+        const load = async () => {
+            if (viewingBlueprint) {
+                const cur = await getCurriculum(viewingBlueprint.classLevel, viewingBlueprint.subject);
+                const db = getDB() || await initDB();
+                setCurriculum(filterCurriculumByTerm(db, cur, viewingBlueprint.examTerm));
+            } else {
+                setCurriculum(null);
+            }
+        };
+        load();
     }, [viewingBlueprint]);
 
     const handleEditBlueprint = (bp: Blueprint) => {
@@ -52,9 +60,9 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         setShowAnswerKey(false);
     };
 
-    const handleSaveBlueprint = () => {
+    const handleSaveBlueprint = async () => {
         if (!viewingBlueprint) return;
-        saveBlueprint(viewingBlueprint);
+        await saveBlueprint(viewingBlueprint);
         alert("Blueprint saved successfully!");
     };
 
@@ -62,6 +70,14 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         if (!viewingBlueprint) return;
         const newItems = viewingBlueprint.items.map(item =>
             item.id === updatedItem.id ? updatedItem : item
+        );
+        setViewingBlueprint({ ...viewingBlueprint, items: newItems });
+    };
+
+    const updateItemField = (id: string, field: keyof BlueprintItem, val: any) => {
+        if (!viewingBlueprint) return;
+        const newItems = viewingBlueprint.items.map(item =>
+            item.id === id ? { ...item, [field]: val } : item
         );
         setViewingBlueprint({ ...viewingBlueprint, items: newItems });
     };
@@ -235,14 +251,23 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     const handleRegeneratePattern = () => {
         if (!viewingBlueprint || !curriculum) return;
         if (!window.confirm("This will replace all current questions with a new random pattern. Continue?")) return;
-        const newItems = generateBlueprintTemplate(curriculum, viewingBlueprint.examTerm, viewingBlueprint.questionPaperTypeId);
+        
+        const db = getDB();
+        if (!db) {
+            alert("Database not initialized. Please refresh.");
+            return;
+        }
+
+        const newItems = generateBlueprintTemplate(db, curriculum, viewingBlueprint.examTerm, viewingBlueprint.questionPaperTypeId);
         setViewingBlueprint({ ...viewingBlueprint, items: newItems, isConfirmed: false });
     };
 
-    const handleConfirmPattern = () => {
+    const handleConfirmPattern = async () => {
         if (!viewingBlueprint) return;
-        setViewingBlueprint({ ...viewingBlueprint, isConfirmed: true });
-        saveBlueprint({ ...viewingBlueprint, isConfirmed: true });
+        const confirmed = { ...viewingBlueprint, isConfirmed: true };
+        setViewingBlueprint(confirmed);
+        await saveBlueprint(confirmed);
+        alert("Blueprint pattern confirmed!");
     };
 
     const menuItems = [
@@ -353,7 +378,8 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                         {showQuestions && !showAnswerKey && (
                             <QuestionEntryForm
                                 blueprint={viewingBlueprint}
-                                onUpdateItem={updateItem}
+                                onUpdateItem={updateItemField}
+                                paperType={paperTypes.find(p => p.id === viewingBlueprint.questionPaperTypeId)}
                             />
                         )}
 

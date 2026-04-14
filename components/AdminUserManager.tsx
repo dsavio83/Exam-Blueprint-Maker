@@ -24,7 +24,7 @@ const AdminUserManager = () => {
     });
 
     useEffect(() => {
-        setUserList(getUsers());
+        getUsers().then(setUserList);
     }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -43,7 +43,10 @@ const AdminUserManager = () => {
         }
 
         setUserList(newUsers);
-        saveUsers(newUsers);
+        saveUsers(newUsers).then(() => {
+            // Optional: refresh list to confirm
+            getUsers().then(setUserList);
+        });
         setIsFormOpen(false);
         setEditingUser(null);
         setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
@@ -59,7 +62,9 @@ const AdminUserManager = () => {
         if (!window.confirm("Are you sure you want to delete this user?")) return;
         const newUsers = userList.filter(u => u.id !== id);
         setUserList(newUsers);
-        saveUsers(newUsers);
+        saveUsers(newUsers).then(() => {
+            getUsers().then(setUserList);
+        });
     };
 
     return (

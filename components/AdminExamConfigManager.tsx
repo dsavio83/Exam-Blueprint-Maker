@@ -20,17 +20,28 @@ const AdminExamConfigManager = () => {
 
     const handleCopyJSON = () => {
         const db = getDB();
+        if (!db) {
+            alert("Database not initialized yet.");
+            return;
+        }
         const json = JSON.stringify(db.examConfigs, null, 2);
         navigator.clipboard.writeText(json).then(() => alert("All Exam Configuration data copied to clipboard! You can use this to update INITIAL_EXAM_CONFIGS in db.ts."));
     };
 
     useEffect(() => {
-        setConfigs(getExamConfigs());
+        const load = async () => {
+            const data = await getExamConfigs();
+            setConfigs(data);
+        };
+        load();
     }, []);
 
     useEffect(() => {
-        const cur = getCurriculum(selectedClass, selectedSubject);
-        setCurriculum(cur || null);
+        const load = async () => {
+            const cur = await getCurriculum(selectedClass, selectedSubject);
+            setCurriculum(cur || null);
+        };
+        load();
     }, [selectedClass, selectedSubject]);
 
     useEffect(() => {
@@ -48,7 +59,7 @@ const AdminExamConfigManager = () => {
         }
     }, [selectedClass, selectedSubject, selectedTerm, configs]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!currentConfig) return;
         const totalPercent = currentConfig.weightages.reduce((sum, w) => sum + w.percentage, 0);
         if (totalPercent !== 100) {
@@ -64,7 +75,7 @@ const AdminExamConfigManager = () => {
             newConfigs.push({ ...currentConfig, id: Math.random().toString(36).substr(2, 9) });
         }
         setConfigs(newConfigs);
-        saveExamConfigs(newConfigs);
+        await saveExamConfigs(newConfigs);
         alert("Configuration Saved!");
     };
 

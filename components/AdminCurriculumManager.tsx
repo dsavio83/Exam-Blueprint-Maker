@@ -16,19 +16,26 @@ const AdminCurriculumManager = () => {
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
 
     useEffect(() => {
-        const data = getCurriculum(selectedClass, selectedSubject);
-        setCurriculum(data || { classLevel: selectedClass, subject: selectedSubject, units: [] });
+        const load = async () => {
+            const data = await getCurriculum(selectedClass, selectedSubject);
+            setCurriculum(data || { classLevel: selectedClass, subject: selectedSubject, units: [] });
+        };
+        load();
     }, [selectedClass, selectedSubject]);
 
     const handleCopyJSON = () => {
         const db = getDB();
+        if (!db) {
+            alert("Database not initialized yet.");
+            return;
+        }
         const json = JSON.stringify(db.curriculums, null, 2);
         navigator.clipboard.writeText(json).then(() => alert("All Curriculum data copied to clipboard! You can use this to update INITIAL_CURRICULUM in db.ts."));
     };
 
-    const saveCurr = (curr: Curriculum) => {
+    const saveCurr = async (curr: Curriculum) => {
         setCurriculum(curr);
-        saveCurriculum(curr);
+        await saveCurriculum(curr);
     };
 
     const handleAddUnit = () => {

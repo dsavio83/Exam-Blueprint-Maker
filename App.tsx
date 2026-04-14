@@ -6,10 +6,11 @@ import {
 } from './types';
 import {
     generateBlueprintTemplate, getCurriculum, getFilteredCurriculum, saveCurriculum,
-    getUsers, saveUsers, getExamConfigs, saveExamConfigs, getSettings, getDB,
+    getUsers, saveUsers, getExamConfigs, saveExamConfigs, getSettings, getDB, initDB,
     getBlueprints, saveBlueprint, deleteBlueprint, getQuestionPaperTypes, saveQuestionPaperTypes,
     getDefaultFormat, getDefaultKnowledge, getDiscourses, saveDiscourses,
-    getAllAccessibleBlueprints, shareBlueprint, removeShare, getSharedWithUsers
+    getAllAccessibleBlueprints, shareBlueprint, removeShare, getSharedWithUsers, filterCurriculumByTerm,
+    login, logout
 } from './services/db';
 import {
     Trash2, Plus, Download, LogOut, FileText,
@@ -23,6 +24,7 @@ import AdminPortal from './components/AdminPortal';
 import BlueprintSharingModal from './components/BlueprintSharingModal';
 import AnswerKeyView from './components/AnswerKeyView';
 import { DocExportService } from './services/docExport';
+import { QuestionEntryForm } from './components/QuestionEntryForm';
 
 // --- Login & Admin Components remain mostly the same (collapsed for brevity in thought, but included fully here) ---
 
@@ -32,15 +34,18 @@ const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        const users = getUsers();
-        const user = users.find(u => u.username === username && u.password === password);
-
-        if (user) {
-            onLogin(user);
-        } else {
-            setError('Invalid credentials');
+        setError('');
+        try {
+            const result = await login(username, password);
+            if (result.success && result.user) {
+                onLogin(result.user);
+            } else {
+                setError(result.error || 'Invalid credentials');
+            }
+        } catch (err) {
+            setError('Connection error. Please ensure the backend is running.');
         }
     };
 
@@ -116,673 +121,6 @@ const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
 };
 
 // --- Admin Components have been moved to ./components/AdminPortal.tsx and its sub-components ---
-
-// --- Question & Answer Entry Component ---
-
-// --- Rich Text Editor (Enhanced) ---
-const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = false }: any) => {
-    const ref = useRef<HTMLDivElement>(null);
-    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean, target: any }>({ x: 0, y: 0, visible: false, target: null });
-
-    // Sync external value changes only when not focused to avoid cursor loss
-    useEffect(() => {
-        if (ref.current && document.activeElement !== ref.current && ref.current.innerHTML !== value) {
-            ref.current.innerHTML = value || '';
-        }
-    }, [value]);
-
-    useEffect(() => {
-        const handleClickOutside = () => setContextMenu(prev => ({ ...prev, visible: false }));
-        window.addEventListener('click', handleClickOutside);
-        return () => window.removeEventListener('click', handleClickOutside);
-    }, []);
-
-    const handleInput = () => {
-        if (ref.current) onChange(ref.current.innerHTML);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            if (isAnswerTab) {
-                // Insert a right-aligned score marker for answers
-                document.execCommand('insertHTML', false, '&nbsp;<span style="float:right; font-weight:bold; margin-left: 20px;">( &nbsp;&nbsp; )</span>&nbsp;');
-            } else {
-                document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;');
-            }
-            handleInput();
-        }
-    };
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const target = e.target as HTMLElement;
-        const cell = target.closest('td, th');
-        const table = target.closest('table');
-
-        if (table) {
-            e.preventDefault();
-            setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
-                visible: true,
-                target: { cell, table }
-            });
-        }
-    };
-
-    const exec = (cmd: string, val?: string) => {
-        document.execCommand(cmd, false, val);
-        handleInput();
-        ref.current?.focus();
-    };
-
-    const handleImageUpload = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = (e: any) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (re) => {
-                    const dataUrl = re.target?.result as string;
-                    exec('insertImage', dataUrl);
-                };
-                reader.readAsDataURL(file);
-            }
-        };
-        input.click();
-    };
-
-    const handleInsertTable = () => {
-        const rows = prompt("Enter number of rows:", "3");
-        const cols = prompt("Enter number of columns:", "2");
-        if (rows && cols) {
-            const r = parseInt(rows);
-            const c = parseInt(cols);
-            if (isNaN(r) || isNaN(c)) return;
-
-            let tableHtml = '<table style="width:100%; border-collapse: collapse; border: 1px solid black; margin: 10px 0;">';
-            for (let i = 0; i < r; i++) {
-                tableHtml += '<tr>';
-                for (let j = 0; j < c; j++) {
-                    tableHtml += '<td style="border: 1px solid black; padding: 8px; min-width: 50px;">&nbsp;</td>';
-                }
-                tableHtml += '</tr>';
-            }
-            tableHtml += '</table><p>&nbsp;</p>';
-            exec('insertHTML', tableHtml);
-        }
-    };
-
-    // Table Customization Logic
-    const addRow = (above: boolean) => {
-        const { cell } = contextMenu.target;
-        if (!cell) return;
-        const row = cell.parentElement;
-        const newRow = row.cloneNode(true);
-        // Clear content in new row cells
-        //@ts-ignore
-        Array.from(newRow.cells).forEach((c: any) => c.innerHTML = '&nbsp;');
-        if (above) row.before(newRow);
-        else row.after(newRow);
-        handleInput();
-    };
-
-    const addCol = (after: boolean) => {
-        const { cell, table } = contextMenu.target;
-        if (!cell || !table) return;
-        const index = cell.cellIndex;
-        //@ts-ignore
-        Array.from(table.rows).forEach((row: any) => {
-            const newCell = row.insertCell(after ? index + 1 : index);
-            newCell.innerHTML = '&nbsp;';
-            newCell.style.border = '1px solid black';
-            newCell.style.padding = '8px';
-            newCell.style.minWidth = '50px';
-        });
-        handleInput();
-    };
-
-    const deleteTablePart = (type: 'row' | 'col' | 'table') => {
-        const { cell, table } = contextMenu.target;
-        if (!table) return;
-        if (type === 'table') {
-            table.remove();
-        } else if (type === 'row' && cell) {
-            cell.parentElement.remove();
-        } else if (type === 'col' && cell) {
-            const index = cell.cellIndex;
-            //@ts-ignore
-            Array.from(table.rows).forEach((row: any) => row.deleteCell(index));
-        }
-        handleInput();
-    };
-
-    return (
-        <div className="border rounded-md overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-100 transition-all relative">
-            <div className="bg-gray-50 border-b p-1.5 flex flex-wrap gap-1 items-center">
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('bold'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Bold"><Bold size={14} /></button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('italic'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Italic"><Italic size={14} /></button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('underline'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Underline"><Underline size={14} /></button>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertUnorderedList'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Bullet List"><List size={14} /></button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertOrderedList'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Number List"><ListOrdered size={14} /></button>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); handleImageUpload(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Image"><Image size={14} /></button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Table"><TableIcon size={14} /></button>
-
-                {isAnswerTab && (
-                    <div className="ml-auto px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider">
-                        Tab Key enabled for marks
-                    </div>
-                )}
-            </div>
-            <div
-                ref={ref}
-                contentEditable
-                className="p-4 min-h-[150px] outline-none text-sm prose max-w-none editor-content tamil-font"
-                onInput={handleInput}
-                onBlur={handleInput}
-                onKeyDown={handleKeyDown}
-                onContextMenu={handleContextMenu}
-                placeholder={placeholder}
-            />
-
-            {/* Table Context Menu */}
-            {contextMenu.visible && (
-                <div
-                    className="fixed z-[100] bg-white border shadow-2xl rounded-lg py-2 w-52 overflow-hidden"
-                    style={{ left: contextMenu.x, top: contextMenu.y }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 mb-1">Table Controls</div>
-                    <button onClick={() => { addRow(true); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Row Above</button>
-                    <button onClick={() => { addRow(false); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Row Below</button>
-                    <button onClick={() => { addCol(false); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Column Left</button>
-                    <button onClick={() => { addCol(true); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2"><Plus size={12} /> Add Column Right</button>
-                    <div className="border-t my-1"></div>
-                    <button
-                        onClick={() => {
-                            const { cell } = contextMenu.target;
-                            if (cell) {
-                                const isHeader = cell.tagName === 'TH';
-                                const row = cell.parentElement;
-                                //@ts-ignore
-                                Array.from(row.cells).forEach((c: any) => {
-                                    const newTag = isHeader ? 'td' : 'th';
-                                    const newCell = document.createElement(newTag);
-                                    newCell.innerHTML = c.innerHTML;
-                                    newCell.style.cssText = c.style.cssText;
-                                    if (!isHeader) {
-                                        newCell.style.fontWeight = 'bold';
-                                        newCell.style.backgroundColor = '#f3f4f6';
-                                    } else {
-                                        newCell.style.fontWeight = 'normal';
-                                        newCell.style.backgroundColor = 'transparent';
-                                    }
-                                    c.replaceWith(newCell);
-                                });
-                                handleInput();
-                            }
-                            setContextMenu(prev => ({ ...prev, visible: false }));
-                        }}
-                        className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
-                    >
-                        <Bold size={12} /> Toggle Header Row
-                    </button>
-                    <button
-                        onClick={() => {
-                            const { cell } = contextMenu.target;
-                            if (cell) {
-                                cell.style.backgroundColor = cell.style.backgroundColor === 'yellow' ? 'transparent' : 'yellow';
-                                handleInput();
-                            }
-                            setContextMenu(prev => ({ ...prev, visible: false }));
-                        }}
-                        className="w-full text-left px-4 py-2 text-xs hover:bg-yellow-50 flex items-center gap-2"
-                    >
-                        <div className="w-3 h-3 bg-yellow-400 border border-gray-300"></div> Highlight Cell (Yellow)
-                    </button>
-                    <div className="border-t my-1"></div>
-                    <button onClick={() => { deleteTablePart('row'); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={12} /> Delete Row</button>
-                    <button onClick={() => { deleteTablePart('col'); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={12} /> Delete Column</button>
-                    <button onClick={() => { deleteTablePart('table'); setContextMenu(prev => ({ ...prev, visible: false })); }} className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2 font-bold"><Trash2 size={12} /> Delete Entire Table</button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- Question Row Component ---
-const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, systemSettings, curriculum, section, sectionItems }: any) => {
-    const [activeTab, setActiveTab] = useState<'question' | 'answer'>('question');
-    const [answerMode, setAnswerMode] = useState<'content' | 'discourse' | 'ai'>('content');
-    const [isGenerating, setIsGenerating] = useState(false);
-
-    // Helpers for Unit selection
-    const selectedUnit = curriculum?.units.find((u: Unit) => u.id === item.unitId);
-    const availableSubUnits = selectedUnit?.subUnits || [];
-
-    const sectionOptionCount = section?.optionCount || 0;
-    const currentSectionOptionUsage = sectionItems?.filter((si: any) => si.hasInternalChoice).length || 0;
-
-    // Limits based on mark rules: 1 & 2 marks have no option.
-    const isMarkRestricted = item.marksPerQuestion <= 2;
-    // Can't enable if we hit the limit, UNLESS it's already enabled
-    const isLimitReached = !item.hasInternalChoice && currentSectionOptionUsage >= sectionOptionCount;
-    const canToggleOption = !isMarkRestricted && (item.hasInternalChoice || !isLimitReached);
-
-    const generateAIAnswer = (targetField: 'answerText' | 'answerTextB', sourceField: 'questionText' | 'questionTextB') => {
-        setIsGenerating(true);
-        setTimeout(() => {
-            onUpdateItem(item.id, targetField, `<p>Answer generated by AI based on: "${item[sourceField] || 'question'}"</p>`);
-            setIsGenerating(false);
-            setAnswerMode('content');
-        }, 1500);
-    };
-
-    const applyDiscourse = (discourseId: string, targetField: 'answerText' | 'answerTextB') => {
-        const d = availableDiscourses.find((x: Discourse) => x.id === discourseId);
-        if (d) {
-            let html = `<p><b>${d.name}</b></p>`;
-            if (d.description) html += `<p>${d.description}</p>`;
-            html += `<ul class="list-disc pl-4">`;
-            d.rubrics.forEach((r: DiscourseScores) => {
-                html += `<li>${r.point} - <b>${r.marks}M</b></li>`;
-            });
-            html += `</ul>`;
-            onUpdateItem(item.id, targetField, html);
-
-            // Apply Cognitive Process if present in Discourse (only for main/A option or global)
-            if (d.cognitiveProcess && targetField === 'answerText') {
-                onUpdateItem(item.id, 'cognitiveProcess', d.cognitiveProcess);
-            }
-        }
-    };
-
-    return (
-        <div className="border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
-            {/* Header / Metadata Row */}
-            <div className="bg-gray-50 p-3 border-b flex flex-wrap gap-4 items-center justify-between rounded-t-lg">
-                <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                        Q{index + 1}
-                    </span>
-                    <span className="font-bold text-gray-700 text-sm">
-                        {item.marksPerQuestion} Mark{item.marksPerQuestion > 1 ? 's' : ''}
-                    </span>
-
-                    {/* Internal Choice Toggle */}
-                    <div className="flex items-center gap-2 ml-4 border-l pl-4">
-                        <span className="tamil-font font-bold text-gray-500 uppercase tracking-widest text-[10px]">உள்நிலைத் தெரிவு (அ/ஆ)</span>
-                        <button
-                            onClick={() => canToggleOption && onUpdateItem(item.id, 'hasInternalChoice', !item.hasInternalChoice)}
-                            disabled={!canToggleOption}
-                            className={`w-10 h-5 rounded-full p-1 transition-all ${item.hasInternalChoice ? 'bg-blue-600 shadow-inner' : 'bg-gray-300'} ${!canToggleOption ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:scale-105 active:scale-95'}`}
-                            title={isMarkRestricted ? "1, 2 மதிப்பெண்ணிற்கு ஆப்ஷன் இல்லை" : isLimitReached ? `Limit of ${sectionOptionCount} options reached for this section` : "Enable Internal Choice (Either/Or)"}
-                        >
-                            <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${item.hasInternalChoice ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </button>
-                        {sectionOptionCount > 0 && !isMarkRestricted && (
-                            <span className="text-[10px] font-medium text-gray-400">
-                                ({currentSectionOptionUsage}/{sectionOptionCount} used)
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 items-center">
-                    {curriculum && (
-                        <>
-                            <select
-                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[250px]"
-                                value={item.unitId}
-                                onChange={(e) => {
-                                    onUpdateItem(item.id, 'unitId', e.target.value);
-                                    // Reset subunit when unit changes
-                                    const newUnit = curriculum.units.find((u: Unit) => u.id === e.target.value);
-                                    if (newUnit && newUnit.subUnits.length > 0) {
-                                        onUpdateItem(item.id, 'subUnitId', newUnit.subUnits[0].id);
-                                    } else {
-                                        onUpdateItem(item.id, 'subUnitId', '');
-                                    }
-                                }}
-                                title="Unit"
-                            >
-                                {curriculum.units.map((u: Unit) => <option key={u.id} value={u.id}>Unit {u.unitNumber}: {u.name}</option>)}
-                            </select>
-
-                            <select
-                                className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none max-w-[250px]"
-                                value={item.subUnitId}
-                                onChange={(e) => onUpdateItem(item.id, 'subUnitId', e.target.value)}
-                                title="Sub-Unit"
-                                disabled={!item.unitId || availableSubUnits.length === 0}
-                            >
-                                {availableSubUnits.length === 0 && <option value="">No Subunits</option>}
-                                {availableSubUnits.map((s: SubUnit) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                        </>
-                    )}
-
-                    <select
-                        className={`border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
-                        value={item.knowledgeLevel}
-                        onChange={(e) => onUpdateItem(item.id, 'knowledgeLevel', e.target.value)}
-                        title="Knowledge Level"
-                        disabled={item.marksPerQuestion === 1}
-                    >
-                        {systemSettings.knowledgeLevels.map((k: any) => <option key={k.code} value={k.name}>{k.name}</option>)}
-                    </select>
-
-                    <select
-                        className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none"
-                        value={item.cognitiveProcess}
-                        onChange={(e) => onUpdateItem(item.id, 'cognitiveProcess', e.target.value)}
-                        title="Cognitive Process"
-                    >
-                        {systemSettings.cognitiveProcesses.map((c: any) => <option key={c.code} value={c.description}>{c.name}</option>)}
-                    </select>
-
-                    <select
-                        className="border rounded px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-100 outline-none w-24"
-                        value={item.itemFormat}
-                        onChange={(e) => onUpdateItem(item.id, 'itemFormat', e.target.value)}
-                        title="Item Format"
-                    >
-                        {systemSettings.itemFormats.map((f: any) => <option key={f.code} value={f.name}>{f.name}</option>)}
-                    </select>
-                </div>
-            </div>
-
-            {/* Content Area */}
-            <div className="p-4">
-                {/* Section Instruction Display removed from here and moved to parent Form for 'once-only' appearance */}
-
-                {/* Tabs */}
-                <div className="flex border-b mb-4">
-                    <button
-                        onClick={() => setActiveTab('question')}
-                        className={`px-4 py-2 text-sm font-medium mr-1 rounded-t-md transition-colors ${activeTab === 'question' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Question
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('answer')}
-                        className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${activeTab === 'answer' ? 'bg-green-50 text-green-700 border-b-2 border-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Answer
-                    </button>
-                </div>
-
-                {/* Tab Content */}
-                <div className="min-h-[150px]">
-                    {activeTab === 'question' && (
-                        <div className="animate-fade-in space-y-6">
-                            {/* Option A (Default) */}
-                            <div>
-                                {item.hasInternalChoice && <div className="tamil-font font-bold text-red-600 mb-1">ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்</div>}
-                                {item.hasInternalChoice && <div className="tamil-font font-bold text-blue-600 mb-1">(அ) வினா</div>}
-                                <SimpleRichTextEditor
-                                    value={item.questionText}
-                                    onChange={(val: string) => onUpdateItem(item.id, 'questionText', val)}
-                                    placeholder="Type the question content here..."
-                                />
-                            </div>
-
-                            {item.hasInternalChoice && (
-                                <div className="tamil-font font-bold text-purple-600 flex items-center gap-2">
-                                    <span className="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">அல்லது</span>
-                                </div>
-
-                            )}
-
-                            {/* Option B (If Enabled) */}
-                            {item.hasInternalChoice && (
-                                <div className="border-t pt-1 bg-purple-50/20 p-4 rounded-lg border border-purple-100">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <div className="tamil-font font-bold text-blue-600 mb-1"> (ஆ) வினா </div>
-                                        {/* <select
-                                            value={item.knowledgeLevelB || item.knowledgeLevel}
-                                            onChange={(e) => onUpdateItem(item.id, 'knowledgeLevelB', e.target.value)}
-                                            className={`text-[10px] border p-1 rounded bg-white font-bold ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
-                                            disabled={item.marksPerQuestion === 1}
-                                        >
-                                            {Object.values(KnowledgeLevel).map(kl => <option key={kl} value={kl}>{kl}</option>)}
-                                        </select>
-                                        <select
-                                            value={item.cognitiveProcessB || item.cognitiveProcess}
-                                            onChange={(e) => onUpdateItem(item.id, 'cognitiveProcessB', e.target.value)}
-                                            className="text-[10px] border p-1 rounded bg-white font-bold"
-                                        >
-                                            {Object.values(CognitiveProcess).map(cp => <option key={cp} value={cp}>{cp.split(' ')[0]}</option>)}
-                                        </select>
-                                        <select
-                                            value={item.itemFormatB || item.itemFormat}
-                                            onChange={(e) => onUpdateItem(item.id, 'itemFormatB', e.target.value)}
-                                            className="text-[10px] border p-1 rounded bg-white font-bold"
-                                        >
-                                            {systemSettings.itemFormats.map((f: any) => <option key={f.code} value={f.name}>{f.name}</option>)}
-                                        </select> */}
-                                    </div>
-                                    <SimpleRichTextEditor
-                                        value={item.questionTextB}
-                                        onChange={(val: string) => onUpdateItem(item.id, 'questionTextB', val)}
-                                        placeholder="Type the second option (ஆ) வினா content here..."
-                                    />
-                                </div>
-                            )}
-
-
-                        </div>
-                    )}
-
-                    {activeTab === 'answer' && (
-                        <div className="animate-fade-in space-y-6">
-                            {/* Answer Toolbar - Global or Per Item? Keeping Global for simplicity for now, applies to the active field conceptually, but we have two fields. 
-                                We'll just replicate controls for A and B if needed or share.
-                            */}
-
-                            {/* Option A Answer */}
-                            <div className="space-y-3">
-                                {item.hasInternalChoice && <div className="tamil-font font-bold text-blue-600">(அ) வினாவிற்கான விடை</div>}
-
-                                <div className="flex items-center gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
-                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mode:</span>
-                                    <select
-                                        className="border rounded px-2 py-1 text-sm bg-white"
-                                        value={answerMode}
-                                        onChange={(e) => setAnswerMode(e.target.value as any)}
-                                    >
-                                        <option value="content">Write Content</option>
-                                        <option value="discourse">Select Discourse</option>
-                                        <option value="ai">AI Generation</option>
-                                    </select>
-                                </div>
-
-                                {answerMode === 'content' && (
-                                    <SimpleRichTextEditor
-                                        value={item.answerText}
-                                        onChange={(val: string) => onUpdateItem(item.id, 'answerText', val)}
-                                        placeholder="Type the answer key or hints..."
-                                        isAnswerTab={true}
-                                    />
-                                )}
-                                {answerMode === 'discourse' && (
-                                    <div className="border rounded p-4 bg-gray-50">
-                                        <p className="text-sm text-gray-600 mb-2">Select a discourse rubrics to apply:</p>
-                                        {availableDiscourses.length === 0 ? (
-                                            <p className="text-red-500 text-sm italic">No discourses found for {item.marksPerQuestion} Marks.</p>
-                                        ) : (
-                                            <select
-                                                className="w-full border p-2 rounded mb-2"
-                                                onChange={(e) => {
-                                                    if (e.target.value) {
-                                                        applyDiscourse(e.target.value, 'answerText');
-                                                        setAnswerMode('content');
-                                                    }
-                                                }}
-                                                defaultValue=""
-                                            >
-                                                <option value="" disabled>-- Choose Discourse --</option>
-                                                {availableDiscourses.map((d: Discourse) => (
-                                                    <option key={d.id} value={d.id}>{d.name} ({d.cognitiveProcess ? d.cognitiveProcess : 'No CP'})</option>
-                                                ))}
-                                            </select>
-                                        )}
-                                    </div>
-                                )}
-                                {answerMode === 'ai' && (
-                                    <div className="border rounded p-6 bg-blue-50 text-center">
-                                        <button
-                                            onClick={() => generateAIAnswer('answerText', 'questionText')}
-                                            disabled={isGenerating || !item.questionText}
-                                            className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 disabled:bg-gray-400 transition"
-                                        >
-                                            {isGenerating ? 'Generating...' : 'Generate Answer with AI'}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Option B Answer */}
-                            {item.hasInternalChoice && (
-                                <div className="space-y-3 pt-4 border-t">
-                                    <div className="tamil-font font-bold text-purple-600">(ஆ) வினாவிற்கான விடை</div>
-                                    <div className="flex items-center gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
-                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mode:</span>
-                                        <select className="border rounded px-2 py-1 text-sm bg-white" value={answerMode} onChange={(e) => setAnswerMode(e.target.value as any)}>
-                                            <option value="content">Write Content</option>
-                                            <option value="discourse">Select Discourse</option>
-                                            <option value="ai">AI Generation</option>
-                                        </select>
-                                    </div>
-                                    {answerMode === 'content' && <SimpleRichTextEditor value={item.answerTextB} onChange={(val: string) => onUpdateItem(item.id, 'answerTextB', val)} placeholder="Type the answer key or hints for (ஆ)..." isAnswerTab={true} />}
-                                    {answerMode === 'discourse' && (
-                                        <div className="border rounded p-4 bg-gray-50">
-                                            <select className="w-full border p-2 rounded mb-2" onChange={(e) => { if (e.target.value) { applyDiscourse(e.target.value, 'answerTextB'); setAnswerMode('content'); } }} defaultValue="">
-                                                <option value="" disabled>-- Choose Discourse --</option>
-                                                {availableDiscourses.map((d: Discourse) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                            </select>
-                                        </div>
-                                    )}
-                                    {answerMode === 'ai' && (
-                                        <div className="border rounded p-6 bg-blue-50 text-center">
-                                            <button onClick={() => generateAIAnswer('answerTextB', 'questionTextB')} disabled={isGenerating || !item.questionTextB} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 disabled:bg-gray-400 transition">
-                                                {isGenerating ? 'Generating...' : 'Generate Answer (ஆ) with AI'}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blueprint: Blueprint, onUpdateItem: (id: string, field: keyof BlueprintItem, val: string) => void, paperType?: QuestionPaperType }) => {
-    const settings = getSettings();
-    const discourses = getDiscourses() || [];
-
-    const fullCurriculum = getCurriculum(blueprint.classLevel, blueprint.subject);
-    const curriculum = getFilteredCurriculum(fullCurriculum, blueprint.examTerm) || fullCurriculum;
-
-    // Helper for unit order
-    const unitOrderMap = new Map<string, number>();
-    curriculum?.units.forEach((u: Unit, idx: number) => {
-        unitOrderMap.set(u.id, u.unitNumber);
-    });
-
-    // Helper for section order
-    const sectionIndexMap = new Map<string, number>();
-    paperType?.sections.forEach((s, idx) => sectionIndexMap.set(s.id, idx));
-
-    // Sort items: Section Order -> Unit Order Ascending -> Marks
-    const sortedItems = [...blueprint.items].sort((a, b) => {
-        // 1. Sort by Section Index (Primary grouping)
-        const idxA = a.sectionId ? sectionIndexMap.get(a.sectionId) ?? 999 : 999;
-        const idxB = b.sectionId ? sectionIndexMap.get(b.sectionId) ?? 999 : 999;
-        if (idxA !== idxB) return idxA - idxB;
-
-        // 2. Sort by Unit (using looked-up order)
-        const unitA = unitOrderMap.get(a.unitId) || 999;
-        const unitB = unitOrderMap.get(b.unitId) || 999;
-        if (unitA !== unitB) return unitA - unitB;
-
-        // 3. Marks (Ascending)
-        return a.marksPerQuestion - b.marksPerQuestion;
-    });
-
-    return (
-        <div className="bg-white p-6 rounded shadow mt-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2">
-                <Edit2 size={24} className="text-blue-600" />
-                Question & Answer Entry
-            </h2>
-            <div className="space-y-6">
-                {(() => {
-                    // Global tracker for instructions to ensure they only appear once PER SECTION ID
-                    const renderedSections = new Set<string>();
-
-                    return sortedItems.map((item, index) => {
-                        const section = paperType?.sections.find(s => s.id === item.sectionId);
-                        const sectionId = section?.id || item.sectionId;
-
-                        // Only show instruction if:
-                        // 1. It exists for this section
-                        // 2. It hasn't been rendered yet in this pass
-                        const showInstruction = section?.instruction && sectionId && !renderedSections.has(sectionId);
-
-                        // Mark this section as rendered immediately if we are showing or skip it
-                        if (showInstruction && sectionId) {
-                            renderedSections.add(sectionId);
-                        }
-
-                        // Filter discourses for this item
-                        const itemDiscourses = discourses.filter(d =>
-                            d.subject === blueprint.subject &&
-                            d.marks === item.marksPerQuestion
-                        );
-
-                        return (
-                            <React.Fragment key={item.id}>
-                                {showInstruction && (
-                                    <div className="mb-4 p-4 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg shadow-sm animate-fade-in group">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <div className="flex items-center gap-2">
-                                                <div className="bg-amber-100 text-amber-700 p-1 rounded">
-                                                    <Layers size={14} />
-                                                </div>
-                                                <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">SECTION INSTRUCTION</div>
-                                            </div>
-                                        </div>
-                                        <p className="text-[14px] font-bold text-amber-900 leading-relaxed tamil-font">
-                                            {section?.instruction}
-                                        </p>
-                                    </div>
-                                )}
-                                <QuestionRow
-                                    item={item}
-                                    index={index}
-                                    onUpdateItem={onUpdateItem}
-                                    availableDiscourses={itemDiscourses}
-                                    systemSettings={settings}
-                                    curriculum={curriculum}
-                                    section={section}
-                                    sectionItems={sortedItems.filter(si => si.sectionId === item.sectionId)}
-                                />
-                            </React.Fragment>
-                        );
-                    });
-                })()}
-            </div>
-        </div>
-    );
-};
 
 // --- Reports Component ---
 
@@ -2214,17 +1552,31 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
     const [isConfigExpanded, setIsConfigExpanded] = useState(true);
     const printRef = useRef<HTMLDivElement>(null);
 
+    const [allUsers, setAllUsers] = useState<User[]>([]);
+
     useEffect(() => {
-        setBlueprints(getAllAccessibleBlueprints(user.id));
-        setPaperTypes(getQuestionPaperTypes());
+        const load = async () => {
+            const [bps, pts, usersList] = await Promise.all([
+                getAllAccessibleBlueprints(user.id),
+                getQuestionPaperTypes(),
+                getUsers()
+            ]);
+            setBlueprints(bps);
+            setPaperTypes(pts);
+            setAllUsers(usersList);
+        };
+        load();
     }, [view, user.id]);
 
     useEffect(() => {
-        if (view === 'create' || view === 'edit') {
-            const cur = getCurriculum(selectedClass, selectedSubject);
-            const filtered = getFilteredCurriculum(cur || null, selectedTerm);
-            setCurriculum(filtered);
-        }
+        const load = async () => {
+            if (view === 'create' || view === 'edit') {
+                const cur = await getCurriculum(selectedClass, selectedSubject);
+                const db = getDB() || await initDB();
+                setCurriculum(filterCurriculumByTerm(db, cur, selectedTerm));
+            }
+        };
+        load();
     }, [selectedClass, selectedSubject, selectedTerm, view]);
 
     // Automatically collapse config if confirmed
@@ -2267,23 +1619,27 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
         setView('edit');
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         const bp = blueprints.find(b => b.id === id);
         if (bp?.isLocked) {
             alert("This question paper is locked by the admin and cannot be deleted.");
             return;
         }
         if (window.confirm("Are you sure you want to delete this blueprint?")) {
-            deleteBlueprint(id);
-            setBlueprints(getBlueprints());
+            await deleteBlueprint(id);
+            const updated = await getAllAccessibleBlueprints(user.id);
+            setBlueprints(updated);
         }
     };
 
-    const handleGenerate = () => {
+    const handleGenerate = async () => {
         if (!curriculum) return alert("Curriculum not found for selected Class/Subject!");
         if (!selectedPaperType) return alert("Please select a Question Paper Type.");
 
-        const items = generateBlueprintTemplate(curriculum, selectedTerm, selectedPaperType);
+        const db = getDB();
+        if (!db) await initDB();
+        
+        const items = generateBlueprintTemplate(getDB()!, curriculum, selectedTerm, selectedPaperType);
         const paperType = paperTypes.find(p => p.id === selectedPaperType);
 
         const newBlueprint: Blueprint = {
@@ -2305,24 +1661,28 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
         setCurrentBlueprint(newBlueprint);
     };
 
-    const handleRegeneratePattern = () => {
+    const handleRegeneratePattern = async () => {
         if (!currentBlueprint || !curriculum) return;
         if (!window.confirm("This will replace all current questions with a new random pattern. Continue?")) return;
-        const newItems = generateBlueprintTemplate(curriculum, currentBlueprint.examTerm, currentBlueprint.questionPaperTypeId);
+        
+        const db = getDB();
+        if (!db) await initDB();
+
+        const newItems = generateBlueprintTemplate(getDB()!, curriculum, currentBlueprint.examTerm, currentBlueprint.questionPaperTypeId);
         setCurrentBlueprint({ ...currentBlueprint, items: newItems, isConfirmed: false });
     };
 
-    const handleConfirmPattern = () => {
+    const handleConfirmPattern = async () => {
         if (!currentBlueprint) return;
         const confirmedBlueprint = { ...currentBlueprint, isConfirmed: true };
         setCurrentBlueprint(confirmedBlueprint);
-        saveBlueprint(confirmedBlueprint);
+        await saveBlueprint(confirmedBlueprint);
         alert("Blueprint pattern confirmed!");
     };
 
-    const handleSaveToDB = () => {
+    const handleSaveToDB = async () => {
         if (!currentBlueprint) return;
-        saveBlueprint(currentBlueprint);
+        await saveBlueprint(currentBlueprint);
         alert("Blueprint saved successfully!");
     };
 
@@ -2675,7 +2035,7 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                                         <tbody>
                                             {filteredBlueprints.map(bp => {
                                                 const isOwner = bp.ownerId === user.id;
-                                                const ownerUser = !isOwner ? getUsers().find(u => u.id === bp.ownerId) : null;
+                                                const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
 
                                                 return (
                                                     <tr key={bp.id} className="border-b hover:bg-gray-50">
@@ -2929,7 +2289,7 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                                 <div ref={printRef} className={`bg-white rounded shadow ${showReports ? 'p-0' : 'p-6'}`}>
                                     {/* Conditional Rendering of Views */}
                                     {(() => {
-                                        const activeCurriculum = getFilteredCurriculum(curriculum, currentBlueprint?.examTerm || selectedTerm) || curriculum;
+                                        const activeCurriculum = curriculum;
 
                                         return (
                                             <>
@@ -2999,8 +2359,9 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
                     blueprint={blueprints.find(bp => bp.id === sharingBlueprintId)!}
                     currentUserId={user.id}
                     onClose={() => setSharingBlueprintId(null)}
-                    onShareComplete={() => {
-                        setBlueprints(getAllAccessibleBlueprints(user.id));
+                    onShareComplete={async () => {
+                        const updated = await getAllAccessibleBlueprints(user.id);
+                        setBlueprints(updated);
                     }}
                 />
             )}
@@ -3011,11 +2372,47 @@ const UserDashboard = ({ user, onLogout }: { user: User, onLogout: () => void })
 // ... [Main App remains] ...
 const App = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    useEffect(() => { const saved = localStorage.getItem('currentUser'); if (saved) setCurrentUser(JSON.parse(saved)); }, []);
-    const handleLogin = (user: User) => { setCurrentUser(user); localStorage.setItem('currentUser', JSON.stringify(user)); };
-    const handleLogout = () => { setCurrentUser(null); localStorage.removeItem('currentUser'); };
+    const [initialized, setInitialized] = useState(false);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                await initDB();
+                const saved = localStorage.getItem('currentUser');
+                if (saved) setCurrentUser(JSON.parse(saved));
+            } catch (err) {
+                console.error("Initialization failed", err);
+            } finally {
+                setInitialized(true);
+            }
+        };
+        load();
+    }, []);
+
+    const handleLogin = (user: User) => {
+        setCurrentUser(user);
+        localStorage.setItem('currentUser', JSON.stringify(user));
+    };
+
+    const handleLogout = () => {
+        logout();
+        setCurrentUser(null);
+        localStorage.removeItem('currentUser');
+    };
+
+    if (!initialized) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+                <RefreshCw className="animate-spin text-blue-600 mb-4" size={48} />
+                <h2 className="text-xl font-bold text-gray-700">Connecting to Database...</h2>
+                <p className="text-gray-500 mt-2">Please ensure the backend server is running.</p>
+            </div>
+        );
+    }
+
     if (!currentUser) return <Login onLogin={handleLogin} />;
     if (currentUser.role === Role.ADMIN) return <AdminPortal user={currentUser} onLogout={handleLogout} />;
     return <UserDashboard user={currentUser} onLogout={handleLogout} />;
 };
+
 export default App;
