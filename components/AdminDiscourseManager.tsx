@@ -1,152 +1,145 @@
-
 import React, { useState, useEffect } from 'react';
-import {
-    Trash2, Plus, Edit2, X, FileJson
-} from 'lucide-react';
-import {
-    SubjectType, Discourse, DiscourseScores, CognitiveProcess
-} from '../types';
-import {
-    getDiscourses, saveDiscourses, getDB
-} from '../services/db';
+import { Discourse, SubjectType, CognitiveProcess, DiscourseScores } from '@/types';
+import { getDiscourses, saveDiscourses } from '@/services/db';
+import { Plus, Trash2, Edit2, X, Search } from 'lucide-react';
 
-const AdminDiscourseManager = () => {
+const AdminDiscourseManager: React.FC = () => {
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingDiscourse, setEditingDiscourse] = useState<Discourse | null>(null);
-
-    const handleCopyJSON = () => {
-        const db = getDB();
-        if (!db) {
-            alert("Database not initialized yet.");
-            return;
-        }
-        const json = JSON.stringify(db.discourses, null, 2);
-        navigator.clipboard.writeText(json).then(() => alert("All Discourse data copied to clipboard! You can use this to update INITIAL_DISCOURSES in db.ts."));
-    };
-
-    // Filter States
-    const [filterSubject, setFilterSubject] = useState<SubjectType>(SubjectType.TAMIL_AT);
-    const [filterMarks, setFilterMarks] = useState<number | 'all'>('all');
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterSubject, setFilterSubject] = useState<string>('All');
 
     const [formData, setFormData] = useState<Partial<Discourse>>({
-        subject: SubjectType.TAMIL_AT,
-        marks: 3,
         name: '',
-        description: '',
-        rubrics: []
+        subject: SubjectType.TAMIL_AT,
+        marks: 5,
+        rubrics: [],
+        cognitiveProcess: CognitiveProcess.CP1
     });
 
     useEffect(() => {
-        const load = async () => {
-            const data = await getDiscourses();
-            setDiscourses(data || []);
-        };
-        load();
+        loadData();
     }, []);
 
-    const filteredDiscourses = (discourses || []).filter(d => {
-        if (d.subject !== filterSubject) return false;
-        if (filterMarks !== 'all' && d.marks !== filterMarks) return false;
-        return true;
-    });
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const data = await getDiscourses();
+            setDiscourses(data);
+        } catch (error) {
+            console.error('Error loading discourses:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSave = async () => {
-        if (!formData.name) return alert("Name is required");
+        if (!formData.name) return;
 
-        let newDiscourses = [...discourses];
-        if (editingDiscourse) {
-            newDiscourses = newDiscourses.map(d => d.id === editingDiscourse.id ? { ...d, ...formData } as Discourse : d);
-        } else {
-            newDiscourses.push({
-                ...formData as Discourse,
-                id: Math.random().toString(36).substr(2, 9)
-            });
+        try {
+            const all = await getDiscourses();
+            if (editingDiscourse) {
+                await saveDiscourses(all.map(d => d.id === editingDiscourse.id ? { ...formData, id: d.id } as Discourse : d));
+            } else {
+                const newDiscourse = {
+                    ...formData,
+                    id: Math.random().toString(36).substr(2, 9),
+                    description: formData.description || ''
+                } as Discourse;
+                await saveDiscourses([...all, newDiscourse]);
+            }
+            setIsFormOpen(false);
+            setEditingDiscourse(null);
+            resetForm();
+            loadData();
+        } catch (error) {
+            console.error('Error saving discourse:', error);
         }
-        setDiscourses(newDiscourses);
-        await saveDiscourses(newDiscourses);
-
-        // Update filters to show the saved item
-        if (formData.subject) setFilterSubject(formData.subject);
-        if (formData.marks) setFilterMarks(formData.marks);
-
-        setIsFormOpen(false);
-        setEditingDiscourse(null);
-        setFormData({ subject: formData.subject, marks: formData.marks, name: '', description: '', rubrics: [] });
     };
 
     const handleEdit = (d: Discourse) => {
         setEditingDiscourse(d);
-        setFormData(d);
+        setFormData({ ...d });
         setIsFormOpen(true);
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm("Delete this Discourse?")) return;
-        const newDiscourses = discourses.filter(d => d.id !== id);
-        setDiscourses(newDiscourses);
-        await saveDiscourses(newDiscourses);
+        if (confirm('Are you sure you want to delete this discourse?')) {
+            const all = await getDiscourses();
+            await saveDiscourses(all.filter(d => d.id !== id));
+            loadData();
+        }
     };
 
-    const addRubric = () => {
+    const resetForm = () => {
         setFormData({
-            ...formData,
-            rubrics: [...(formData.rubrics || []), { point: '', marks: 1 }]
+            name: '',
+            subject: SubjectType.TAMIL_AT,
+            marks: 5,
+            rubrics: [],
+            cognitiveProcess: CognitiveProcess.CP1
         });
     };
 
-    const removeRubric = (idx: number) => {
-        const r = [...(formData.rubrics || [])];
-        r.splice(idx, 1);
-        setFormData({ ...formData, rubrics: r });
+    const addRubric = () => {
+        const newRubric: DiscourseScores = { point: '', marks: 1 };
+        setFormData({
+            ...formData,
+            rubrics: [...(formData.rubrics || []), newRubric]
+        });
     };
 
-    const updateRubric = (idx: number, field: keyof DiscourseScores, val: any) => {
-        const r = [...(formData.rubrics || [])];
-        r[idx] = { ...r[idx], [field]: val };
-        setFormData({ ...formData, rubrics: r });
+    const removeRubric = (index: number) => {
+        const updated = [...(formData.rubrics || [])];
+        updated.splice(index, 1);
+        setFormData({ ...formData, rubrics: updated });
     };
 
-    const formatMark = (m: number) => {
-        if (m % 1 === 0.5) {
-            const floor = Math.floor(m);
-            return floor === 0 ? '½' : `${floor}½`;
-        }
-        return m;
+    const updateRubric = (index: number, field: keyof DiscourseScores, value: string | number) => {
+        const updated = [...(formData.rubrics || [])];
+        updated[index] = { ...updated[index], [field]: value } as DiscourseScores;
+        setFormData({ ...formData, rubrics: updated });
     };
+
+    const filteredDiscourses = discourses.filter(d => {
+        const matchesSearch = d.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSubject = filterSubject === 'All' || d.subject === filterSubject;
+        return matchesSearch && matchesSubject;
+    });
+
+    const formatMark = (m: number) => (m % 1 === 0 ? m.toString() : m.toFixed(1));
+
+    if (loading) return <div className="p-8 text-center text-gray-500">Loading discourses...</div>;
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center border-b pb-4">
-                <h2 className="text-xl font-bold text-gray-800">Discourse Management</h2>
-                <div className="flex gap-4">
-                    <button
-                        onClick={handleCopyJSON}
-                        className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition-colors"
-                    >
-                        <FileJson size={16} /> Export JSON
-                    </button>
+        <div className="p-4 lg:p-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Discourse & Rubrics Manager</h2>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-64">
+                        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search discourses..."
+                            className="pl-10 pr-4 py-2 border rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                     <select
+                        className="border p-2 rounded-lg bg-white"
                         value={filterSubject}
-                        onChange={(e) => setFilterSubject(e.target.value as SubjectType)}
-                        className="border p-2 rounded text-sm bg-white"
+                        onChange={e => setFilterSubject(e.target.value)}
                     >
+                        <option value="All">All Subjects</option>
                         {Object.values(SubjectType).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <select
-                        value={filterMarks}
-                        onChange={(e) => setFilterMarks(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                        className="border p-2 rounded text-sm bg-white"
-                    >
-                        <option value="all">All Marks</option>
-                        <option value="3">3 Marks</option>
-                        <option value="5">5 Marks</option>
-                        <option value="6">6 Marks</option>
                     </select>
                     <button
                         onClick={() => {
+                            resetForm();
                             setEditingDiscourse(null);
-                            setFormData({ subject: filterSubject, marks: typeof filterMarks === 'number' ? filterMarks : 3, name: '', description: '', rubrics: [] });
                             setIsFormOpen(true);
                         }}
                         className="bg-blue-600 text-white px-4 py-2 rounded flex items-center shadow hover:bg-blue-700"
@@ -187,7 +180,7 @@ const AdminDiscourseManager = () => {
                             <select
                                 className="border w-full p-2 rounded mt-1"
                                 value={formData.cognitiveProcess || ''}
-                                onChange={e => setFormData({ ...formData, cognitiveProcess: e.target.value })}
+                                onChange={e => setFormData({ ...formData, cognitiveProcess: e.target.value as CognitiveProcess })}
                             >
                                 <option value="">-- Select --</option>
                                 {Object.entries(CognitiveProcess).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

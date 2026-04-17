@@ -7,7 +7,7 @@ import {
   QuestionPaperType,
   Discourse,
   SharedBlueprint
-} from '../types';
+} from './types';
 
 // --- Seed Data Helpers ---
 const createUnit = (idPrefix: string, num: number, name: string, subNames: string[], los?: string) => ({
@@ -221,7 +221,7 @@ const INITIAL_EXAM_CONFIGS: ExamConfiguration[] = [
 ];
 
 const INITIAL_SETTINGS: SystemSettings = {
-  cognitiveProcesses: Object.entries(CognitiveProcess).map(([k, v]) => ({ code: k, name: v.split(' ')[0], description: v })),
+  cognitiveProcesses: Object.entries(CognitiveProcess).map(([k, v]) => ({ code: k, name: (v as string).split(' ')[0], description: v })),
   knowledgeLevels: Object.entries(KnowledgeLevel).map(([k, v]) => ({ code: k, name: v, description: v })),
   itemFormats: Object.entries(ItemFormat).map(([k, v]) => ({ code: k, name: v, description: v }))
 };

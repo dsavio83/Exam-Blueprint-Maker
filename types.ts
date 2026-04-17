@@ -16,9 +16,9 @@ export enum SubjectType {
 }
 
 export enum ExamTerm {
-  FIRST = 'First Term Exam',
-  SECOND = 'Second Term Exam',
-  THIRD = 'Third Term Exam'
+  FIRST = 'First Term Summative',
+  SECOND = 'Second Term Summative',
+  THIRD = 'Third Term Summative'
 }
 
 export enum KnowledgeLevel {
@@ -68,6 +68,11 @@ export interface Unit {
   learningOutcomes?: string; // Added field for Learning Outcomes (LOs)
 }
 
+export interface AnswerMark {
+  answer: string;
+  mark: string;
+}
+
 export interface Curriculum {
   classLevel: ClassLevel;
   subject: SubjectType;
@@ -91,9 +96,26 @@ export interface BlueprintItem {
   hasInternalChoice?: boolean; // Toggle for "Either/Or" options
   questionTextB?: string; // For Option B
   answerTextB?: string;   // For Option B
+  structuredAnswers?: AnswerMark[]; // New structured answer field
+  structuredAnswersB?: AnswerMark[]; // New structured answer field for Option B
+  structuredQuestions?: AnswerMark[]; // New structured field for Question
+  structuredQuestionsB?: AnswerMark[]; // New structured field for Question B
   knowledgeLevelB?: KnowledgeLevel; // Metadata for Option B
   cognitiveProcessB?: CognitiveProcess; // Metadata for Option B
   itemFormatB?: ItemFormat; // Metadata for Option B
+  time?: number; // Time in minutes
+  enableWriteContent?: boolean;
+  enableDiscourse?: boolean;
+  enableInputAnswer?: boolean;
+  enableFurtherInfo?: boolean;
+  furtherInfo?: string;
+  enableWriteContentB?: boolean;
+  enableDiscourseB?: boolean;
+  enableInputAnswerB?: boolean;
+  enableFurtherInfoB?: boolean;
+  furtherInfoB?: string;
+  discourseId?: string;
+  discourseIdB?: string;
 }
 
 export interface QuestionPatternSection {
@@ -103,6 +125,7 @@ export interface QuestionPatternSection {
   instruction?: string; // Direction for the user (e.g., 'Answer any 5')
   massViewHeader?: string; // Optional header for Mass View
   optionCount?: number; // Number of questions in this section that should have internal choice
+  timePerQuestion?: number; // New field for time allocation per question
 }
 
 export interface QuestionPaperType {

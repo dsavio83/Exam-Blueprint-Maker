@@ -1,90 +1,98 @@
-
 import React, { useState } from 'react';
+import { UserCircle, Lock, Eye, EyeOff, FileText } from 'lucide-react';
 import { User } from '../types';
-import { MOCK_USERS } from '../constants';
+import { login } from '../services/db';
 
-interface LoginProps {
-  onLogin: (user: User) => void;
-}
+const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [error, setError] = useState('');
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        try {
+            const result = await login(username, password);
+            if (result.success && result.user) {
+                onLogin(result.user);
+            } else {
+                setError(result.error || 'Invalid credentials');
+            }
+        } catch (err) {
+            setError('Connection error. Please ensure the backend is running.');
+        }
+    };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+            <div className="bg-white/90 backdrop-blur-sm p-10 rounded-2xl shadow-2xl w-full max-w-md border border-white">
+                <div className="text-center mb-10">
+                    <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg rotate-3">
+                        <FileText size={40} className="text-white" />
+                    </div>
+                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                        Exam Blueprint
+                    </h1>
+                    <p className="text-gray-500 mt-2">Quality Question Paper System</p>
+                </div>
 
-    const user = MOCK_USERS.find(u => u.username === username && u.password === password);
-    
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('Invalid username or password');
-    }
-  };
+                {error && (
+                    <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 mb-6 rounded text-sm font-medium">
+                        {error}
+                    </div>
+                )}
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden p-8 space-y-8">
-        <div className="text-center">
-          <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-          </div>
-          <h2 className="text-3xl font-extrabold text-slate-900">Blueprint Pro</h2>
-          <p className="mt-2 text-sm text-slate-500">Secure Access Portal</p>
+                <form onSubmit={handleLogin} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Username</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                <UserCircle size={18} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Enter username"
+                                className="block w-full pl-10 pr-3 py-3 rounded-xl border-gray-200 border bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                <Lock size={18} />
+                            </div>
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Enter password"
+                                className="block w-full pl-10 pr-12 py-3 rounded-xl border-gray-200 border bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
+                            <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 focus:outline-none transition-colors"
+                                onClick={() => setShowPassword(!showPassword)}
+                            >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl hover:scale-[1.01] transition-all"
+                    >
+                        Login
+                    </button>
+                </form>
+            </div>
         </div>
-        
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center font-medium border border-red-100">
-            {error}
-          </div>
-        )}
-        
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-1">
-            <label className="text-sm font-bold text-slate-700">Username</label>
-            <input
-              type="text"
-              required
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="Enter username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-bold text-slate-700">Password</label>
-            <input
-              type="password"
-              required
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 text-white py-4 rounded-xl font-extrabold text-lg shadow-xl hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95"
-          >
-            Login
-          </button>
-        </form>
-        
-        <div className="text-center text-xs text-slate-400">
-          <p>Demo Credentials:</p>
-          <p>admin / password123</p>
-          <p>teacher / password123</p>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default Login;

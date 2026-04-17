@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Role, ClassLevel, SubjectType, ExamTerm,
-    BlueprintItem, Blueprint, ItemFormat, KnowledgeLevel, CognitiveProcess, Unit, SubUnit, Curriculum, User, QuestionPaperType
+    BlueprintItem, Blueprint, ItemFormat, KnowledgeLevel, CognitiveProcess, Unit, SubUnit, Curriculum, User, QuestionPaperType, Discourse
 } from '@/types';
 import {
     generateBlueprintTemplate, getCurriculum,
     getDB, initDB, saveBlueprint, deleteBlueprint, getQuestionPaperTypes, getUsers,
-    getDefaultFormat, getDefaultKnowledge, getAllAccessibleBlueprints, filterCurriculumByTerm
+    getDefaultFormat, getDefaultKnowledge, getAllAccessibleBlueprints, filterCurriculumByTerm, getDiscourses
 } from '@/services/db';
 import {
     Trash2, Plus, Download, LogOut, FileText,
@@ -18,9 +18,9 @@ import jsPDF from 'jspdf';
 import BlueprintSharingModal from './BlueprintSharingModal';
 import { DocExportService } from '@/services/docExport';
 import { QuestionEntryForm } from './QuestionEntryForm';
-import { SummaryTable } from './SummaryTable';
 import { BlueprintMatrix } from './BlueprintMatrix';
 import { ReportsView } from './ReportsView';
+import { SummaryTable } from './SummaryTable';
 
 interface UserDashboardProps {
     user: User;
@@ -30,7 +30,7 @@ interface UserDashboardProps {
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
     const [currentBlueprint, setCurrentBlueprint] = useState<Blueprint | null>(null);
-    const [selectedClass, setSelectedClass] = useState<ClassLevel>(ClassLevel.CLASS_10);
+    const [selectedClass, setSelectedClass] = useState<ClassLevel>(ClassLevel._10);
     const [selectedSubject, setSelectedSubject] = useState<SubjectType>(SubjectType.TAMIL_AT);
     const [selectedTerm, setSelectedTerm] = useState<ExamTerm>(ExamTerm.FIRST);
     const [selectedSet, setSelectedSet] = useState('Set A');
@@ -41,24 +41,28 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const [isConfigExpanded, setIsConfigExpanded] = useState(true);
     const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
     const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
+    const [isSaving, setIsSaving] = useState(false);
     
     const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
+    const [discourses, setDiscourses] = useState<Discourse[]>([]);
 
     const printRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const load = async () => {
-            const [bps, pts, usersList] = await Promise.all([
+            const [bps, pts, usersList, discList] = await Promise.all([
                 getAllAccessibleBlueprints(user.id),
                 getQuestionPaperTypes(),
-                getUsers()
+                getUsers(),
+                getDiscourses()
             ]);
             setBlueprints(bps);
             setPaperTypes(pts);
             setAllUsers(usersList);
+            setDiscourses(discList);
         };
         load();
     }, [user.id, view]);
@@ -84,7 +88,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
     const handleCreateNew = () => {
         setCurrentBlueprint(null);
-        setSelectedClass(ClassLevel.CLASS_10);
+        setSelectedClass(ClassLevel._10);
         setSelectedSubject(SubjectType.TAMIL_AT);
         setSelectedTerm(ExamTerm.FIRST);
         setSelectedSet('Set A');
@@ -175,10 +179,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
     const handleSaveToDB = async () => {
         if (!currentBlueprint) return;
-        await saveBlueprint(currentBlueprint);
-        const updated = await getAllAccessibleBlueprints(user.id);
-        setBlueprints(updated);
-        alert("Blueprint saved successfully!");
+        setIsSaving(true);
+        try {
+            await saveBlueprint(currentBlueprint);
+            const updated = await getAllAccessibleBlueprints(user.id);
+            setBlueprints(updated);
+            alert("Blueprint saved successfully!");
+        } catch (error) {
+            console.error("Save failed:", error);
+            alert("Failed to save blueprint.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleDownloadPDF = async (type: string = 'all') => {
@@ -319,31 +331,39 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     };
 
     const updateItem = (id: string, field: keyof BlueprintItem, value: any) => {
-        if (!currentBlueprint) return;
-        const updatedItems = currentBlueprint.items.map(i => {
-            if (i.id === id) {
-                const updated = { ...i, [field]: value };
+        setCurrentBlueprint(prev => {
+            if (!prev) return prev;
+            const updatedItems = prev.items.map(i => {
+                if (i.id === id) {
+                    const updated = { ...i, [field]: value };
 
-                // User Requirement: 1-mark (option) questions must be Awareness/Knowledge level (BASIC)
-                if (updated.marksPerQuestion === 1) {
-                    updated.knowledgeLevel = KnowledgeLevel.BASIC;
-                    updated.knowledgeLevelB = KnowledgeLevel.BASIC;
-                }
-
-                // User Requirement: Options (A and B) must be at the same knowledge level
-                if (updated.hasInternalChoice) {
-                    if (field === 'knowledgeLevel') {
-                        updated.knowledgeLevelB = value as KnowledgeLevel;
-                    } else if (field === 'knowledgeLevelB') {
-                        updated.knowledgeLevel = value as KnowledgeLevel;
+                    // User Requirement: 1-mark (option) questions must be Awareness/Knowledge level (BASIC)
+                    if (updated.marksPerQuestion === 1) {
+                        updated.knowledgeLevel = KnowledgeLevel.BASIC;
+                        updated.knowledgeLevelB = KnowledgeLevel.BASIC;
                     }
-                }
 
-                return updated;
-            }
-            return i;
+                    // User Requirement: Discourse not available for 1 or 2 mark questions
+                    if (updated.marksPerQuestion <= 2) {
+                        updated.enableDiscourse = false;
+                        updated.enableDiscourseB = false;
+                    }
+
+                    // User Requirement: Options (A and B) must be at the same knowledge level
+                    if (updated.hasInternalChoice) {
+                        if (field === 'knowledgeLevel') {
+                            updated.knowledgeLevelB = value as KnowledgeLevel;
+                        } else if (field === 'knowledgeLevelB') {
+                            updated.knowledgeLevel = value as KnowledgeLevel;
+                        }
+                    }
+
+                    return updated;
+                }
+                return i;
+            });
+            return { ...prev, items: updatedItems };
         });
-        setCurrentBlueprint({ ...currentBlueprint, items: updatedItems });
     };
 
     const moveItem = (itemId: string, newUnitId: string, newSectionId: string, newSubUnitId?: string) => {
@@ -396,33 +416,42 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                 {/* LIST VIEW */}
                 {view === 'list' && (
                     <div>
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-800">Blueprints</h2>
-                                <div className="flex gap-2 mt-3">
-                                    <button
-                                        onClick={() => setFilterView('all')}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filterView === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        All
-                                    </button>
-                                    <button
-                                        onClick={() => setFilterView('owned')}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filterView === 'owned' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        My Blueprints
-                                    </button>
-                                    <button
-                                        onClick={() => setFilterView('shared')}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filterView === 'shared' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        Shared with Me
-                                    </button>
+                        <div className="mb-8">
+                            <div className="flex justify-between items-center bg-white/40 backdrop-blur-md p-4 rounded-2xl border border-white/60 shadow-sm mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-2 h-8 bg-blue-600 rounded-full"></div>
+                                    <h2 className="text-2xl font-black text-gray-800 tracking-tight">Blueprints</h2>
                                 </div>
+                                <button 
+                                    onClick={handleCreateNew} 
+                                    className="group relative overflow-hidden bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-blue-200 hover:shadow-blue-300 transition-all active:scale-95 flex items-center font-bold text-sm"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
+                                    <Plus className="mr-1.5" size={18} /> 
+                                    <span>New</span>
+                                </button>
                             </div>
-                            <button onClick={handleCreateNew} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center">
-                                <Plus className="mr-2" /> Create New
-                            </button>
+
+                            <div className="flex flex-wrap gap-2 bg-gray-100/50 p-1.5 rounded-2xl w-fit">
+                                <button
+                                    onClick={() => setFilterView('all')}
+                                    className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${filterView === 'all' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
+                                >
+                                    All
+                                </button>
+                                <button
+                                    onClick={() => setFilterView('owned')}
+                                    className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${filterView === 'owned' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
+                                >
+                                    Owned
+                                </button>
+                                <button
+                                    onClick={() => setFilterView('shared')}
+                                    className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${filterView === 'shared' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
+                                >
+                                    Shared
+                                </button>
+                            </div>
                         </div>
 
                         {(() => {
@@ -439,83 +468,223 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                     <p>No blueprints found.</p>
                                 </div>
                             ) : (
-                                <div className="bg-white rounded shadow overflow-hidden">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead className="bg-gray-100 border-b">
-                                            <tr>
-                                                <th className="p-4 font-semibold text-gray-600">Status</th>
-                                                <th className="p-4 font-semibold text-gray-600">Date</th>
-                                                <th className="p-4 font-semibold text-gray-600">Paper Type</th>
-                                                <th className="p-4 font-semibold text-gray-600">Class</th>
-                                                <th className="p-4 font-semibold text-gray-600">Subject</th>
-                                                <th className="p-4 font-semibold text-gray-600">Term</th>
-                                                <th className="p-4 font-semibold text-gray-600">Set</th>
-                                                <th className="p-4 font-semibold text-gray-600 text-center">Marks</th>
-                                                <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredBlueprints.map(bp => {
-                                                const isOwner = bp.ownerId === user.id;
-                                                const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
+                                <>
+                                    {/* Desktop Table View */}
+                                    <div className="hidden lg:block bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-gray-50 border-b border-gray-100">
+                                                <tr>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider">Status</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider">Date</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider">Paper Type</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider">Class</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider">Subject</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider">Term</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider text-center">Set</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider text-center">Marks</th>
+                                                    <th className="p-4 font-bold text-gray-600 uppercase text-xs tracking-wider text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredBlueprints.map(bp => {
+                                                    const isOwner = bp.ownerId === user.id;
+                                                    const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
 
-                                                return (
-                                                    <tr key={bp.id} className="border-b hover:bg-gray-50">
-                                                        <td className="p-4">
-                                                            <div className="flex flex-col gap-1">
-                                                                {isOwner ? (
-                                                                    <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit">
-                                                                        <UserCircle size={12} />
-                                                                        Owner
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit">
-                                                                        <Share2 size={12} />
-                                                                        Shared
-                                                                    </span>
-                                                                )}
-                                                                {bp.isConfirmed && (
-                                                                    <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit">
-                                                                        <CheckCircle size={12} />
-                                                                        Confirmed
-                                                                    </span>
-                                                                )}
+                                                    return (
+                                                        <tr key={bp.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
+                                                            <td className="p-4">
+                                                                <div className="flex flex-col gap-1">
+                                                                    {isOwner ? (
+                                                                        <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase w-fit">
+                                                                            <UserCircle size={12} />
+                                                                            Owner
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase w-fit">
+                                                                            <Share2 size={12} />
+                                                                            Shared
+                                                                        </span>
+                                                                    )}
+                                                                    {bp.isConfirmed && (
+                                                                        <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase w-fit">
+                                                                            <CheckCircle size={12} />
+                                                                            Confirmed
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4 text-sm text-gray-500 font-medium">{new Date(bp.createdAt).toLocaleDateString()}</td>
+                                                            <td className="p-4 font-bold text-blue-700">
+                                                                {bp.questionPaperTypeName || 'N/A'}
+                                                                {!isOwner && ownerUser && <div className="text-xs text-gray-400 mt-0.5 font-normal italic">Shared by {ownerUser.name}</div>}
+                                                            </td>
+                                                            <td className="p-4 text-gray-700">Class {bp.classLevel === 'SSLC' ? '11 (SSLC)' : bp.classLevel}</td>
+                                                            <td className="p-4 text-gray-700">{bp.subject}</td>
+                                                            <td className="p-4 text-gray-600 text-sm font-medium">{bp.examTerm}</td>
+                                                            <td className="p-4 text-sm text-center font-bold text-gray-800">{bp.setId || 'Set A'}</td>
+                                                            <td className="p-4 text-center">
+                                                                <span className="bg-gray-100 px-2 py-1 rounded font-bold text-gray-700">{bp.totalMarks}</span>
+                                                            </td>
+                                                            <td className="p-4 text-right">
+                                                                <div className="flex items-center justify-end gap-3">
+                                                                    <button
+                                                                        onClick={() => handleEdit(bp)}
+                                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${bp.isLocked ? 'text-gray-400 cursor-not-allowed bg-gray-50' : 'text-blue-600 hover:bg-blue-100 bg-blue-50'} `}
+                                                                        disabled={bp.isLocked}
+                                                                    >
+                                                                        {bp.isLocked ? <Lock size={14} /> : <Edit2 size={14} />}
+                                                                        Edit
+                                                                    </button>
+                                                                    {isOwner && (
+                                                                        <>
+                                                                            <button 
+                                                                                onClick={() => setSharingBlueprintId(bp.id)} 
+                                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm text-green-700 hover:bg-green-100 bg-green-50 transition-all"
+                                                                            >
+                                                                                <Share2 size={14} /> Share
+                                                                            </button>
+                                                                            <button 
+                                                                                onClick={() => handleDelete(bp.id)} 
+                                                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${bp.isLocked ? 'text-gray-300' : 'text-red-500 hover:bg-red-50 bg-red-50/30'}`} 
+                                                                                disabled={bp.isLocked}
+                                                                            >
+                                                                                <Trash2 size={14} />
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Mobile Card View */}
+                                    <div className="lg:hidden grid grid-cols-1 gap-6 pb-10">
+                                        {filteredBlueprints.map((bp, index) => {
+                                            const isOwner = bp.ownerId === user.id;
+                                            const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
+                                            
+                                            // Dynamic colorful patterns based on index or ID
+                                            const colors = [
+                                                'from-blue-600 to-indigo-700',
+                                                'from-purple-600 to-pink-600',
+                                                'from-emerald-500 to-teal-700',
+                                                'from-rose-500 to-orange-600',
+                                                'from-amber-500 to-yellow-600',
+                                                'from-cyan-500 to-blue-500'
+                                            ];
+                                            const bgGradient = colors[index % colors.length];
+
+                                            return (
+                                                <div 
+                                                    key={bp.id} 
+                                                    className="relative bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 transform active:scale-95 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
+                                                    style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
+                                                >
+                                                    {/* Pattern Header */}
+                                                    <div className={`h-24 bg-gradient-to-r ${bgGradient} relative overflow-hidden`}>
+                                                        {/* Abstract Patterns */}
+                                                        <div className="absolute inset-0 opacity-20">
+                                                            <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white blur-2xl"></div>
+                                                            <div className="absolute top-5 -left-10 w-24 h-24 rounded-full bg-white blur-xl"></div>
+                                                            <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '20px 20px' }}></div>
+                                                        </div>
+                                                        
+                                                        {/* Bottom Curve */}
+                                                        <div className="absolute bottom-0 left-0 right-0 h-6 bg-white" style={{ borderRadius: '50% 50% 0 0 / 100% 100% 0 0' }}></div>
+
+                                                        {/* Status Badges */}
+                                                        <div className="absolute top-4 left-4 flex flex-wrap gap-2">
+                                                            {isOwner ? (
+                                                                <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest border border-white/30">
+                                                                    Owner
+                                                                </span>
+                                                            ) : (
+                                                                <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest border border-white/30">
+                                                                    Shared
+                                                                </span>
+                                                            )}
+                                                            {bp.isConfirmed && (
+                                                                <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest border border-white/30">
+                                                                    Confirmed
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white p-2 rounded-xl border border-white/30">
+                                                            <div className="text-[10px] uppercase font-bold text-center leading-tight">Marks</div>
+                                                            <div className="text-xl font-black text-center">{bp.totalMarks}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="px-6 pb-6 -mt-6">
+                                                        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-50 mb-4">
+                                                            <h3 className="text-xl font-black text-gray-800 leading-tight mb-1">
+                                                                {bp.questionPaperTypeName || 'N/A'}
+                                                            </h3>
+                                                            {!isOwner && ownerUser && (
+                                                                <div className="text-xs text-blue-600 font-bold mb-2">By {ownerUser.name}</div>
+                                                            )}
+                                                            <div className="text-xs text-gray-400 font-medium">Created on {new Date(bp.createdAt).toLocaleDateString()}</div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-3 mb-6">
+                                                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                                <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Class</div>
+                                                                <div className="font-bold text-gray-700">Class {bp.classLevel === 'SSLC' ? '11 (SSLC)' : bp.classLevel}</div>
                                                             </div>
-                                                        </td>
-                                                        <td className="p-4 text-sm text-gray-500">{new Date(bp.createdAt).toLocaleDateString()}</td>
-                                                        <td className="p-4 font-medium text-blue-600">
-                                                            {bp.questionPaperTypeName || 'N/A'}
-                                                            {!isOwner && ownerUser && <div className="text-xs text-gray-500 mt-1">by {ownerUser.name}</div>}
-                                                        </td>
-                                                        <td className="p-4">Class {bp.classLevel}</td>
-                                                        <td className="p-4">{bp.subject}</td>
-                                                        <td className="p-4 text-sm">{bp.examTerm}</td>
-                                                        <td className="p-4 text-sm">{bp.setId || 'Set A'}</td>
-                                                        <td className="p-4 text-center">{bp.totalMarks}</td>
-                                                        <td className="p-4 text-right">
-                                                            <div className="flex items-center justify-end gap-2">
-                                                                <button
-                                                                    onClick={() => handleEdit(bp)}
-                                                                    className={`${bp.isLocked ? 'text-gray-400' : 'text-blue-600'} hover:underline flex items-center gap-1`}
-                                                                >
-                                                                    {bp.isLocked && <Lock size={14} />}
-                                                                    Edit
-                                                                </button>
-                                                                {isOwner && (
-                                                                    <>
-                                                                        <button onClick={() => setSharingBlueprintId(bp.id)} className="text-green-600 hover:underline flex items-center gap-1"><Share2 size={14} /> Share</button>
-                                                                        <button onClick={() => handleDelete(bp.id)} className={`${bp.isLocked ? 'text-gray-300' : 'text-red-500'} hover:underline`} disabled={bp.isLocked}>Delete</button>
-                                                                    </>
-                                                                )}
+                                                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                                <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Term</div>
+                                                                <div className="font-bold text-gray-700">{bp.examTerm}</div>
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                                <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Subject</div>
+                                                                <div className="font-bold text-gray-700 truncate">{bp.subject}</div>
+                                                            </div>
+                                                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                                <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Set</div>
+                                                                <div className="font-bold text-gray-700">{bp.setId || 'Set A'}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                onClick={() => handleEdit(bp)}
+                                                                disabled={bp.isLocked}
+                                                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all ${bp.isLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 active:shadow-none active:translate-y-0.5'}`}
+                                                            >
+                                                                {bp.isLocked ? <Lock size={16} /> : <Edit2 size={16} />}
+                                                                Edit
+                                                            </button>
+                                                            {isOwner && (
+                                                                <>
+                                                                    <button 
+                                                                        onClick={() => setSharingBlueprintId(bp.id)} 
+                                                                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm uppercase tracking-wider bg-green-500 text-white shadow-lg shadow-green-100 active:shadow-none active:translate-y-0.5 transition-all text-center"
+                                                                    >
+                                                                        <Share2 size={16} /> Share
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleDelete(bp.id)} 
+                                                                        disabled={bp.isLocked}
+                                                                        className={`w-12 flex items-center justify-center rounded-xl transition-all ${bp.isLocked ? 'bg-gray-100 text-gray-200' : 'bg-red-50 text-red-500 border border-red-100 active:bg-red-500 active:text-white'}`}
+                                                                    >
+                                                                        <Trash2 size={20} />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
                             );
+
                         })()}
                     </div>
                 )}
@@ -565,7 +734,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                 onChange={e => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)}
                                                 className="w-full border p-2 rounded bg-gray-50 disabled:opacity-60"
                                             >
-                                                {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
+                                                {Object.values(ClassLevel).filter(v => typeof v === 'number' || v === 'SSLC').map(v => <option key={v} value={v}>Class {v === 'SSLC' ? '11 (SSLC)' : v}</option>)}
                                             </select>
                                         </div>
                                         <div>
@@ -659,7 +828,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                 <button onClick={handleConfirmPattern} className="bg-blue-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow-md hover:bg-blue-700 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"><CheckCircle className="mr-1 md:mr-2" size={18} /> Confirm</button>
                                             </>
                                         )}
-                                        <button onClick={handleSaveToDB} className="bg-green-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow hover:bg-green-700 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"><Save className="mr-1 md:mr-2" size={18} /> Save Blueprint</button>
+                                        <button 
+                                            onClick={handleSaveToDB} 
+                                            disabled={isSaving}
+                                            className="bg-green-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow hover:bg-green-700 disabled:bg-green-400 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"
+                                        >
+                                            {isSaving ? (
+                                                <RefreshCw className="mr-1 md:mr-2 animate-spin" size={18} />
+                                            ) : (
+                                                <Save className="mr-1 md:mr-2" size={18} />
+                                            )}
+                                            {isSaving ? 'Saving...' : 'Save Blueprint'}
+                                        </button>
                                     </div>
                                 </div>
 
@@ -687,6 +867,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                         <ReportsView
                                             blueprint={currentBlueprint}
                                             curriculum={curriculum}
+                                            discourses={discourses}
                                             onDownloadPDF={handleDownloadPDF}
                                             onDownloadWord={handleDownloadWord}
                                         />

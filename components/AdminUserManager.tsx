@@ -69,7 +69,7 @@ const AdminUserManager = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center border-b pb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
                 <h2 className="text-xl font-bold text-gray-800">User Management</h2>
                 <button
                     onClick={() => {
@@ -77,14 +77,15 @@ const AdminUserManager = () => {
                         setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
                         setIsFormOpen(true);
                     }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded flex items-center shadow hover:bg-blue-700"
+                    className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded flex items-center justify-center shadow hover:bg-blue-700 transition-colors"
                 >
-                    <Plus size={18} className="mr-2" /> Add User
+                    <Plus size={18} className="mr-2" />
+                    <span>Add User</span>
                 </button>
             </div>
 
             {isFormOpen && (
-                <div className="bg-white p-6 rounded shadow border-l-4 border-blue-500 mb-6">
+                <div className="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-blue-500 mb-6">
                     <h3 className="font-bold mb-4">{editingUser ? 'Edit User' : 'Add New User'}</h3>
                     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -164,43 +165,87 @@ const AdminUserManager = () => {
                 </div>
             )}
 
-            <div className="bg-white rounded shadow overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50 border-b">
-                        <tr>
-                            <th className="p-4 font-semibold text-gray-600">Name / Email</th>
-                            <th className="p-4 font-semibold text-gray-600">Username</th>
-                            <th className="p-4 font-semibold text-gray-600">Role</th>
-                            <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {userList.map(u => (
-                            <tr key={u.id} className="border-b hover:bg-gray-50">
-                                <td className="p-4">
-                                    <div className="font-medium text-gray-900">{u.name}</div>
-                                    <div className="text-xs text-gray-500">{u.email || '-'}</div>
-                                </td>
-                                <td className="p-4 text-gray-600 font-mono text-sm">{u.username}</td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-                                        {u.role}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-right">
-                                    <button onClick={() => handleEdit(u)} className="text-blue-600 hover:text-blue-800 mr-3">
-                                        <Edit2 size={16} />
+            <div className="bg-white rounded shadow border overflow-hidden">
+                {/* Desktop Table View */}
+                <div className="hidden md:block">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                            <tr>
+                                <th className="p-4 font-semibold text-gray-600">Name / Email</th>
+                                <th className="p-4 font-semibold text-gray-600">Username</th>
+                                <th className="p-4 font-semibold text-gray-600">Role</th>
+                                <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {userList.map(u => (
+                                <tr key={u.id} className="border-b hover:bg-gray-50">
+                                    <td className="p-4">
+                                        <div className="font-medium text-gray-900">{u.name}</div>
+                                        <div className="text-xs text-gray-500">{u.email || '-'}</div>
+                                    </td>
+                                    <td className="p-4 text-gray-600 font-mono text-sm">{u.username}</td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                            {u.role}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        <div className="flex justify-end gap-3">
+                                            <button onClick={() => handleEdit(u)} className="text-blue-600 hover:text-blue-800" title="Edit User">
+                                                <Edit2 size={16} />
+                                            </button>
+                                            {u.username !== 'admin' && (
+                                                <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700" title="Delete User">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden divide-y">
+                    {userList.map(u => (
+                        <div key={u.id} className="p-4 space-y-3">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="font-bold text-gray-900">{u.name}</div>
+                                    <div className="text-sm text-gray-500">{u.email || 'No email provided'}</div>
+                                </div>
+                                <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                    {u.role}
+                                </span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-sm">
+                                <div className="text-gray-600">
+                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Username</span>
+                                    <span className="font-mono">{u.username}</span>
+                                </div>
+                                <div className="flex gap-4">
+                                    <button onClick={() => handleEdit(u)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors">
+                                        <Edit2 size={20} />
                                     </button>
                                     {u.username !== 'admin' && (
-                                        <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700">
-                                            <Trash2 size={16} />
+                                        <button onClick={() => handleDelete(u.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                                            <Trash2 size={20} />
                                         </button>
                                     )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {userList.length === 0 && (
+                        <div className="p-8 text-center text-gray-500 italic">
+                            No users found.
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -19,7 +19,7 @@ const AdminPaperTypeManager = () => {
         description: '',
         sections: []
     });
-    const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1, optionCount: 0 };
+    const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1, optionCount: 0, timePerQuestion: 0 };
 
     useEffect(() => {
         const load = async () => {
@@ -105,7 +105,7 @@ const AdminPaperTypeManager = () => {
                             onClick={handleAddNew}
                             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg font-bold shadow-md transition-all text-sm flex items-center gap-2"
                         >
-                            <Plus size={18} /> Add New Paper Type
+                            <Plus size={18} /> Add New <span className="hidden sm:inline">Paper Type</span>
                         </button>
                     )}
                 </div>
@@ -142,8 +142,13 @@ const AdminPaperTypeManager = () => {
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
                         <div className="flex justify-between items-center mb-3">
                             <label className="text-xs font-bold text-gray-500 uppercase">Sections Configuration</label>
-                            <div className="text-xs font-bold text-purple-600">
-                                Total Marks: {(formData.sections || []).reduce((sum, s) => sum + (s.marks * s.count), 0)}
+                            <div className="flex gap-4">
+                                <div className="text-xs font-bold text-purple-600">
+                                    Total Marks: {(formData.sections || []).reduce((sum, s) => sum + (s.marks * s.count), 0)}
+                                </div>
+                                <div className="text-xs font-bold text-blue-600 border-l pl-4">
+                                    Total Time: {(formData.sections || []).reduce((sum, s) => sum + ((s.timePerQuestion || 0) * s.count), 0)} mins
+                                </div>
                             </div>
                         </div>
 
@@ -171,6 +176,16 @@ const AdminPaperTypeManager = () => {
                                                 value={s.optionCount || 0} 
                                                 onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} 
                                                 title="Number of questions in this section that have internal choices"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] uppercase font-bold text-gray-400">Time/Q (min):</span>
+                                            <input 
+                                                type="number" 
+                                                className="border w-12 p-1 rounded text-center text-sm" 
+                                                value={s.timePerQuestion || 0} 
+                                                onChange={e => updateSection(idx, 'timePerQuestion', parseInt(e.target.value) || 0)} 
+                                                title="Time allocated per question in this section (in minutes)"
                                             />
                                         </div>
                                         <div className="ml-auto flex items-center">
@@ -229,7 +244,7 @@ const AdminPaperTypeManager = () => {
                             <div className="flex-1 space-y-2 mb-4 bg-gray-50/50 p-2 rounded-lg">
                                 {t.sections.slice(0, 3).map((s, i) => (
                                     <div key={i} className="text-[11px] text-gray-600 flex justify-between border-b border-gray-100 pb-1">
-                                        <span>{s.count} qns × {s.marks}M {s.optionCount ? `(${s.optionCount} Opt)` : ''}</span>
+                                        <span>{s.count} qns × {s.marks}M {s.timePerQuestion ? `· ${s.timePerQuestion}m` : ''}</span>
                                         <span className="font-bold text-gray-400">{s.marks * s.count}M</span>
                                     </div>
                                 ))}

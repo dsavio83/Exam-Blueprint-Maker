@@ -131,7 +131,127 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Mobile View - Card Style */}
+            <div className="grid grid-cols-1 gap-4 md:hidden">
+                {filteredBlueprints.length > 0 ? (
+                    filteredBlueprints.map((bp) => (
+                        <div key={bp.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-4">
+                            <div className="flex items-start justify-between">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                                        <FileText size={20} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-blue-700 truncate">Class {bp.classLevel} - {bp.subject}</span>
+                                            <span className="text-[10px] bg-blue-50 text-blue-600 font-bold uppercase w-fit px-1.5 py-0.5 rounded border border-blue-100 mt-1">
+                                                {bp.setId || 'Set A'}
+                                            </span>
+                                        </div>
+                                        <div className="text-[11px] text-gray-500 mt-2 space-y-1">
+                                            <div className="flex items-center gap-1">
+                                                <BookOpen size={10} />
+                                                <span className="font-semibold truncate">{bp.questionPaperTypeName}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Clock size={10} />
+                                                <span>{bp.examTerm} • {bp.academicYear || '2025-26'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button
+                                    onClick={() => setSelectedShareBp(bp.id)}
+                                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-colors flex-shrink-0 ${bp.sharedWith?.length ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'}`}
+                                >
+                                    <Share2 size={10} />
+                                    {bp.sharedWith?.length || 0}
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between border-t border-gray-50 pt-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[10px]">
+                                        <UserIcon size={12} />
+                                    </div>
+                                    <div>
+                                        <div className="text-[12px] font-medium text-gray-800 leading-none">{getUserName(bp.ownerId)}</div>
+                                        <div className="text-[9px] text-gray-400 flex items-center gap-1 mt-1">
+                                            <Calendar size={9} /> {new Date(bp.createdAt).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1 justify-end max-w-[50%]">
+                                    {bp.isConfirmed ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 gap-1 uppercase">
+                                            <CheckCircle size={9} /> Confirmed
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-gray-100 text-gray-800 gap-1 uppercase">
+                                            <Clock size={9} /> Draft
+                                        </span>
+                                    )}
+                                    {bp.isLocked && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 gap-1 uppercase">
+                                            <Lock size={9} /> Locked
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between bg-gray-50/50 rounded-lg p-1">
+                                <button
+                                    onClick={() => onEditBlueprint(bp)}
+                                    className="flex-1 flex justify-center p-2 text-blue-600 hover:bg-white hover:shadow-sm rounded-md transition-all"
+                                    title="View/Edit Paper"
+                                >
+                                    <Edit2 size={18} />
+                                </button>
+                                <button
+                                    onClick={() => handleToggleLock(bp.id)}
+                                    className={`flex-1 flex justify-center p-2 rounded-md transition-all ${bp.isLocked ? 'text-amber-600 hover:bg-white hover:shadow-sm' : 'text-gray-400 hover:bg-white'}`}
+                                    title={bp.isLocked ? "Unlock" : "Lock"}
+                                >
+                                    {bp.isLocked ? <Lock size={18} /> : <Unlock size={18} />}
+                                </button>
+                                <button
+                                    onClick={() => handleToggleHidden(bp.id)}
+                                    className={`flex-1 flex justify-center p-2 rounded-md transition-all ${bp.isHidden ? 'text-gray-400 hover:bg-white' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
+                                    title={bp.isHidden ? "Unhide" : "Hide"}
+                                >
+                                    {bp.isHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                                {bp.isConfirmed && (
+                                    <button
+                                        onClick={() => handleResetConfirmation(bp.id)}
+                                        className="flex-1 flex justify-center p-2 text-orange-600 hover:bg-white hover:shadow-sm rounded-md transition-all"
+                                        title="Reset"
+                                    >
+                                        <RotateCcw size={18} />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => handleDelete(bp.id)}
+                                    className="flex-1 flex justify-center p-2 text-red-500 hover:bg-white hover:shadow-sm hover:text-red-700 rounded-md transition-all"
+                                    title="Delete"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center text-gray-500">
+                        <FileText size={40} className="mx-auto text-gray-200 mb-2" />
+                        <p>No question papers found</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Desktop View - Table Style */}
+            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>

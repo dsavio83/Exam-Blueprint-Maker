@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bold, Italic, Underline, List, ListOrdered, Image, Table as TableIcon, Plus, Trash2 } from 'lucide-react';
+import { Bold, Italic, Underline, List, ListOrdered, Image, Table as TableIcon, Plus, Trash2, ListChecks } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
-const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = false }: any) => {
+const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = false, onToggleStructured }: any) => {
     const ref = useRef<HTMLDivElement>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean, target: any }>({ x: 0, y: 0, visible: false, target: null });
 
@@ -11,7 +11,7 @@ const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = fals
         if (ref.current && document.activeElement !== ref.current) {
             const cleanHTML = DOMPurify.sanitize(value || '', {
                 ADD_TAGS: ['table', 'tbody', 'tr', 'th', 'td', 'br', 'span', 'b', 'i', 'u', 'img', 'ul', 'ol', 'li', 'p'],
-                ADD_ATTR: ['style', 'class', 'src', 'alt', 'width', 'height', 'border', 'padding', 'margin'],
+                ADD_ATTR: ['style', 'class', 'src', 'alt', 'width', 'height', 'border', 'padding', 'margin', 'id', 'contenteditable'],
             });
             if (ref.current.innerHTML !== cleanHTML) {
                 ref.current.innerHTML = cleanHTML;
@@ -30,22 +30,104 @@ const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = fals
             const rawHTML = ref.current.innerHTML;
             const cleanHTML = DOMPurify.sanitize(rawHTML, {
                 ADD_TAGS: ['table', 'tbody', 'tr', 'th', 'td', 'br', 'span', 'b', 'i', 'u', 'img', 'ul', 'ol', 'li', 'p'],
-                ADD_ATTR: ['style', 'class', 'src', 'alt', 'width', 'height', 'border', 'padding', 'margin'],
+                ADD_ATTR: ['style', 'class', 'src', 'alt', 'width', 'height', 'border', 'padding', 'margin', 'id', 'contenteditable'],
             });
             onChange(cleanHTML);
         }
     };
 
+    const tabCount = useRef(0);
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Tab') {
             e.preventDefault();
-            if (isAnswerTab) {
-                // Insert a right-aligned score marker for answers
-                document.execCommand('insertHTML', false, '&nbsp;<span style="float:right; font-weight:bold; margin-left: 20px;">( &nbsp;&nbsp; )</span>&nbsp;');
+            tabCount.current += 1;
+            
+            if (isAnswerTab && tabCount.current >= 3) {
+                // Intelligently delete the spaces from previous tabs
+                const selection = window.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    const node = range.startContainer;
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const text = node.textContent || '';
+                        const offset = range.startOffset;
+                        let count = 0;
+                        // Count trailing spaces/nbsp up to 16
+                        while (count < 16 && offset - 1 - count >= 0) {
+                            const char = text[offset - 1 - count];
+                            if (char === ' ' || char === '\u00a0') {
+                                count++;
+                            } else {
+                                break;
+                            }
+                        }
+                        if (count > 0) {
+                            const delRange = document.createRange();
+                            delRange.setStart(node, offset - count);
+                            delRange.setEnd(node, offset);
+                            selection.removeAllRanges();
+                            selection.addRange(delRange);
+                            document.execCommand('delete');
+                        }
+                    }
+                }
+
+                // Insert a right-aligned score marker for answers on the 3rd tab
+                const markerId = `mark-${Date.now()}`;
+                // Use a marker with a special class for the editor and a data attribute 
+                document.execCommand('insertHTML', false, `<span id="${markerId}" class="mark-indicator" contenteditable="true" data-type="mark-box"></span>`);
+                
+                // Move cursor inside the marker
+                setTimeout(() => {
+                    const el = document.getElementById(markerId);
+                    if (el) {
+                        const range = document.createRange();
+                        const sel = window.getSelection();
+                        range.selectNodeContents(el);
+                        range.collapse(false);
+                        sel?.removeAllRanges();
+                        sel?.addRange(range);
+                    }
+                    handleInput(); 
+                }, 0);
+                
+                tabCount.current = 0; 
             } else {
-                document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;');
+                // Insert spaces for 1st, 2nd tab OR when not in Answer Tab mode
+                // Using \u00a0 directly to avoid ambiguity
+                document.execCommand('insertHTML', false, '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0');
             }
             handleInput();
+        } else if (e.key === '5' && ref.current) {
+            // Check for 0.5 typing to auto-convert to ½
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const container = range.startContainer;
+                const offset = range.startOffset;
+                
+                if (container.nodeType === Node.TEXT_NODE) {
+                    const text = container.textContent || '';
+                    const before = text.substring(0, offset);
+                    if (before.endsWith('0.')) {
+                        e.preventDefault();
+                        // Delete the '0.'
+                        const newRange = document.createRange();
+                        newRange.setStart(container, offset - 2);
+                        newRange.setEnd(container, offset);
+                        selection.removeAllRanges();
+                        selection.addRange(newRange);
+                        document.execCommand('delete');
+                        // Insert '½'
+                        document.execCommand('insertText', false, '½');
+                        handleInput();
+                    }
+                }
+            }
+        } else {
+            // Reset tab count on any other key
+            tabCount.current = 0;
         }
     };
 
@@ -165,7 +247,39 @@ const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = fals
                 <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertOrderedList'); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Number List"><ListOrdered size={14} /></button>
                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button type="button" onMouseDown={(e) => { e.preventDefault(); handleImageUpload(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Image"><Image size={14} /></button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Table"><TableIcon size={14} /></button>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="p-1.5 hover:bg-gray-200 rounded text-gray-700 transition-colors" title="Insert Table (வழக்கமான அட்டவணை)"><TableIcon size={14} /></button>
+                {onToggleStructured && (
+                    <button 
+                        type="button" 
+                        onMouseDown={(e) => { e.preventDefault(); onToggleStructured(); }} 
+                        className="p-1.5 px-3 hover:bg-green-100 text-green-700 rounded transition-all flex items-center gap-1.5 border border-green-200 shadow-sm active:scale-95 group" 
+                        title="Input Answer Table (விடை அட்டவணை)"
+                    >
+                        <ListChecks size={16} className="group-hover:scale-110 transition-transform" />
+                        <span className="text-[11px] font-black whitespace-nowrap uppercase tracking-tighter">Input Answer</span>
+                    </button>
+                )}
+                
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+                {isAnswerTab && (
+                    <div className="flex items-center gap-0.5 px-1 py-0.5 bg-green-50 rounded border border-green-100 ml-1">
+                        <span className="text-[9px] font-black text-green-600 uppercase tracking-tighter mr-1 ml-1">Bullets:</span>
+                        {['•', '▪', '➢', '➔', '✔', '★', '❖', '✅'].map(b => (
+                            <button
+                                key={b}
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    exec('insertText', b + '\u00a0');
+                                }}
+                                className="w-6 h-6 flex items-center justify-center bg-white hover:bg-green-500 hover:text-white border border-gray-100 rounded text-xs transition-all active:scale-90"
+                            >
+                                {b}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {isAnswerTab && (
                     <div className="ml-auto px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider">
@@ -181,7 +295,7 @@ const SimpleRichTextEditor = ({ value, onChange, placeholder, isAnswerTab = fals
                 onBlur={handleInput}
                 onKeyDown={handleKeyDown}
                 onContextMenu={handleContextMenu}
-                placeholder={placeholder}
+                data-placeholder={placeholder}
             />
 
             {/* Table Context Menu */}

@@ -14,12 +14,29 @@ const PURPLE_SOFT = "F5E6FF";
  */
 export class DocExportService {
 
-    private static createTableCell(text: string, options: { 
-        bold?: boolean, 
-        size?: number, 
-        align?: any, 
-        rowSpan?: number, 
-        colSpan?: number, 
+    private static getItemQuestionCount(item: Blueprint["items"][number]) {
+        return Math.max(item.questionCount || 1, 1);
+    }
+
+    private static getItemTotalScore(item: Blueprint["items"][number]) {
+        return this.getItemQuestionCount(item) * (item.marksPerQuestion || 0);
+    }
+
+    private static getItemTime(item: Blueprint["items"][number]) {
+        if (item.time !== undefined && item.time !== null && item.time !== 0) return item.time.toString();
+
+        const marks = item.marksPerQuestion || 0;
+        if (marks <= 2) return "5";
+        if (marks <= 4) return "10";
+        return "15";
+    }
+
+    private static createTableCell(text: string, options: {
+        bold?: boolean,
+        size?: number,
+        align?: any,
+        rowSpan?: number,
+        colSpan?: number,
         shading?: string,
         italic?: boolean,
         font?: string
@@ -53,9 +70,9 @@ export class DocExportService {
         });
     }
 
-    private static createRichParagraph(text: string, options: { 
-        bold?: boolean, 
-        size?: number, 
+    private static createRichParagraph(text: string, options: {
+        bold?: boolean,
+        size?: number,
         align?: any,
         color?: string,
         italic?: boolean
@@ -87,9 +104,9 @@ export class DocExportService {
 
     private static getTermTamil(term: string) {
         switch (term) {
-            case 'First Term Exam': return 'முதல்';
-            case 'Second Term Exam': return 'இரண்டாம்';
-            case 'Third Term Exam': return 'மூன்றாம்';
+            case 'First Term Summative': return 'முதல்';
+            case 'Second Term Summative': return 'இரண்டாம்';
+            case 'Third Term Summative': return 'மூன்றாம்';
             default: return 'முதல்';
         }
     }
@@ -157,9 +174,9 @@ export class DocExportService {
                     this.createRichParagraph(setId, { bold: true, size: 28 }),
                     this.createRichParagraph("சமக்ர சிக்ஷா கேரளம்", { bold: true, size: 36, align: AlignmentType.CENTER }),
                     this.createRichParagraph("Weightage Analysis / Table of Specifications", { bold: true, italic: true, size: 28, color: "FF0080", align: AlignmentType.CENTER }),
-                    
+
                     new Paragraph({ text: "", spacing: { after: 200 } }),
-                    
+
                     new Table({
                         width: { size: 100, type: WidthType.PERCENTAGE },
                         rows: [
@@ -175,7 +192,7 @@ export class DocExportService {
 
                     new Paragraph({ text: "", spacing: { before: 400 } }),
                     new Paragraph({ text: "I. Weightage to Content Area", heading: HeadingLevel.HEADING_3 }),
-                    
+
                     new Table({
                         width: { size: 100, type: WidthType.PERCENTAGE },
                         rows: [
@@ -246,16 +263,20 @@ export class DocExportService {
         const groupedItemsMap = blueprint.items.reduce((acc, item) => {
             const key = `${item.unitId}-${item.subUnitId}-${item.marksPerQuestion}-${item.knowledgeLevel}-${item.knowledgeLevelB || ''}-${item.cognitiveProcess}-${item.cognitiveProcessB || ''}-${item.itemFormat}-${item.itemFormatB || ''}-${item.hasInternalChoice ? 'yes' : 'no'}`;
             if (!acc[key]) {
-                acc[key] = { ...item, questionCount: 1, totalMarks: item.marksPerQuestion };
+                acc[key] = {
+                    ...item,
+                    questionCount: this.getItemQuestionCount(item),
+                    totalMarks: this.getItemTotalScore(item)
+                };
             } else {
-                acc[key].questionCount += 1;
-                acc[key].totalMarks += item.marksPerQuestion;
+                acc[key].questionCount += this.getItemQuestionCount(item);
+                acc[key].totalMarks += this.getItemTotalScore(item);
             }
             return acc;
         }, {} as Record<string, any>);
 
         const sortedGroups = Object.values(groupedItemsMap).sort((a, b) => a.marksPerQuestion - b.marksPerQuestion);
-        
+
         const rows = [
             ...this.createOfficialHeaderRows(blueprint, 17),
             new TableRow({
@@ -291,8 +312,19 @@ export class DocExportService {
         sortedGroups.forEach((item, idx) => {
             const unit = curriculum.units.find(u => u.id === item.unitId);
             const subUnit = unit?.subUnits.find(s => s.id === item.subUnitId);
-            
-            const createDataRow = (suffix: string = "") => {
+
+            const createDataRow = (
+                suffix: string = "",
+                metadata: {
+                    knowledgeLevel: KnowledgeLevel;
+                    cognitiveProcess: CognitiveProcess;
+                    itemFormat: string;
+                } = {
+                        knowledgeLevel: item.knowledgeLevel,
+                        cognitiveProcess: item.cognitiveProcess,
+                        itemFormat: item.itemFormat
+                    }
+            ) => {
                 return new TableRow({
                     children: [
                         this.createTableCell(`${idx + 1}${suffix}`, { bold: true }),
@@ -300,15 +332,15 @@ export class DocExportService {
                         this.createTableCell(unit?.name || "-", { size: 16 }),
                         this.createTableCell(subUnit?.name || "-", { size: 16 }),
                         // KL
-                        this.createTableCell(item.knowledgeLevel === KnowledgeLevel.BASIC ? "1" : ""),
-                        this.createTableCell(item.knowledgeLevel === KnowledgeLevel.AVERAGE ? "1" : ""),
-                        this.createTableCell(item.knowledgeLevel === KnowledgeLevel.PROFOUND ? "1" : ""),
+                        this.createTableCell(metadata.knowledgeLevel === KnowledgeLevel.BASIC ? item.questionCount.toString() : ""),
+                        this.createTableCell(metadata.knowledgeLevel === KnowledgeLevel.AVERAGE ? item.questionCount.toString() : ""),
+                        this.createTableCell(metadata.knowledgeLevel === KnowledgeLevel.PROFOUND ? item.questionCount.toString() : ""),
                         // CP
-                        ...Object.values(CognitiveProcess).map(v => this.createTableCell(item.cognitiveProcess === v ? "1" : "")),
+                        ...Object.values(CognitiveProcess).map(v => this.createTableCell(metadata.cognitiveProcess === v ? item.questionCount.toString() : "")),
                         // Format
-                        ...["SR1", "SR2", "CRS1", "CRS2", "CRS3", "CRL"].map(f => this.createTableCell(item.itemFormat === f ? "1" : "")),
+                        ...["SR1", "SR2", "CRS1", "CRS2", "CRS3", "CRL"].map(f => this.createTableCell(metadata.itemFormat === f ? item.questionCount.toString() : "")),
                         this.createTableCell(item.totalMarks.toString(), { bold: true }),
-                        this.createTableCell("5"), // Placeholder time
+                        this.createTableCell(this.getItemTime(item)),
                     ]
                 });
             };
@@ -317,7 +349,11 @@ export class DocExportService {
                 rows.push(createDataRow());
             } else {
                 rows.push(createDataRow("(அ)"));
-                rows.push(createDataRow("(ஆ)"));
+                rows.push(createDataRow("(ஆ)", {
+                    knowledgeLevel: item.knowledgeLevelB || item.knowledgeLevel,
+                    cognitiveProcess: item.cognitiveProcessB || item.cognitiveProcess,
+                    itemFormat: item.itemFormatB || item.itemFormat
+                }));
             }
         });
 
@@ -386,7 +422,7 @@ export class DocExportService {
                         this.createTableCell((idx + 1).toString(), { bold: true }),
                         this.createTableCell(item.marksPerQuestion.toString()),
                         this.createTableCell(cleanText(item.answerText || ""), { align: AlignmentType.LEFT }),
-                        this.createTableCell(""),
+                        this.createTableCell(item.furtherInfo || "", { align: AlignmentType.LEFT, size: 18 }),
                     ]
                 }));
             } else {
@@ -395,7 +431,7 @@ export class DocExportService {
                         this.createTableCell(`${idx + 1}(அ)`, { bold: true }),
                         this.createTableCell(item.marksPerQuestion.toString()),
                         this.createTableCell(cleanText(item.answerText || ""), { align: AlignmentType.LEFT }),
-                        this.createTableCell(""),
+                        this.createTableCell(item.furtherInfo || "", { align: AlignmentType.LEFT, size: 18 }),
                     ]
                 }));
                 rows.push(new TableRow({
@@ -403,7 +439,7 @@ export class DocExportService {
                         this.createTableCell(`${idx + 1}(ஆ)`, { bold: true, shading: PURPLE_SOFT }),
                         this.createTableCell(item.marksPerQuestion.toString(), { shading: PURPLE_SOFT }),
                         this.createTableCell(cleanText(item.answerTextB || ""), { align: AlignmentType.LEFT, shading: PURPLE_SOFT }),
-                        this.createTableCell("", { shading: PURPLE_SOFT }),
+                        this.createTableCell(item.furtherInfoB || "", { align: AlignmentType.LEFT, size: 18, shading: PURPLE_SOFT }),
                     ]
                 }));
             }
@@ -415,9 +451,9 @@ export class DocExportService {
                     this.createRichParagraph(setId, { bold: true, size: 28 }),
                     this.createRichParagraph("சமக்ர சிக்ஷா கேரளம்", { bold: true, size: 36, align: AlignmentType.CENTER }),
                     this.createRichParagraph("Proforma for Scoring Key & Marking Scheme", { bold: true, italic: true, size: 28, color: "FF0080", align: AlignmentType.CENTER }),
-                    
+
                     new Paragraph({ text: "", spacing: { after: 200 } }),
-                    
+
                     new Table({
                         width: { size: 100, type: WidthType.PERCENTAGE },
                         rows: this.createOfficialHeaderRows(blueprint, 2)
@@ -441,7 +477,7 @@ export class DocExportService {
      */
     static async exportReport3(blueprint: Blueprint, curriculum: Curriculum) {
         const setId = (blueprint.setId || 'Set A').replace('Set ', '');
-        
+
         const rows = [
             ...this.createOfficialHeaderRows(blueprint, 20),
             new TableRow({
@@ -468,25 +504,41 @@ export class DocExportService {
         ];
 
         blueprint.items.forEach((item, idx) => {
-             const unit = curriculum.units.find(u => u.id === item.unitId);
-             const createRow = (suffix: string = "") => new TableRow({
-                 children: [
-                     this.createTableCell(`${idx+1}${suffix}`),
-                     this.createTableCell(unit?.learningOutcomes || "-", { size: 14 }),
-                     this.createTableCell(unit?.name || "-"),
-                     ...Object.values(CognitiveProcess).map(v => this.createTableCell(item.cognitiveProcess === v ? item.totalMarks.toString() : "")),
-                     ...Object.values(KnowledgeLevel).map(v => this.createTableCell(item.knowledgeLevel === v ? item.totalMarks.toString() : "")),
-                     ...["SR1","SR2","CRS1","CRS2","CRS3","CRL"].map(f => this.createTableCell(item.itemFormat === f ? item.totalMarks.toString() : "")),
-                     this.createTableCell(item.totalMarks.toString(), { bold: true }),
-                 ]
-             });
+            const unit = curriculum.units.find(u => u.id === item.unitId);
+            const rowScore = this.getItemTotalScore(item);
+            const createRow = (
+                suffix: string = "",
+                metadata: {
+                    cognitiveProcess: CognitiveProcess;
+                    knowledgeLevel: KnowledgeLevel;
+                    itemFormat: string;
+                } = {
+                        cognitiveProcess: item.cognitiveProcess,
+                        knowledgeLevel: item.knowledgeLevel,
+                        itemFormat: item.itemFormat
+                    }
+            ) => new TableRow({
+                children: [
+                    this.createTableCell(`${idx + 1}${suffix}`),
+                    this.createTableCell(unit?.learningOutcomes || "-", { size: 14 }),
+                    this.createTableCell(unit?.name || "-"),
+                    ...Object.values(CognitiveProcess).map(v => this.createTableCell(metadata.cognitiveProcess === v ? rowScore.toString() : "")),
+                    ...Object.values(KnowledgeLevel).map(v => this.createTableCell(metadata.knowledgeLevel === v ? rowScore.toString() : "")),
+                    ...["SR1", "SR2", "CRS1", "CRS2", "CRS3", "CRL"].map(f => this.createTableCell(metadata.itemFormat === f ? rowScore.toString() : "")),
+                    this.createTableCell(rowScore.toString(), { bold: true }),
+                ]
+            });
 
-             if (!item.hasInternalChoice) {
-                 rows.push(createRow());
-             } else {
-                 rows.push(createRow("(அ)"));
-                 rows.push(createRow("(ஆ)"));
-             }
+            if (!item.hasInternalChoice) {
+                rows.push(createRow());
+            } else {
+                rows.push(createRow("(அ)"));
+                rows.push(createRow("(ஆ)", {
+                    cognitiveProcess: item.cognitiveProcessB || item.cognitiveProcess,
+                    knowledgeLevel: item.knowledgeLevelB || item.knowledgeLevel,
+                    itemFormat: item.itemFormatB || item.itemFormat
+                }));
+            }
         });
 
         const doc = new Document({

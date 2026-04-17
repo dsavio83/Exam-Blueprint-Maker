@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     LayoutDashboard, BookOpen, Settings, FileType, List, Users, Menu, X, LogOut, FileText, ChevronLeft, Save, Printer, Download, ClipboardList, RefreshCw, CheckCircle
 } from 'lucide-react';
-import { User, Blueprint, ClassLevel, SubjectType, ExamTerm, BlueprintItem, Curriculum, QuestionPaperType } from '../types';
+import { User, Blueprint, ClassLevel, SubjectType, ExamTerm, BlueprintItem, Curriculum, QuestionPaperType, Discourse } from '../types';
 import AdminDashboard from './AdminDashboard';
 import AdminCurriculumManager from './AdminCurriculumManager';
 import AdminExamConfigManager from './AdminExamConfigManager';
@@ -13,8 +13,10 @@ import AdminDiscourseManager from './AdminDiscourseManager';
 import AdminQuestionPaperManager from './AdminQuestionPaperManager';
 import AdminQuestionConsolidator from './AdminQuestionConsolidator';
 import AnswerKeyView from './AnswerKeyView';
-import { getCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate, getDB, initDB, filterCurriculumByTerm } from '../services/db';
-import { BlueprintMatrix, ReportsView, SummaryTable } from '../App';
+import { getCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate, getDB, initDB, filterCurriculumByTerm, getDiscourses } from '../services/db';
+import { BlueprintMatrix } from './BlueprintMatrix';
+import { ReportsView } from './ReportsView';
+import { SummaryTable } from './SummaryTable';
 import { QuestionEntryForm } from './QuestionEntryForm';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -30,12 +32,15 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     const [showAnswerKey, setShowAnswerKey] = useState(false);
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
+    const [discourses, setDiscourses] = useState<Discourse[]>([]);
     const printRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const load = async () => {
             const types = await getQuestionPaperTypes();
             setPaperTypes(types);
+            const disc = await getDiscourses();
+            setDiscourses(disc);
         };
         load();
     }, []);
@@ -387,7 +392,9 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                             <ReportsView
                                 blueprint={viewingBlueprint}
                                 curriculum={curriculum}
+                                discourses={discourses}
                                 onDownloadPDF={handleDownloadPDF}
+                                onDownloadWord={async () => {}}
                             />
                         )}
 
@@ -395,6 +402,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                             <AnswerKeyView
                                 blueprint={viewingBlueprint}
                                 curriculum={curriculum}
+                                discourses={discourses}
                             />
                         )}
 

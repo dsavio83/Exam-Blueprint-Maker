@@ -21,35 +21,87 @@
     /* Tamil specific font */
     [lang="ta"],
     .tamil-font {
-      font-family: 'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif;
-      font-size: 14px;
+      font-family: 'TAU-Paalai', 'Noto Serif', serif;
+      font-size: 14pt;
+    }
+        @font-face {
+      font-family: 'TAU-Urai';
+      src: url('/fonts/TAU-Urai-Bold.ttf') format('truetype');
+      font-weight: bold;
+      font-style: normal;
     }
 
-    /* Fix for double borders in all tables */
+    .tamil-heading-font {
+      font-family: 'TAU-Urai Bold', 'TAU-Urai', 'TAU-Paalai', serif;
+      font-weight: 700;
+    }
+
+    .english-font {
+      font-family: 'Times New Roman', 'Times', serif;
+    }
+
+    /* Professional Rubric List (Answer Key) */
+    .rubric-list {
+      list-style-type: none !important;
+      padding-left: 1.25rem !important;
+      margin: 0.5rem 0 !important;
+      width: 100%;
+    }
+
+    .rubric-list li {
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: baseline !important;
+      gap: 1rem !important;
+      padding: 0.25rem 0 0.25rem 0.2rem !important;
+      border-bottom: 1px dashed #eee;
+      width: 100%;
+      position: relative;
+    }
+
+    .rubric-list li::before {
+      content: "•";
+      position: absolute;
+      left: -0.9rem;
+      top: 0.15rem;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .rubric-list li:last-child {
+      border-bottom: none;
+    }
+
+    .rubric-point {
+      flex: 1;
+      text-align: left;
+    }
+
+    .rubric-mark {
+      font-weight: bold;
+      min-width: 2rem;
+      text-align: right;
+      color: #1e40af; /* Blue-800 for visibility */
+    }
+
+    /* Force single borders in all tables */
     table {
       border-collapse: collapse !important;
       border-spacing: 0 !important;
       width: 100% !important;
+      border: 1px solid black !important; /* Outer border */
     }
 
     th,
     td {
       border: 1px solid black !important;
+      padding: 8px; /* Consistent padding */
     }
 
-    /* Maintain Tailwind-like borders for specific UI tables if needed,
-         but the user wants single borders everywhere.
-         Wait, let's be careful not to break the main dashboard table which uses gray-200.
-         Actually, the user said "அனைத்து டேபில் வியூவிலும்".
-      */
-    .bg-white table th,
-    .bg-white table td {
-      border-color: #000 !important;
-      /* Force black for report-like tables */
-    }
-
-    /* Reset for dashboard tables if they look too harsh */
-    .bg-gray-100 th {
+    /* Maintain black borders for report-like tables */
+    .bg-white table, .bg-white th, .bg-white td,
+    .bg-gray-100 table, .bg-gray-100 th, .bg-gray-100 td,
+    .reports-container table, .reports-container th, .reports-container td {
       border-color: #000 !important;
     }
 
@@ -185,7 +237,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-vGUpTxgz.js"></script>
+  <script type="module" crossorigin src="/assets/index-jjvjiuWh.js"></script>
 </head>
 
 <body class="bg-gray-50 text-gray-900 antialiased select-none">

@@ -32,24 +32,24 @@ const INITIAL_PAPER_TYPES = [
 ];
 
 const INITIAL_EXAM_CONFIGS = [
-  { id: 'at-t1-10', classLevel: 10, subject: 'Tamil AT', term: 'First Term Exam', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
-  { id: 'at-t2-10', classLevel: 10, subject: 'Tamil AT', term: 'Second Term Exam', weightages: [{ unitNumber: 1, percentage: 10 }, { unitNumber: 2, percentage: 10 }, { unitNumber: 3, percentage: 40 }, { unitNumber: 4, percentage: 40 }] },
-  { id: 'at-t3-10', classLevel: 10, subject: 'Tamil AT', term: 'Third Term Exam', weightages: [{ unitNumber: 1, percentage: 20 }, { unitNumber: 2, percentage: 20 }, { unitNumber: 3, percentage: 20 }, { unitNumber: 4, percentage: 20 }, { unitNumber: 5, percentage: 20 }] },
-  { id: 'at-t1-9', classLevel: 9, subject: 'Tamil AT', term: 'First Term Exam', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
-  { id: 'at-t2-9', classLevel: 9, subject: 'Tamil AT', term: 'Second Term Exam', weightages: [{ unitNumber: 1, percentage: 10 }, { unitNumber: 2, percentage: 10 }, { unitNumber: 3, percentage: 40 }, { unitNumber: 4, percentage: 40 }] },
-  { id: 'at-t3-9', classLevel: 9, subject: 'Tamil AT', term: 'Third Term Exam', weightages: [{ unitNumber: 1, percentage: 5 }, { unitNumber: 2, percentage: 5 }, { unitNumber: 3, percentage: 10 }, { unitNumber: 4, percentage: 10 }, { unitNumber: 5, percentage: 35 }, { unitNumber: 6, percentage: 35 }] },
-  { id: 'at-t1-8', classLevel: 8, subject: 'Tamil AT', term: 'First Term Exam', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
-  { id: 'at-t2-8', classLevel: 8, subject: 'Tamil AT', term: 'Second Term Exam', weightages: [{ unitNumber: 1, percentage: 10 }, { unitNumber: 2, percentage: 10 }, { unitNumber: 3, percentage: 40 }, { unitNumber: 4, percentage: 40 }] },
-  { id: 'at-t3-8', classLevel: 8, subject: 'Tamil AT', term: 'Third Term Exam', weightages: [{ unitNumber: 1, percentage: 5 }, { unitNumber: 2, percentage: 5 }, { unitNumber: 3, percentage: 10 }, { unitNumber: 4, percentage: 10 }, { unitNumber: 5, percentage: 35 }, { unitNumber: 6, percentage: 35 }] },
-  { id: 'bt-t1-10', classLevel: 10, subject: 'Tamil BT', term: 'First Term Exam', weightages: [{ unitNumber: 1, percentage: 100 }] },
-  { id: 'bt-t2-10', classLevel: 10, subject: 'Tamil BT', term: 'Second Term Exam', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
-  { id: 'bt-t3-10', classLevel: 10, subject: 'Tamil BT', term: 'Third Term Exam', weightages: [{ unitNumber: 1, percentage: 30 }, { unitNumber: 2, percentage: 34 }, { unitNumber: 3, percentage: 36 }] },
-  { id: 'bt-t1-9', classLevel: 9, subject: 'Tamil BT', term: 'First Term Exam', weightages: [{ unitNumber: 1, percentage: 100 }] },
-  { id: 'bt-t2-9', classLevel: 9, subject: 'Tamil BT', term: 'Second Term Exam', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
-  { id: 'bt-t3-9', classLevel: 9, subject: 'Tamil BT', term: 'Third Term Exam', weightages: [{ unitNumber: 1, percentage: 30 }, { unitNumber: 2, percentage: 34 }, { unitNumber: 3, percentage: 36 }] },
-  { id: 'bt-t1-8', classLevel: 8, subject: 'Tamil BT', term: 'First Term Exam', weightages: [{ unitNumber: 1, percentage: 100 }] },
-  { id: 'bt-t2-8', classLevel: 8, subject: 'Tamil BT', term: 'Second Term Exam', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
-  { id: 'bt-t3-8', classLevel: 8, subject: 'Tamil BT', term: 'Third Term Exam', weightages: [{ unitNumber: 1, percentage: 30 }, { unitNumber: 2, percentage: 34 }, { unitNumber: 3, percentage: 36 }] }
+  { id: 'at-t1-10', classLevel: 10, subject: 'Tamil AT', term: 'First Term Summative', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
+  { id: 'at-t2-10', classLevel: 10, subject: 'Tamil AT', term: 'Second Term Summative', weightages: [{ unitNumber: 1, percentage: 10 }, { unitNumber: 2, percentage: 10 }, { unitNumber: 3, percentage: 40 }, { unitNumber: 4, percentage: 40 }] },
+  { id: 'at-t3-10', classLevel: 10, subject: 'Tamil AT', term: 'Third Term Summative', weightages: [{ unitNumber: 1, percentage: 20 }, { unitNumber: 2, percentage: 20 }, { unitNumber: 3, percentage: 20 }, { unitNumber: 4, percentage: 20 }, { unitNumber: 5, percentage: 20 }] },
+  { id: 'at-t1-9', classLevel: 9, subject: 'Tamil AT', term: 'First Term Summative', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
+  { id: 'at-t2-9', classLevel: 9, subject: 'Tamil AT', term: 'Second Term Summative', weightages: [{ unitNumber: 1, percentage: 10 }, { unitNumber: 2, percentage: 10 }, { unitNumber: 3, percentage: 40 }, { unitNumber: 4, percentage: 40 }] },
+  { id: 'at-t3-9', classLevel: 9, subject: 'Tamil AT', term: 'Third Term Summative', weightages: [{ unitNumber: 1, percentage: 5 }, { unitNumber: 2, percentage: 5 }, { unitNumber: 3, percentage: 10 }, { unitNumber: 4, percentage: 10 }, { unitNumber: 5, percentage: 35 }, { unitNumber: 6, percentage: 35 }] },
+  { id: 'at-t1-8', classLevel: 8, subject: 'Tamil AT', term: 'First Term Summative', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
+  { id: 'at-t2-8', classLevel: 8, subject: 'Tamil AT', term: 'Second Term Summative', weightages: [{ unitNumber: 1, percentage: 10 }, { unitNumber: 2, percentage: 10 }, { unitNumber: 3, percentage: 40 }, { unitNumber: 4, percentage: 40 }] },
+  { id: 'at-t3-8', classLevel: 8, subject: 'Tamil AT', term: 'Third Term Summative', weightages: [{ unitNumber: 1, percentage: 5 }, { unitNumber: 2, percentage: 5 }, { unitNumber: 3, percentage: 10 }, { unitNumber: 4, percentage: 10 }, { unitNumber: 5, percentage: 35 }, { unitNumber: 6, percentage: 35 }] },
+  { id: 'bt-t1-10', classLevel: 10, subject: 'Tamil BT', term: 'First Term Summative', weightages: [{ unitNumber: 1, percentage: 100 }] },
+  { id: 'bt-t2-10', classLevel: 10, subject: 'Tamil BT', term: 'Second Term Summative', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
+  { id: 'bt-t3-10', classLevel: 10, subject: 'Tamil BT', term: 'Third Term Summative', weightages: [{ unitNumber: 1, percentage: 30 }, { unitNumber: 2, percentage: 34 }, { unitNumber: 3, percentage: 36 }] },
+  { id: 'bt-t1-9', classLevel: 9, subject: 'Tamil BT', term: 'First Term Summative', weightages: [{ unitNumber: 1, percentage: 100 }] },
+  { id: 'bt-t2-9', classLevel: 9, subject: 'Tamil BT', term: 'Second Term Summative', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
+  { id: 'bt-t3-9', classLevel: 9, subject: 'Tamil BT', term: 'Third Term Summative', weightages: [{ unitNumber: 1, percentage: 30 }, { unitNumber: 2, percentage: 34 }, { unitNumber: 3, percentage: 36 }] },
+  { id: 'bt-t1-8', classLevel: 8, subject: 'Tamil BT', term: 'First Term Summative', weightages: [{ unitNumber: 1, percentage: 100 }] },
+  { id: 'bt-t2-8', classLevel: 8, subject: 'Tamil BT', term: 'Second Term Summative', weightages: [{ unitNumber: 1, percentage: 50 }, { unitNumber: 2, percentage: 50 }] },
+  { id: 'bt-t3-8', classLevel: 8, subject: 'Tamil BT', term: 'Third Term Summative', weightages: [{ unitNumber: 1, percentage: 30 }, { unitNumber: 2, percentage: 34 }, { unitNumber: 3, percentage: 36 }] }
 ];
 
 const createDiscourse = (id, subject, marks, name) => ({
