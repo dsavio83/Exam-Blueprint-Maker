@@ -526,16 +526,15 @@ ${bodyHTML}
                         <div className="flex-1 text-center">
                             <h1 className="text-2xl font-bold text-black border-b-2 border-black inline-block px-4 pb-0.5 uppercase tracking-tight">Question Paper Design - HS</h1>
                         </div>
-                        <div className="absolute right-0 top-0 px-1.5 py-0.5 text-[10pt] font-bold bg-white whitespace-nowrap">
-                            {blueprint.classLevel}-{subjectInfo.code === '02' ? 'AT' : 'BT'} | Set {setId} | Type: {displayQpType}
-                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-4 text-[11pt] font-bold border-b border-black pb-3">
                         <div className="flex"><span className="w-24 text-gray-700">Class</span><span className="mx-2">:</span><span>{blueprint.classLevel}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span>{totalExamMinutes} Minutes</span></div>
                         <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2">:</span><span className="tamil-font leading-none !text-[11pt] !font-normal !not-italic">{subjectInfo.tamil}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Set</span><span className="mx-2">:</span><span>{setId}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Type</span><span className="mx-2">:</span><span>{displayQpType}</span></div>
                         <div className="flex"><span className="w-24 text-gray-700">Score</span><span className="mx-2">:</span><span>{totalScore} Marks</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span>{totalExamMinutes} Minutes</span></div>
                         <div className="flex"><span className="w-24 text-gray-700">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic">{termEnglish}</span></div>
                         <div className="flex"><span className="w-24 text-gray-700">Year</span><span className="mx-2">:</span><span>{academicYear}</span></div>
                     </div>
@@ -867,17 +866,16 @@ ${bodyHTML}
                     <h1 className="text-2xl font-bold text-black border-b-2 border-black inline-block px-4 pb-1">Proforma for Analysing Question Paper</h1>
                     <div className="text-lg font-bold mt-1">Topic/Sub Topic wise Analysis</div>
                 </div>
-                <div className="absolute right-0 top-0 px-2 py-1 text-sm font-bold bg-white whitespace-nowrap">
-                    {blueprint.classLevel}-{subjectInfo.code === '02' ? 'AT' : 'BT'} | Set: {setId} | Type: {displayQpType}
-                </div>
             </div>
             <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-4 text-[11pt] font-bold border-b border-black pb-3">
-                <div className="flex"><span className="w-24">Class</span><span className="mx-2">:</span><span>{blueprint.classLevel}</span></div>
-                <div className="flex"><span className="w-24">Time</span><span className="mx-2">:</span><span>{examMinutes} Minutes</span></div>
-                <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2 text-gray-700">:</span><span className="tamil-font leading-none !text-[11pt] !font-normal !not-italic">{subjectInfo.tamil}</span></div>
-                <div className="flex"><span className="w-24">Score</span><span className="mx-2">:</span><span>{derivedTotalMarks} Marks</span></div>
-                <div className="flex"><span className="w-24">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic">{termEnglish}</span></div>
-                <div className="flex"><span className="w-24">Year</span><span className="mx-2">:</span><span>{academicYear}</span></div>
+                <div className="flex"><span className="w-24 text-gray-700">Class</span><span className="mx-2">:</span><span>{blueprint.classLevel}</span></div>
+                <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2">:</span><span className="tamil-font leading-none !text-[11pt] !font-normal !not-italic">{subjectInfo.tamil}</span></div>
+                <div className="flex"><span className="w-24 text-gray-700">Set</span><span className="mx-2">:</span><span>{setId}</span></div>
+                <div className="flex"><span className="w-24 text-gray-700">Type</span><span className="mx-2">:</span><span>{displayQpType}</span></div>
+                {/* <div className="flex"><span className="w-24 text-gray-700">Score</span><span className="mx-2">:</span><span>{totalScore} Marks</span></div>
+                <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span>{totalExamMinutes} Minutes</span></div> */}
+                <div className="flex"><span className="w-24 text-gray-700">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic">{termEnglish}</span></div>
+                <div className="flex"><span className="w-24 text-gray-700">Year</span><span className="mx-2">:</span><span>{academicYear}</span></div>
             </div>
             <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">
                 {partLabel}
