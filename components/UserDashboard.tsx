@@ -21,6 +21,7 @@ import { QuestionEntryForm } from './QuestionEntryForm';
 import { BlueprintMatrix } from './BlueprintMatrix';
 import { ReportsView } from './ReportsView';
 import { SummaryTable } from './SummaryTable';
+import UniversalBlueprintView from './UniversalBlueprintView';
 
 interface UserDashboardProps {
     user: User;
@@ -36,8 +37,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const [selectedSet, setSelectedSet] = useState('Set A');
     const [selectedPaperType, setSelectedPaperType] = useState<string>('');
     const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
-    const [showReports, setShowReports] = useState(false);
-    const [showQuestions, setShowQuestions] = useState(false);
     const [isConfigExpanded, setIsConfigExpanded] = useState(true);
     const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
     const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
@@ -94,8 +93,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         setSelectedSet('Set A');
         setSelectedAcademicYear('2025-2026');
         setSelectedPaperType('');
-        setShowReports(false);
-        setShowQuestions(false);
         setIsConfigExpanded(true);
         setView('create');
     };
@@ -111,8 +108,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         setSelectedTerm(bp.examTerm);
         setSelectedSet(bp.setId || 'Set A');
         setSelectedPaperType(bp.questionPaperTypeId || '');
-        setShowReports(false);
-        setShowQuestions(false);
         setView('edit');
     };
 
@@ -795,91 +790,26 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                         </div>
 
                         {currentBlueprint && curriculum && (
-                            <div className="space-y-6">
-                                <div className="sticky top-[53px] z-20 bg-white/90 backdrop-blur-md py-2 px-3 border-b flex justify-between items-center no-print shadow-md gap-2 transition-all">
-                                    <div className="flex gap-2 overflow-x-auto">
-                                        <button
-                                            onClick={() => { setShowReports(false); setShowQuestions(false); }}
-                                            className={`px-3 py-1.5 md:px-4 md:py-2 rounded text-sm md:text-base whitespace-nowrap transition-all font-medium ${!showReports && !showQuestions ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} `}
-                                        >
-                                            Matrix
-                                        </button>
-                                        {currentBlueprint.isConfirmed && (
-                                            <>
-                                                <button
-                                                    onClick={() => { setShowQuestions(true); setShowReports(false); }}
-                                                    className={`px-3 py-1.5 md:px-4 md:py-2 rounded text-sm md:text-base whitespace-nowrap transition-all font-medium ${showQuestions ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} `}
-                                                >
-                                                    Question Entry
-                                                </button>
-                                                <button
-                                                    onClick={() => { setShowReports(true); setShowQuestions(false); }}
-                                                    className={`px-3 py-1.5 md:px-4 md:py-1.5 rounded text-sm md:text-base whitespace-nowrap transition-all font-medium ${showReports ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} `}
-                                                >
-                                                    Reports
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {!showReports && !showQuestions && !currentBlueprint.isConfirmed && (
-                                            <>
-                                                <button onClick={handleRegeneratePattern} className="bg-orange-500 text-white px-3 py-1.5 md:px-4 md:py-2 rounded shadow-md hover:bg-orange-600 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"><RefreshCw className="mr-1 md:mr-2" size={18} /> New Pattern</button>
-                                                <button onClick={handleConfirmPattern} className="bg-blue-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow-md hover:bg-blue-700 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"><CheckCircle className="mr-1 md:mr-2" size={18} /> Confirm</button>
-                                            </>
-                                        )}
-                                        <button 
-                                            onClick={handleSaveToDB} 
-                                            disabled={isSaving}
-                                            className="bg-green-600 text-white px-3 py-1.5 md:px-6 md:py-2 rounded shadow hover:bg-green-700 disabled:bg-green-400 flex items-center font-bold text-sm md:text-base whitespace-nowrap transition-all"
-                                        >
-                                            {isSaving ? (
-                                                <RefreshCw className="mr-1 md:mr-2 animate-spin" size={18} />
-                                            ) : (
-                                                <Save className="mr-1 md:mr-2" size={18} />
-                                            )}
-                                            {isSaving ? 'Saving...' : 'Save Blueprint'}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div ref={printRef} className={`bg-white rounded shadow ${showReports ? 'p-0' : 'p-6'}`}>
-                                    {!showReports && !showQuestions && (
-                                        <BlueprintMatrix
-                                            blueprint={currentBlueprint}
-                                            curriculum={curriculum}
-                                            onUpdateItem={updateItem}
-                                            onMoveItem={moveItem}
-                                            paperType={paperTypes.find(p => p.id === currentBlueprint.questionPaperTypeId)}
-                                            readOnly={currentBlueprint.isConfirmed}
-                                        />
-                                    )}
-
-                                    {showQuestions && (
-                                        <QuestionEntryForm
-                                            blueprint={currentBlueprint}
-                                            onUpdateItem={updateItem}
-                                            paperType={paperTypes.find(p => p.id === currentBlueprint.questionPaperTypeId)}
-                                        />
-                                    )}
-
-                                    {showReports && (
-                                        <ReportsView
-                                            blueprint={currentBlueprint}
-                                            curriculum={curriculum}
-                                            discourses={discourses}
-                                            onDownloadPDF={handleDownloadPDF}
-                                            onDownloadWord={handleDownloadWord}
-                                        />
-                                    )}
-
-                                    {!showReports && currentBlueprint && (
-                                        <div className="mt-8 pt-8 border-t px-6 pb-6">
-                                            <SummaryTable items={currentBlueprint.items} />
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            <UniversalBlueprintView
+                                blueprint={currentBlueprint}
+                                curriculum={curriculum}
+                                paperType={paperTypes.find(p => p.id === currentBlueprint.questionPaperTypeId)}
+                                discourses={discourses}
+                                isAdmin={false}
+                                onBack={() => {
+                                    if (view === 'create') setView('list');
+                                    else setView('list');
+                                    setCurrentBlueprint(null);
+                                }}
+                                onUpdateItemField={updateItem}
+                                onMoveItem={moveItem}
+                                onSave={handleSaveToDB}
+                                onRegenerate={handleRegeneratePattern}
+                                onConfirm={handleConfirmPattern}
+                                onDownloadPDF={(type) => handleDownloadPDF(type as any)}
+                                onDownloadWord={handleDownloadWord}
+                                isSaving={isSaving}
+                            />
                         )}
                     </div>
                 )}

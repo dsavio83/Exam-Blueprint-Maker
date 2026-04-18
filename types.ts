@@ -136,6 +136,18 @@ export interface QuestionPaperType {
   sections: QuestionPatternSection[];
 }
 
+export interface ReportSettings {
+  fontSizeBody: number;
+  fontSizeTitle: number;
+  fontSizeTamil: number;
+  rowHeight: number;
+  columnWidths: Record<string, number>;
+  showLogo: boolean;
+  compactMode: boolean;
+  fontFamily: string;
+  orientation?: 'p' | 'l'; // p = portrait, l = landscape
+}
+
 export interface Blueprint {
   id: string;
   examTerm: ExamTerm;
@@ -153,6 +165,7 @@ export interface Blueprint {
   isLocked?: boolean; // Admin can lock a blueprint
   isHidden?: boolean; // Admin can hide a blueprint from the user
   isConfirmed?: boolean; // User has confirmed the pattern
+  reportSettings?: ReportSettings;
 }
 
 export interface SharedBlueprint {

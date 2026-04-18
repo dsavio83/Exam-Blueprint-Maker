@@ -14,10 +14,12 @@ import AdminQuestionPaperManager from './AdminQuestionPaperManager';
 import AdminQuestionConsolidator from './AdminQuestionConsolidator';
 import AnswerKeyView from './AnswerKeyView';
 import { getCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate, getDB, initDB, filterCurriculumByTerm, getDiscourses } from '../services/db';
+import { DocExportService } from '../services/docExport';
 import { BlueprintMatrix } from './BlueprintMatrix';
 import { ReportsView } from './ReportsView';
 import { SummaryTable } from './SummaryTable';
 import { QuestionEntryForm } from './QuestionEntryForm';
+import UniversalBlueprintView from './UniversalBlueprintView';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -27,9 +29,6 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 
     // Viewing/Editing Paper State
     const [viewingBlueprint, setViewingBlueprint] = useState<Blueprint | null>(null);
-    const [showReports, setShowReports] = useState(false);
-    const [showQuestions, setShowQuestions] = useState(false);
-    const [showAnswerKey, setShowAnswerKey] = useState(false);
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
@@ -60,9 +59,6 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 
     const handleEditBlueprint = (bp: Blueprint) => {
         setViewingBlueprint(bp);
-        setShowReports(false);
-        setShowQuestions(false);
-        setShowAnswerKey(false);
     };
 
     const handleSaveBlueprint = async () => {
@@ -227,6 +223,19 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         pdf.save(`Blueprint_Report_${viewingBlueprint.classLevel}_${viewingBlueprint.subject}_${type}.pdf`);
     };
 
+    const handleDownloadWord = async (type: string = 'all') => {
+        if (!viewingBlueprint || !curriculum) return;
+        try {
+            if (type === 'report1' || type === 'all') await DocExportService.exportReport1(viewingBlueprint, curriculum);
+            if (type === 'report2' || type === 'all') await DocExportService.exportReport2(viewingBlueprint, curriculum);
+            if (type === 'report3' || type === 'all') await DocExportService.exportReport3(viewingBlueprint, curriculum);
+            if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(viewingBlueprint, curriculum);
+        } catch (error) {
+            console.error("Word export failed:", error);
+            alert("Failed to export Word document.");
+        }
+    };
+
     const moveItem = (itemId: string, newUnitId: string, newSectionId: string, newSubUnitId?: string) => {
         if (!viewingBlueprint || !curriculum) return;
         const paperType = paperTypes.find(p => p.id === viewingBlueprint.questionPaperTypeId);
@@ -278,7 +287,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'curriculum', label: 'Curriculum & Units', icon: BookOpen },
-        { id: 'config', label: 'Exam Weightage', icon: Settings },
+        ...(user.username === 'admin' ? [{ id: 'config', label: 'Exam Weightage', icon: Settings }] : []),
         { id: 'papertype', label: 'Paper Types', icon: FileType },
         { id: 'discourses', label: 'Discourses', icon: List },
         { id: 'blueprints', label: 'User Papers', icon: FileText },
@@ -290,129 +299,21 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         // If viewing a specific paper, show the paper view instead of the list
         if (activeTab === 'blueprints' && viewingBlueprint && curriculum) {
             return (
-                <div className="space-y-6">
-                    <div className="flex items-center gap-4 mb-2 no-print">
-                        <button
-                            onClick={() => setViewingBlueprint(null)}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600"
-                        >
-                            <ChevronLeft size={24} />
-                        </button>
-                        <div>
-                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                {viewingBlueprint.questionPaperTypeName}
-                                {viewingBlueprint.isConfirmed && (
-                                    <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded uppercase">Confirmed</span>
-                                )}
-                            </h2>
-                            <p className="text-xs text-secondary">
-                                {viewingBlueprint.subject} • Class {viewingBlueprint.classLevel} • {viewingBlueprint.examTerm} • {viewingBlueprint.setId}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md py-2 px-3 border-b flex justify-between items-center no-print shadow-sm gap-2 rounded-xl mb-4">
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => { setShowReports(false); setShowQuestions(false); setShowAnswerKey(false); }}
-                                className={`px-4 py-2 rounded-lg text-sm transition-all font-bold ${!showReports && !showQuestions && !showAnswerKey ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-secondary hover:bg-gray-200'} `}
-                            >
-                                Matrix
-                            </button>
-                            {viewingBlueprint.isConfirmed && (
-                                <>
-                                    <button
-                                        onClick={() => { setShowQuestions(true); setShowReports(false); setShowAnswerKey(false); }}
-                                        className={`px-4 py-2 rounded-lg text-sm transition-all font-bold ${showQuestions ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-secondary hover:bg-gray-200'} `}
-                                    >
-                                        Questions
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowReports(true); setShowQuestions(false); setShowAnswerKey(false); }}
-                                        className={`px-4 py-2 rounded-lg text-sm transition-all font-bold ${showReports ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-secondary hover:bg-gray-200'} `}
-                                    >
-                                        Reports
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowAnswerKey(true); setShowReports(false); setShowQuestions(false); }}
-                                        className={`px-4 py-2 rounded-lg text-sm transition-all font-bold ${showAnswerKey ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-secondary hover:bg-gray-200'} `}
-                                    >
-                                        Answer Key
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                        <div className="flex gap-2">
-                            {!showReports && !showQuestions && !viewingBlueprint.isConfirmed && (
-                                <>
-                                    <button
-                                        onClick={handleRegeneratePattern}
-                                        className="bg-orange-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-orange-600 flex items-center font-bold text-sm transition-all"
-                                    >
-                                        <RefreshCw className="mr-2" size={18} />
-                                        New Pattern
-                                    </button>
-                                    <button
-                                        onClick={handleConfirmPattern}
-                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 flex items-center font-bold text-sm transition-all"
-                                    >
-                                        <CheckCircle className="mr-2" size={18} />
-                                        Confirm
-                                    </button>
-                                </>
-                            )}
-                            <button onClick={handleSaveBlueprint} className={`bg-green-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-green-700 flex items-center font-bold text-sm transition-all ${showAnswerKey ? 'hidden' : ''}`}>
-                                <Save className="mr-2" size={18} />
-                                Save
-                            </button>
-                        </div>
-                    </div>
-
-                    <div ref={printRef} className={`bg-white p-6 rounded-2xl shadow-sm border border-gray-100 ${showAnswerKey ? 'p-0 border-none bg-transparent shadow-none' : ''}`}>
-                        {!showReports && !showQuestions && !showAnswerKey && (
-                            <BlueprintMatrix
-                                blueprint={viewingBlueprint}
-                                curriculum={curriculum}
-                                onUpdateItem={updateItem}
-                                onMoveItem={moveItem}
-                                paperType={paperTypes.find(p => p.id === viewingBlueprint.questionPaperTypeId)}
-                                readOnly={viewingBlueprint.isConfirmed}
-                            />
-                        )}
-
-                        {showQuestions && !showAnswerKey && (
-                            <QuestionEntryForm
-                                blueprint={viewingBlueprint}
-                                onUpdateItem={updateItemField}
-                                paperType={paperTypes.find(p => p.id === viewingBlueprint.questionPaperTypeId)}
-                            />
-                        )}
-
-                        {showReports && !showAnswerKey && (
-                            <ReportsView
-                                blueprint={viewingBlueprint}
-                                curriculum={curriculum}
-                                discourses={discourses}
-                                onDownloadPDF={handleDownloadPDF}
-                                onDownloadWord={async () => {}}
-                            />
-                        )}
-
-                        {showAnswerKey && (
-                            <AnswerKeyView
-                                blueprint={viewingBlueprint}
-                                curriculum={curriculum}
-                                discourses={discourses}
-                            />
-                        )}
-
-                        {!showReports && !showAnswerKey && viewingBlueprint && (
-                            <div className="mt-8 pt-8 border-t">
-                                <SummaryTable items={viewingBlueprint.items} />
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <UniversalBlueprintView
+                    blueprint={viewingBlueprint}
+                    curriculum={curriculum}
+                    paperType={paperTypes.find(p => p.id === viewingBlueprint.questionPaperTypeId)}
+                    discourses={discourses}
+                    isAdmin={true}
+                    onBack={() => setViewingBlueprint(null)}
+                    onUpdateItemField={updateItemField}
+                    onMoveItem={moveItem}
+                    onSave={handleSaveBlueprint}
+                    onRegenerate={handleRegeneratePattern}
+                    onConfirm={handleConfirmPattern}
+                    onDownloadPDF={(type) => handleDownloadPDF(type as any)}
+                    onDownloadWord={(type) => handleDownloadWord(type as any)} 
+                />
             );
         }
 

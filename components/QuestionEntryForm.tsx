@@ -1,13 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { Edit2, Layers } from 'lucide-react';
+import { Edit2, Layers, Save, RefreshCw } from 'lucide-react';
 import { Blueprint, BlueprintItem, QuestionPaperType, SystemSettings, Discourse, Curriculum } from '../types';
 import { getSettings, getDiscourses, getCurriculum, getDB, initDB, filterCurriculumByTerm } from '../services/db';
 import QuestionRow from './QuestionRow';
 
-export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blueprint: Blueprint, onUpdateItem: (id: string, field: keyof BlueprintItem, val: string) => void, paperType?: QuestionPaperType }) => {
+export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, isSaving }: {
+    blueprint: Blueprint,
+    onUpdateItem: (id: string, field: keyof BlueprintItem, val: string) => void,
+    paperType?: QuestionPaperType,
+    onSave?: () => void,
+    isSaving?: boolean
+}) => {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
+    const [localSaving, setLocalSaving] = useState(false);
+
+    // If an external onSave is provided, we can wrap it to show a local state if needed
+    // But since UniversalBlueprintView already has isSaving, we prioritize that.
+    const handleSave = async () => {
+        if (!onSave) return;
+        setLocalSaving(true);
+        try {
+            await onSave();
+        } finally {
+            // Success animation duration
+            setTimeout(() => setLocalSaving(false), 1000);
+        }
+    };
+
+    const isCurrentlySaving = isSaving || localSaving;
 
     useEffect(() => {
         const load = async () => {
@@ -63,11 +85,29 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType }: { blue
     });
 
     return (
-        <div className="bg-white p-6 rounded shadow mt-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2">
-                <Edit2 size={24} className="text-blue-600" />
-                Question & Answer Entry
-            </h2>
+        <div className="bg-white p-6 rounded shadow mt-6 relative">
+            <div className="flex justify-between items-center mb-6 border-b pb-2">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <Edit2 size={24} className="text-blue-600" />
+                    Question & Answer Entry
+                </h2>
+                <button
+                    onClick={handleSave}
+                    disabled={isCurrentlySaving}
+                    className={`absolute top-6 right-6 p-3 rounded-2xl transition-all shadow-xl flex items-center justify-center group no-print z-10 
+                        ${isCurrentlySaving 
+                            ? 'bg-blue-600 text-white cursor-wait animate-pulse shadow-blue-100' 
+                            : 'bg-green-600 text-white hover:bg-green-700 shadow-green-100 active:scale-95'
+                        }`}
+                    title={isCurrentlySaving ? "Saving..." : "Save All Changes"}
+                >
+                    {isCurrentlySaving ? (
+                        <RefreshCw size={24} className="animate-spin" />
+                    ) : (
+                        <Save size={24} className="group-hover:scale-110 transition-transform" />
+                    )}
+                </button>
+            </div>
             <div className="space-y-6">
                 {(() => {
                     // Global tracker for instructions to ensure they only appear once PER SECTION ID

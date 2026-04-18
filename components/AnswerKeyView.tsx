@@ -108,14 +108,14 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
             if (d) {
                 let dHtml = `<p><b>${d.name}</b></p>`;
                 dHtml += `<div class="discourse-details">`;
-                
+
                 const normalizedDescription = (d.description || '').trim();
                 const dedupedDescription = normalizedDescription.toLowerCase().startsWith(d.name.trim().toLowerCase())
                     ? normalizedDescription.slice(d.name.trim().length).trim().replace(/^[:\-–]\s*/, '')
                     : normalizedDescription;
-                
+
                 if (dedupedDescription) dHtml += `<p>${dedupedDescription}</p>`;
-                
+
                 if (d.rubrics && d.rubrics.length > 0) {
                     dHtml += `<ul class="rubric-list">`;
                     d.rubrics.forEach(r => {
@@ -130,8 +130,8 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
 
         // 3. Input Answer (Third priority)
         if (enableInput && structured && structured.length > 0) {
-            const sHtml = `<ul class="rubric-list">` + 
-                structured.map(v => `<li><span class="rubric-point">${v.answer}</span><strong class="rubric-mark english-font">${v.mark}</strong></li>`).join('') + 
+            const sHtml = `<ul class="rubric-list">` +
+                structured.map(v => `<li><span class="rubric-point">${v.answer}</span><strong class="rubric-mark english-font">${v.mark}</strong></li>`).join('') +
                 `</ul>`;
             htmlParts.push(sHtml);
         }
@@ -210,8 +210,8 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
     const termHeading = getTermHeading();
 
     return (
-        <div className={(isPdf ? 'bg-white' : 'bg-white p-4 paper-container max-w-4xl mx-auto') + ' mt-[5px]'}>
-            <div className="mb-2">
+        <div className={(isPdf ? 'bg-white' : 'bg-white p-4 paper-container max-w-4xl mx-auto') + ' mt-[35px]'}>
+            <div className="mb-3">
                 <div className="border-b-2 border-black pb-1">
                     <div className="relative flex items-center justify-center py-0.5">
                         <div className="text-center">
