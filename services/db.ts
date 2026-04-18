@@ -77,11 +77,31 @@ const handleResponse = async (response: Response) => {
     }
     return null;
   }
+
+  const contentType = response.headers.get('content-type') || '';
+  const rawBody = await response.text();
+  const isJson = contentType.toLowerCase().includes('application/json');
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    if (isJson) {
+      const error = JSON.parse(rawBody || '{}');
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+
+    throw new Error(
+      `Non-JSON error response from ${response.url} (${response.status} ${response.statusText}). ` +
+      `Content-Type: ${contentType || 'unknown'}. Body starts with: ${rawBody.slice(0, 120)}`
+    );
   }
-  return response.json();
+
+  if (!isJson) {
+    throw new Error(
+      `Expected JSON from ${response.url} but received ${contentType || 'unknown'}. ` +
+      `Body starts with: ${rawBody.slice(0, 120)}`
+    );
+  }
+
+  return rawBody ? JSON.parse(rawBody) : null;
 };
 
 export const initDB = async (): Promise<DB> => {
@@ -106,14 +126,22 @@ export const login = async (username: string, password: string): Promise<{ succe
       body: JSON.stringify({ username, password })
     });
     if (!res.ok) {
-      const data = await res.json();
-      return { success: false, error: data.error || 'Invalid credentials' };
+      const contentType = res.headers.get('content-type') || '';
+      const rawBody = await res.text();
+      if (contentType.toLowerCase().includes('application/json')) {
+        const data = JSON.parse(rawBody || '{}');
+        return { success: false, error: data.error || 'Invalid credentials' };
+      }
+      return {
+        success: false,
+        error: `Login API returned ${res.status}. Body starts with: ${rawBody.slice(0, 120)}`
+      };
     }
-    const { token, user } = await res.json();
+    const { token, user } = await handleResponse(res);
     localStorage.setItem('blueprint_token', token);
     return { success: true, user };
   } catch (err) {
-    return { success: false, error: 'Server connection failed' };
+    return { success: false, error: err instanceof Error ? err.message : 'Server connection failed' };
   }
 };
 
