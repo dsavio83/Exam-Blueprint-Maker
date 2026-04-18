@@ -956,10 +956,12 @@ const BlueprintSummaryTable: React.FC<BlueprintSummaryTableProps> = ({ blueprint
   });
 
   // OR summary
-  const withOR = items.filter(i => i.hasInternalChoice).length;
-  const withoutOR = items.length - withOR;
+  const withOR = items.filter(i => i.hasInternalChoice).reduce((acc, i) => acc + i.questionCount, 0);
+  const withoutOR = items.filter(i => !i.hasInternalChoice).reduce((acc, i) => acc + i.questionCount, 0);
+  const withORMarks = items.filter(i => i.hasInternalChoice).reduce((acc, i) => acc + i.totalMarks, 0);
+  const withoutORMarks = items.filter(i => !i.hasInternalChoice).reduce((acc, i) => acc + i.totalMarks, 0);
 
-  const totalItems = items.length;
+  const totalItems = (items.reduce((acc, i) => acc + i.questionCount, 0)) + (items.filter(i => i.hasInternalChoice).reduce((acc, i) => acc + i.questionCount, 0));
   const totalM = validation.grandTotal;
 
   return (
@@ -998,8 +1000,8 @@ const BlueprintSummaryTable: React.FC<BlueprintSummaryTableProps> = ({ blueprint
           <SummaryColumn
             title="Option / Choice"
             rows={[
-              { label: 'With Option', count: withOR, marks: items.filter(i => i.hasInternalChoice).reduce((a, i) => a + i.totalMarks, 0) },
-              { label: 'No Option', count: withoutOR, marks: items.filter(i => !i.hasInternalChoice).reduce((a, i) => a + i.totalMarks, 0) },
+              { label: 'Choice', count: items.filter(i => i.hasInternalChoice).reduce((a, i) => a + i.questionCount, 0), marks: withORMarks },
+              { label: 'Without Choice', count: items.filter(i => !i.hasInternalChoice).reduce((a, i) => a + i.questionCount, 0), marks: withoutORMarks },
             ]}
           />
         </div>
@@ -1024,13 +1026,21 @@ const SummaryColumn: React.FC<SummaryColumnProps> = ({ title, rows }) => (
         </tr>
       </thead>
       <tbody>
-        {rows.map((r, i) => (
-          <tr key={i} className="border-t border-gray-100">
-            <td className="py-1 text-gray-700 font-medium">{r.label}</td>
-            <td className="py-1 text-center text-gray-600">{r.count}</td>
-            <td className="py-1 text-center font-bold text-gray-800">{r.marks}</td>
-          </tr>
-        ))}
+        {rows.map((r, i) => {
+          const isTamil = /[\u0B80-\u0BFF]/.test(r.label);
+          return (
+            <tr key={i} className="border-t border-gray-100">
+              <td
+                className={`py-1 text-gray-700 font-medium whitespace-nowrap ${isTamil ? 'tamil-font' : ''}`}
+                lang={isTamil ? 'ta' : 'en'}
+              >
+                {r.label}
+              </td>
+              <td className="py-1 text-center text-gray-600">{r.count}</td>
+              <td className="py-1 text-center font-bold text-gray-800">{r.marks}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   </div>
