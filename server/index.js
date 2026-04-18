@@ -49,6 +49,7 @@ const PORT = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
 let dbConnectionError = '';
+let dbConnectionState = 'idle';
 const markConnectionError = (message) => { dbConnectionError = message; };
 const clearConnectionError = () => { dbConnectionError = ''; };
 const isDbReady = () => mongoose.connection.readyState === 1;
@@ -57,32 +58,82 @@ const dbUnavailableMessage = () => {
   if (!MONGO_URI) {
     return 'MongoDB connection string is not configured on the server.';
   }
+  if (dbConnectionState === 'connecting') {
+    return 'MongoDB connection is still initializing. Retry in a few seconds.';
+  }
   return dbConnectionError || 'MongoDB is not connected. Retry after the database connection is restored.';
+};
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let mongoConnectPromise = null;
+const connectToMongo = async () => {
+  if (!MONGO_URI) {
+    dbConnectionState = 'error';
+    markConnectionError('MongoDB connection string is not configured on the server.');
+    return null;
+  }
+  if (isDbReady()) {
+    dbConnectionState = 'connected';
+    clearConnectionError();
+    return mongoose.connection;
+  }
+  if (mongoConnectPromise) {
+    return mongoConnectPromise;
+  }
+
+  dbConnectionState = 'connecting';
+  mongoConnectPromise = mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 5000
+  })
+    .then((connection) => {
+      console.log('Connected to MongoDB');
+      dbConnectionState = 'connected';
+      clearConnectionError();
+      return connection;
+    })
+    .catch((err) => {
+      console.error('MongoDB connection error:', err.message);
+      dbConnectionState = 'error';
+      markConnectionError(err.message);
+      throw err;
+    })
+    .finally(() => {
+      mongoConnectPromise = null;
+    });
+
+  return mongoConnectPromise;
+};
+const ensureDbReady = async () => {
+  if (isDbReady()) return true;
+  try {
+    await Promise.race([
+      connectToMongo(),
+      wait(6500)
+    ]);
+  } catch (_) {
+    // The exact failure reason is stored in dbConnectionError.
+  }
+  return isDbReady();
 };
 
 if (MONGO_URI) {
-  mongoose.connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 5000
-  })
-    .then(() => {
-      console.log('Connected to MongoDB');
-      clearConnectionError();
-    })
-    .catch(err => {
-      console.error('MongoDB connection error:', err.message);
-      markConnectionError(err.message);
-    });
-
+  connectToMongo().catch(() => {});
   mongoose.connection.on('error', (err) => {
     console.error('MongoDB runtime error:', err.message);
+    dbConnectionState = 'error';
     markConnectionError(err.message);
   });
   mongoose.connection.on('disconnected', () => {
     console.warn('MongoDB disconnected.');
-    markConnectionError('MongoDB disconnected.');
+    if (!dbConnectionError) {
+      markConnectionError('MongoDB disconnected.');
+    }
+    if (!isDbReady()) {
+      dbConnectionState = 'error';
+    }
   });
 } else {
   console.warn('MONGO_URI is not configured.');
+  dbConnectionState = 'error';
   markConnectionError('MongoDB connection string is not configured.');
 }
 const getEntityId = (value) => {
@@ -137,7 +188,7 @@ const auth = (req, res, next) => {
 // 1. GET /init - Fetch all initial data
 app.get('/init', async (req, res) => {
   try {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
 
     const [users, curriculums, examConfigs, paperTypes, discourses, settings] = await Promise.all([
       User.find(), Curriculum.find(), ExamConfig.find(), 
@@ -163,7 +214,7 @@ app.get('/init', async (req, res) => {
 // 2. POST /login - JWT Authentication
 app.post('/login', async (req, res) => {
   try {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
 
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
@@ -189,7 +240,7 @@ app.post('/login', async (req, res) => {
 // 3. /users - User Management
 app.route('/users')
   .get(auth, async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
 
     if (isAdminRole(req.user.role)) {
       return res.json((await User.find()).map(normalizeUser));
@@ -212,7 +263,7 @@ app.route('/users')
 // 4. /curriculums - Curriculum Management
 app.route('/curriculums')
   .get(async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     res.json(await Curriculum.find());
   })
   .post(auth, async (req, res) => {
@@ -225,7 +276,7 @@ app.route('/curriculums')
 // 5. /exam-configs - Exam Configuration
 app.route('/exam-configs')
   .get(async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     res.json(await ExamConfig.find());
   })
   .post(auth, async (req, res) => {
@@ -239,7 +290,7 @@ app.route('/exam-configs')
 // 6. /paper-types - Paper Type Management
 app.route('/paper-types')
   .get(async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     res.json(await PaperType.find());
   })
   .post(auth, async (req, res) => {
@@ -253,7 +304,7 @@ app.route('/paper-types')
 // 7. /discourses - Discourse Management
 app.route('/discourses')
   .get(async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     res.json(await Discourse.find());
   })
   .post(auth, async (req, res) => {
@@ -267,7 +318,7 @@ app.route('/discourses')
 // 8. /settings - System Settings
 app.route('/settings')
   .get(async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     const settings = await SystemSettings.findOne();
     if (!settings) return res.status(404).json({ error: 'System settings were not found in MongoDB.' });
     res.json(settings);
@@ -282,7 +333,7 @@ app.route('/settings')
 // 9. /blueprints - Blueprint Creation
 app.post('/blueprints', auth, async (req, res) => {
   try {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     await Blueprint.findOneAndUpdate({ id: req.body.id }, req.body, { upsert: true });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -292,7 +343,7 @@ app.post('/blueprints', auth, async (req, res) => {
 app.route('/blueprints/:id')
   .get(auth, async (req, res) => {
     try {
-      if (!isDbReady()) return serviceUnavailable(res);
+      if (!(await ensureDbReady())) return serviceUnavailable(res);
 
       const { type } = req.query;
       if (type === 'shared') {
@@ -309,7 +360,7 @@ app.route('/blueprints/:id')
   })
   .delete(auth, async (req, res) => {
     try {
-      if (!isDbReady()) return serviceUnavailable(res);
+      if (!(await ensureDbReady())) return serviceUnavailable(res);
       await Blueprint.deleteOne({ id: req.params.id });
       await SharedBlueprint.deleteMany({ blueprintId: req.params.id });
       res.json({ success: true });
@@ -319,20 +370,20 @@ app.route('/blueprints/:id')
 // 11. /share - Sharing System
 app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
   .get(auth, async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     const shares = await SharedBlueprint.find({ blueprintId: req.params.bId });
     const shareUserIds = shares.map((s) => String(s.sharedWithUserId));
     res.json((await User.find()).map(normalizeUser).filter((user) => shareUserIds.includes(String(user.id))));
   })
   .post(auth, async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     const s = req.body;
     await SharedBlueprint.findOneAndUpdate({ blueprintId: s.blueprintId, sharedWithUserId: s.sharedWithUserId }, s, { upsert: true });
     await Blueprint.findOneAndUpdate({ id: s.blueprintId }, { $addToSet: { sharedWith: s.sharedWithUserId } });
     res.json({ success: true });
   })
   .delete(auth, async (req, res) => {
-    if (!isDbReady()) return serviceUnavailable(res);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
     await SharedBlueprint.deleteOne({ blueprintId: req.params.bId, sharedWithUserId: req.params.uId });
     await Blueprint.findOneAndUpdate({ id: req.params.bId }, { $pull: { sharedWith: req.params.uId } });
     res.json({ success: true });
@@ -344,6 +395,7 @@ app.get('/health', (req, res) => {
   return res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'error',
     database: healthy ? 'connected' : 'disconnected',
+    state: dbConnectionState,
     error: healthy ? null : dbUnavailableMessage(),
     time: new Date()
   });
