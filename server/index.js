@@ -317,4 +317,8 @@ app.get('/api/health', (req, res) => res.json({
   time: new Date()
 }));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}

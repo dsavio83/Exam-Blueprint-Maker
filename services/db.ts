@@ -9,7 +9,23 @@ import {
   SharedBlueprint
 } from '../types';
 
-const API_URL = 'http://localhost:5000/api';
+const resolveApiUrl = () => {
+  const envUrl = (import.meta as any)?.env?.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string') {
+    return envUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const { hostname } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:5000/api';
+    }
+  }
+
+  return '/api';
+};
+
+const API_URL = resolveApiUrl();
 
 // --- API Implementation ---
 
