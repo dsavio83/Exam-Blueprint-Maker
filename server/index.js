@@ -5,7 +5,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
-const { fallbackData } = require('./fallback-data');
 const {
   User, Curriculum, ExamConfig, Blueprint, PaperType,
   Discourse, SystemSettings, SharedBlueprint
@@ -48,63 +47,79 @@ app.use((req, res, next) => {
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 const PORT = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
-const USE_FALLBACK_DB = process.env.USE_FALLBACK_DB === 'true';
 
-let fallbackOnly = USE_FALLBACK_DB;
-const markFallback = () => { fallbackOnly = true; };
-const markLive = () => { fallbackOnly = false; };
-const isDbReady = () => !fallbackOnly && mongoose.connection.readyState === 1;
+let dbConnectionError = '';
+const markConnectionError = (message) => { dbConnectionError = message; };
+const clearConnectionError = () => { dbConnectionError = ''; };
+const isDbReady = () => mongoose.connection.readyState === 1;
 const isAdminRole = (role) => String(role || '').toLowerCase() === 'admin';
+const dbUnavailableMessage = () => {
+  if (!MONGO_URI) {
+    return 'MongoDB connection string is not configured on the server.';
+  }
+  return dbConnectionError || 'MongoDB is not connected. Retry after the database connection is restored.';
+};
 
-if (!USE_FALLBACK_DB && MONGO_URI) {
+if (MONGO_URI) {
   mongoose.connect(MONGO_URI, {
     serverSelectionTimeoutMS: 5000
   })
     .then(() => {
       console.log('Connected to MongoDB');
-      markLive();
+      clearConnectionError();
     })
     .catch(err => {
       console.error('MongoDB connection error:', err.message);
-      markFallback();
+      markConnectionError(err.message);
     });
 
   mongoose.connection.on('error', (err) => {
     console.error('MongoDB runtime error:', err.message);
-    markFallback();
+    markConnectionError(err.message);
   });
   mongoose.connection.on('disconnected', () => {
-    console.warn('MongoDB disconnected, using fallback data.');
-    markFallback();
+    console.warn('MongoDB disconnected.');
+    markConnectionError('MongoDB disconnected.');
   });
-} else if (USE_FALLBACK_DB) {
-  console.warn('Skipping MongoDB connection. Running in fallback-only mode.');
 } else {
-  console.warn('MONGO_URI is not configured. Running in fallback-only mode.');
+  console.warn('MONGO_URI is not configured.');
+  markConnectionError('MongoDB connection string is not configured.');
 }
-
-const cloneFallback = (value) => JSON.parse(JSON.stringify(value));
+const getEntityId = (value) => {
+  if (!value) return '';
+  return String(value.id || value._id || '');
+};
+const idsMatch = (left, right) => {
+  const a = String(left || '');
+  const b = String(right || '');
+  return !!a && !!b && a === b;
+};
 const toSafeUser = (user) => ({
-  id: user.id,
+  id: getEntityId(user),
   username: user.username,
   role: user.role,
   name: user.name,
   email: user.email
 });
-
-const getFallbackInitPayload = () => ({
-  users: cloneFallback(fallbackData.users),
-  curriculums: cloneFallback(fallbackData.curriculums),
-  examConfigs: cloneFallback(fallbackData.examConfigs),
-  blueprints: cloneFallback(fallbackData.blueprints),
-  questionPaperTypes: cloneFallback(fallbackData.questionPaperTypes),
-  discourses: cloneFallback(fallbackData.discourses),
-  sharedBlueprints: cloneFallback(fallbackData.sharedBlueprints),
-  settings: cloneFallback(fallbackData.settings)
+const normalizeUser = (user) => ({
+  ...(user?.toObject ? user.toObject() : user),
+  id: getEntityId(user)
+});
+const normalizeBlueprint = (blueprint) => ({
+  ...(blueprint?.toObject ? blueprint.toObject() : blueprint),
+  id: getEntityId(blueprint),
+  ownerId: String(blueprint?.ownerId || '')
+});
+const normalizeShare = (share) => ({
+  ...(share?.toObject ? share.toObject() : share),
+  id: getEntityId(share),
+  blueprintId: String(share?.blueprintId || ''),
+  ownerId: String(share?.ownerId || ''),
+  sharedWithUserId: String(share?.sharedWithUserId || '')
 });
 
 const serviceUnavailable = (res) =>
-  res.status(503).json({ error: 'Database is unavailable. Retry after MongoDB connection is restored.' });
+  res.status(503).json({ error: dbUnavailableMessage() });
 
 // Middleware to verify JWT
 const auth = (req, res, next) => {
@@ -122,9 +137,7 @@ const auth = (req, res, next) => {
 // 1. GET /init - Fetch all initial data
 app.get('/init', async (req, res) => {
   try {
-    if (!isDbReady()) {
-      return res.json(getFallbackInitPayload());
-    }
+    if (!isDbReady()) return serviceUnavailable(res);
 
     const [users, curriculums, examConfigs, paperTypes, discourses, settings] = await Promise.all([
       User.find(), Curriculum.find(), ExamConfig.find(), 
@@ -135,14 +148,14 @@ app.get('/init', async (req, res) => {
     const sharedBlueprints = await SharedBlueprint.find();
 
     res.json({
-      users,
+      users: users.map(normalizeUser),
       curriculums,
       examConfigs,
-      blueprints,
+      blueprints: blueprints.map(normalizeBlueprint),
       questionPaperTypes: paperTypes,
       discourses,
-      sharedBlueprints,
-      settings: settings || fallbackData.settings
+      sharedBlueprints: sharedBlueprints.map(normalizeShare),
+      settings
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -150,47 +163,40 @@ app.get('/init', async (req, res) => {
 // 2. POST /login - JWT Authentication
 app.post('/login', async (req, res) => {
   try {
+    if (!isDbReady()) return serviceUnavailable(res);
+
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const user = isDbReady()
-      ? await User.findOne({ username: new RegExp(`^${username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') })
-      : fallbackData.users.find((entry) => entry.username.toLowerCase() === username.toLowerCase());
+    const user = await User.findOne({ username: new RegExp(`^${username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
 
     const storedPassword = String(user.password || '');
     const isMatch = await bcrypt.compare(password, storedPassword).catch(() => false);
-    const plainTextMatch = password === storedPassword;
-    const knownSeedPasswordMatch =
-      (user.username === 'admin' && password === 'admin') ||
-      (user.username === 'user' && password === 'user');
 
-    if (!isMatch && !plainTextMatch && !knownSeedPasswordMatch) {
+    if (!isMatch) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, name: user.name } });
+    const normalizedUserId = getEntityId(user);
+    const token = jwt.sign({ id: normalizedUserId, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, user: { id: normalizedUserId, username: user.username, role: user.role, name: user.name } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // 3. /users - User Management
 app.route('/users')
   .get(auth, async (req, res) => {
-    if (!isDbReady()) {
-      const users = cloneFallback(fallbackData.users);
-      if (isAdminRole(req.user.role)) return res.json(users);
-      return res.json(users.filter((user) => !isAdminRole(user.role)).map(toSafeUser));
-    }
+    if (!isDbReady()) return serviceUnavailable(res);
 
     if (isAdminRole(req.user.role)) {
-      return res.json(await User.find());
+      return res.json((await User.find()).map(normalizeUser));
     }
 
     const users = await User.find({}, { id: 1, username: 1, role: 1, name: 1, email: 1, _id: 0 });
-    return res.json(users.filter((user) => !isAdminRole(user.role)));
+    return res.json(users.map(normalizeUser).filter((user) => !isAdminRole(user.role)));
   })
   .post(auth, async (req, res) => {
     if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
@@ -206,7 +212,7 @@ app.route('/users')
 // 4. /curriculums - Curriculum Management
 app.route('/curriculums')
   .get(async (req, res) => {
-    if (!isDbReady()) return res.json(cloneFallback(fallbackData.curriculums));
+    if (!isDbReady()) return serviceUnavailable(res);
     res.json(await Curriculum.find());
   })
   .post(auth, async (req, res) => {
@@ -219,7 +225,7 @@ app.route('/curriculums')
 // 5. /exam-configs - Exam Configuration
 app.route('/exam-configs')
   .get(async (req, res) => {
-    if (!isDbReady()) return res.json(cloneFallback(fallbackData.examConfigs));
+    if (!isDbReady()) return serviceUnavailable(res);
     res.json(await ExamConfig.find());
   })
   .post(auth, async (req, res) => {
@@ -233,7 +239,7 @@ app.route('/exam-configs')
 // 6. /paper-types - Paper Type Management
 app.route('/paper-types')
   .get(async (req, res) => {
-    if (!isDbReady()) return res.json(cloneFallback(fallbackData.questionPaperTypes));
+    if (!isDbReady()) return serviceUnavailable(res);
     res.json(await PaperType.find());
   })
   .post(auth, async (req, res) => {
@@ -247,7 +253,7 @@ app.route('/paper-types')
 // 7. /discourses - Discourse Management
 app.route('/discourses')
   .get(async (req, res) => {
-    if (!isDbReady()) return res.json(cloneFallback(fallbackData.discourses));
+    if (!isDbReady()) return serviceUnavailable(res);
     res.json(await Discourse.find());
   })
   .post(auth, async (req, res) => {
@@ -261,8 +267,10 @@ app.route('/discourses')
 // 8. /settings - System Settings
 app.route('/settings')
   .get(async (req, res) => {
-    if (!isDbReady()) return res.json(cloneFallback(fallbackData.settings));
-    res.json((await SystemSettings.findOne()) || fallbackData.settings);
+    if (!isDbReady()) return serviceUnavailable(res);
+    const settings = await SystemSettings.findOne();
+    if (!settings) return res.status(404).json({ error: 'System settings were not found in MongoDB.' });
+    res.json(settings);
   })
   .post(auth, async (req, res) => {
     if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
@@ -284,26 +292,19 @@ app.post('/blueprints', auth, async (req, res) => {
 app.route('/blueprints/:id')
   .get(auth, async (req, res) => {
     try {
-      if (!isDbReady()) {
-        const { type } = req.query;
-        if (type === 'shared') {
-          const shares = fallbackData.sharedBlueprints.filter((share) => share.sharedWithUserId === req.params.id);
-          const sharedIds = shares.map((share) => share.blueprintId);
-          return res.json(cloneFallback(fallbackData.blueprints.filter((bp) => sharedIds.includes(bp.id))));
-        }
-        if (isAdminRole(req.user.role) && req.params.id === 'all') {
-          return res.json(cloneFallback(fallbackData.blueprints));
-        }
-        return res.json(cloneFallback(fallbackData.blueprints.filter((bp) => bp.ownerId === req.params.id)));
-      }
+      if (!isDbReady()) return serviceUnavailable(res);
 
       const { type } = req.query;
       if (type === 'shared') {
         const shares = await SharedBlueprint.find({ sharedWithUserId: req.params.id });
-        return res.json(await Blueprint.find({ id: { $in: shares.map(s => s.blueprintId) } }));
+        const shareIds = shares.map((s) => String(s.blueprintId));
+        return res.json((await Blueprint.find()).map(normalizeBlueprint).filter((bp) => shareIds.includes(String(bp.id))));
       }
-      if (isAdminRole(req.user.role) && req.params.id === 'all') return res.json(await Blueprint.find());
-      res.json(await Blueprint.find({ ownerId: req.params.id }));
+      if (isAdminRole(req.user.role) && req.params.id === 'all') {
+        return res.json((await Blueprint.find()).map(normalizeBlueprint));
+      }
+      const allBlueprints = (await Blueprint.find()).map(normalizeBlueprint);
+      res.json(allBlueprints.filter((bp) => idsMatch(bp.ownerId, req.params.id)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   })
   .delete(auth, async (req, res) => {
@@ -318,13 +319,10 @@ app.route('/blueprints/:id')
 // 11. /share - Sharing System
 app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
   .get(auth, async (req, res) => {
-    if (!isDbReady()) {
-      const shares = fallbackData.sharedBlueprints.filter((share) => share.blueprintId === req.params.bId);
-      const users = fallbackData.users.filter((user) => shares.some((share) => share.sharedWithUserId === user.id));
-      return res.json(cloneFallback(users));
-    }
+    if (!isDbReady()) return serviceUnavailable(res);
     const shares = await SharedBlueprint.find({ blueprintId: req.params.bId });
-    res.json(await User.find({ id: { $in: shares.map(s => s.sharedWithUserId) } }));
+    const shareUserIds = shares.map((s) => String(s.sharedWithUserId));
+    res.json((await User.find()).map(normalizeUser).filter((user) => shareUserIds.includes(String(user.id))));
   })
   .post(auth, async (req, res) => {
     if (!isDbReady()) return serviceUnavailable(res);
@@ -341,11 +339,15 @@ app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
   });
 
 // 12. /health - System Health
-app.get('/health', (req, res) => res.json({
-  status: 'ok',
-  database: isDbReady() ? 'connected' : 'fallback',
-  time: new Date()
-}));
+app.get('/health', (req, res) => {
+  const healthy = isDbReady();
+  return res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'error',
+    database: healthy ? 'connected' : 'disconnected',
+    error: healthy ? null : dbUnavailableMessage(),
+    time: new Date()
+  });
+});
 
 module.exports = app;
 
