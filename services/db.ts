@@ -147,21 +147,12 @@ export const login = async (username: string, password: string): Promise<{ succe
 
 export const logout = () => {
   localStorage.removeItem('blueprint_token');
+  cachedDB = null;
 };
 
 export const getUsers = async (): Promise<User[]> => {
-  try {
-    const res = await fetch(`${API_URL}/users`, { headers: getAuthHeaders() });
-    return await handleResponse(res) || [];
-  } catch (err) {
-    if (err instanceof Error && err.message.toLowerCase().includes('admin access required')) {
-      console.warn('getUsers: restricted access, falling back to cached users');
-      const cached = getDB();
-      return cached?.users?.filter(user => user.role !== Role.ADMIN) || [];
-    }
-    console.error('getUsers error:', err);
-    return [];
-  }
+  const res = await fetch(`${API_URL}/users`, { headers: getAuthHeaders() });
+  return await handleResponse(res) || [];
 };
 
 export const saveUsers = async (users: User[]): Promise<void> => {

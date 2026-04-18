@@ -20,7 +20,7 @@ const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
                 setError(result.error || 'Invalid credentials');
             }
         } catch (err) {
-            setError('Connection error. Please ensure the backend is running.');
+            setError(err instanceof Error ? err.message : 'Database connection failed.');
         }
     };
 
