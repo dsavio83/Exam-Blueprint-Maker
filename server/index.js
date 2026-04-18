@@ -15,7 +15,29 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => {
-  if (req.url === '/api') {
+  const catchAllPath =
+    req.query?.['...path'] ??
+    req.query?.['[...path]'] ??
+    req.query?.path ??
+    req.query?.['[[...path]]'];
+
+  if ((req.url === '/' || req.url === '' || req.url === '/api' || req.url.startsWith('/api?')) && catchAllPath) {
+    const segments = Array.isArray(catchAllPath)
+      ? catchAllPath
+      : String(catchAllPath).split('/').filter(Boolean);
+
+    const params = new URLSearchParams();
+    Object.entries(req.query || {}).forEach(([key, value]) => {
+      if (['...path', '[...path]', 'path', '[[...path]]'].includes(key)) return;
+      if (Array.isArray(value)) {
+        value.forEach((entry) => params.append(key, String(entry)));
+      } else if (value !== undefined) {
+        params.append(key, String(value));
+      }
+    });
+
+    req.url = `/${segments.join('/')}${params.toString() ? `?${params.toString()}` : ''}`;
+  } else if (req.url === '/api') {
     req.url = '/';
   } else if (req.url.startsWith('/api/')) {
     req.url = req.url.slice(4);
