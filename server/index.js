@@ -14,6 +14,14 @@ const {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+app.use((req, res, next) => {
+  if (req.url === '/api') {
+    req.url = '/';
+  } else if (req.url.startsWith('/api/')) {
+    req.url = req.url.slice(4);
+  }
+  next();
+});
 
 const MONGO_URI = process.env.MONGO_URI;
 const PORT = process.env.PORT || 5000;
@@ -89,8 +97,8 @@ const auth = (req, res, next) => {
 
 // --- APIs (Total: 12 Route Registrations) ---
 
-// 1. GET /api/init - Fetch all initial data
-app.get('/api/init', async (req, res) => {
+// 1. GET /init - Fetch all initial data
+app.get('/init', async (req, res) => {
   try {
     if (!isDbReady()) {
       return res.json(getFallbackInitPayload());
@@ -117,8 +125,8 @@ app.get('/api/init', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2. POST /api/login - JWT Authentication
-app.post('/api/login', async (req, res) => {
+// 2. POST /login - JWT Authentication
+app.post('/login', async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
@@ -146,8 +154,8 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 3. /api/users - User Management
-app.route('/api/users')
+// 3. /users - User Management
+app.route('/users')
   .get(auth, async (req, res) => {
     if (!isDbReady()) {
       const users = cloneFallback(fallbackData.users);
@@ -173,8 +181,8 @@ app.route('/api/users')
     res.json({ success: true });
   });
 
-// 4. /api/curriculums - Curriculum Management
-app.route('/api/curriculums')
+// 4. /curriculums - Curriculum Management
+app.route('/curriculums')
   .get(async (req, res) => {
     if (!isDbReady()) return res.json(cloneFallback(fallbackData.curriculums));
     res.json(await Curriculum.find());
@@ -186,8 +194,8 @@ app.route('/api/curriculums')
     res.json({ success: true });
   });
 
-// 5. /api/exam-configs - Exam Configuration
-app.route('/api/exam-configs')
+// 5. /exam-configs - Exam Configuration
+app.route('/exam-configs')
   .get(async (req, res) => {
     if (!isDbReady()) return res.json(cloneFallback(fallbackData.examConfigs));
     res.json(await ExamConfig.find());
@@ -200,8 +208,8 @@ app.route('/api/exam-configs')
     res.json({ success: true });
   });
 
-// 6. /api/paper-types - Paper Type Management
-app.route('/api/paper-types')
+// 6. /paper-types - Paper Type Management
+app.route('/paper-types')
   .get(async (req, res) => {
     if (!isDbReady()) return res.json(cloneFallback(fallbackData.questionPaperTypes));
     res.json(await PaperType.find());
@@ -214,8 +222,8 @@ app.route('/api/paper-types')
     res.json({ success: true });
   });
 
-// 7. /api/discourses - Discourse Management
-app.route('/api/discourses')
+// 7. /discourses - Discourse Management
+app.route('/discourses')
   .get(async (req, res) => {
     if (!isDbReady()) return res.json(cloneFallback(fallbackData.discourses));
     res.json(await Discourse.find());
@@ -228,8 +236,8 @@ app.route('/api/discourses')
     res.json({ success: true });
   });
 
-// 8. /api/settings - System Settings
-app.route('/api/settings')
+// 8. /settings - System Settings
+app.route('/settings')
   .get(async (req, res) => {
     if (!isDbReady()) return res.json(cloneFallback(fallbackData.settings));
     res.json((await SystemSettings.findOne()) || fallbackData.settings);
@@ -241,8 +249,8 @@ app.route('/api/settings')
     res.json({ success: true });
   });
 
-// 9. /api/blueprints - Blueprint Creation
-app.post('/api/blueprints', auth, async (req, res) => {
+// 9. /blueprints - Blueprint Creation
+app.post('/blueprints', auth, async (req, res) => {
   try {
     if (!isDbReady()) return serviceUnavailable(res);
     await Blueprint.findOneAndUpdate({ id: req.body.id }, req.body, { upsert: true });
@@ -250,8 +258,8 @@ app.post('/api/blueprints', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 10. /api/blueprints/:id - Blueprint Retrieval & Deletion
-app.route('/api/blueprints/:id')
+// 10. /blueprints/:id - Blueprint Retrieval & Deletion
+app.route('/blueprints/:id')
   .get(auth, async (req, res) => {
     try {
       if (!isDbReady()) {
@@ -285,8 +293,8 @@ app.route('/api/blueprints/:id')
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-// 11. /api/share - Sharing System
-app.route(['/api/share', '/api/share/:bId', '/api/share/:bId/:uId'])
+// 11. /share - Sharing System
+app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
   .get(auth, async (req, res) => {
     if (!isDbReady()) {
       const shares = fallbackData.sharedBlueprints.filter((share) => share.blueprintId === req.params.bId);
@@ -310,8 +318,8 @@ app.route(['/api/share', '/api/share/:bId', '/api/share/:bId/:uId'])
     res.json({ success: true });
   });
 
-// 12. /api/health - System Health
-app.get('/api/health', (req, res) => res.json({
+// 12. /health - System Health
+app.get('/health', (req, res) => res.json({
   status: 'ok',
   database: isDbReady() ? 'connected' : 'fallback',
   time: new Date()
