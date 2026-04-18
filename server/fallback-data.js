@@ -3,13 +3,14 @@ const {
   INITIAL_EXAM_CONFIGS,
   INITIAL_DISCOURSES
 } = require('./seed-master-data');
+const { INITIAL_CURRICULUM } = require('./seed-curriculum');
 
 const fallbackData = {
   users: [
     { id: '1', username: 'admin', password: 'admin', role: 'ADMIN', name: 'Super Admin' },
     { id: '2', username: 'user', password: 'user', role: 'USER', name: 'Staff Member' }
   ],
-  curriculums: [],
+  curriculums: INITIAL_CURRICULUM,
   examConfigs: INITIAL_EXAM_CONFIGS,
   blueprints: [],
   questionPaperTypes: INITIAL_PAPER_TYPES,
