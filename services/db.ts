@@ -9,17 +9,36 @@ import {
   SharedBlueprint
 } from '../types';
 
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+
+const isLocalHostname = (hostname: string) => LOCAL_HOSTNAMES.has(String(hostname || '').toLowerCase());
+
+const isLoopbackUrl = (value: string) => {
+  try {
+    return isLocalHostname(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+};
+
 const resolveApiUrl = () => {
   const envUrl = (import.meta as any)?.env?.VITE_API_URL;
+  const browserHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const runningLocally = isLocalHostname(browserHostname);
+
   if (envUrl && typeof envUrl === 'string') {
-    return envUrl.replace(/\/$/, '');
+    const normalized = envUrl.trim().replace(/\/$/, '');
+
+    // Prevent production deployments from calling a developer's localhost API.
+    if (!(isLoopbackUrl(normalized) && !runningLocally)) {
+      return normalized;
+    }
+
+    console.warn('Ignoring VITE_API_URL because it points to localhost in a non-local environment.');
   }
 
-  if (typeof window !== 'undefined') {
-    const { hostname } = window.location;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:5000/api';
-    }
+  if (runningLocally) {
+    return 'http://localhost:5001/api';
   }
 
   return '/api';

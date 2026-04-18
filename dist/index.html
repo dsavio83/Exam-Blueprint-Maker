@@ -18,13 +18,8 @@
       font-family: 'Noto Serif', serif;
     }
 
-    /* Tamil specific font */
-    [lang="ta"],
-    .tamil-font {
-      font-family: 'TAU-Paalai', 'Noto Serif', serif;
-      font-size: 14pt;
-    }
-        @font-face {
+
+    @font-face {
       font-family: 'TAU-Urai';
       src: url('/fonts/TAU-Urai-Bold.ttf') format('truetype');
       font-weight: bold;
@@ -32,8 +27,15 @@
     }
 
     .tamil-heading-font {
-      font-family: 'TAU-Urai Bold', 'TAU-Urai', 'TAU-Paalai', serif;
+      font-family: 'TAU-Urai Bold', serif;
       font-weight: 700;
+    }
+
+    /* Tamil specific font */
+    [lang="ta"],
+    .tamil-font {
+      font-family: 'TAU-Paalai', 'Noto Serif', serif;
+      font-size: 14pt;
     }
 
     .english-font {
@@ -43,7 +45,7 @@
     /* Professional Rubric List (Answer Key) */
     .rubric-list {
       list-style-type: none !important;
-      padding-left: 1.25rem !important;
+      padding-left: 1.5rem !important;
       margin: 0.5rem 0 !important;
       width: 100%;
     }
@@ -51,7 +53,7 @@
     .rubric-list li {
       display: flex !important;
       justify-content: space-between !important;
-      align-items: baseline !important;
+      align-items: flex-start !important;
       gap: 1rem !important;
       padding: 0.25rem 0 0.25rem 0.2rem !important;
       border-bottom: 1px dashed #eee;
@@ -62,10 +64,11 @@
     .rubric-list li::before {
       content: "•";
       position: absolute;
-      left: -0.9rem;
-      top: 0.15rem;
-      font-size: 1rem;
+      left: -1rem;
+      top: -0.1rem;
+      font-size: 1.6rem;
       line-height: 1;
+      color: #333;
     }
 
     .rubric-list li:last-child {
@@ -75,13 +78,42 @@
     .rubric-point {
       flex: 1;
       text-align: left;
+      line-height: 1.6;
     }
 
     .rubric-mark {
       font-weight: bold;
       min-width: 2rem;
       text-align: right;
-      color: #1e40af; /* Blue-800 for visibility */
+      color: #000;
+      line-height: 1.6;
+      margin-left: 8px;
+    }
+
+    /* Mark Indicator for editor - show box for feedback */
+    .editor-content .mark-indicator {
+      float: right;
+      border: 1px solid #000;
+      padding: 1px 6px;
+      min-width: 32px;
+      text-align: center;
+      font-weight: bold;
+      margin-left: 20px;
+      background: #fcfcfc;
+      display: block;
+      border-radius: 2px;
+      font-family: 'Times New Roman', 'Times', serif;
+    }
+
+    /* Mark Indicator for final view - hide box */
+    .mark-indicator {
+      float: right;
+      min-width: 32px;
+      text-align: center;
+      font-weight: bold;
+      margin-left: 10px;
+      display: block;
+      font-family: 'Times New Roman', 'Times', serif;
     }
 
     /* Force single borders in all tables */
@@ -89,19 +121,27 @@
       border-collapse: collapse !important;
       border-spacing: 0 !important;
       width: 100% !important;
-      border: 1px solid black !important; /* Outer border */
+      border: 1px solid black !important;
+      /* Outer border */
     }
 
     th,
     td {
       border: 1px solid black !important;
-      padding: 8px; /* Consistent padding */
+      padding: 2px 4px;
+      /* Professional compact look */
     }
 
     /* Maintain black borders for report-like tables */
-    .bg-white table, .bg-white th, .bg-white td,
-    .bg-gray-100 table, .bg-gray-100 th, .bg-gray-100 td,
-    .reports-container table, .reports-container th, .reports-container td {
+    .bg-white table,
+    .bg-white th,
+    .bg-white td,
+    .bg-gray-100 table,
+    .bg-gray-100 th,
+    .bg-gray-100 td,
+    .reports-container table,
+    .reports-container th,
+    .reports-container td {
       border-color: #000 !important;
     }
 
@@ -118,6 +158,21 @@
     .scrollbar-hide {
       -ms-overflow-style: none;
       scrollbar-width: none;
+    }
+
+    /* Global removals for professional look */
+    .shadow-md,
+    .shadow-sm,
+    .shadow-lg,
+    .shadow {
+      box-shadow: none !important;
+    }
+
+    .rounded-xl,
+    .rounded-lg,
+    .rounded-md,
+    .rounded {
+      border-radius: 0 !important;
     }
 
     @media print {
@@ -157,13 +212,6 @@
         box-shadow: none !important;
         padding: 0 !important;
         margin: 0 !important;
-      }
-
-      .shadow-md,
-      .rounded-xl,
-      .rounded-lg {
-        box-shadow: none !important;
-        border-radius: 0 !important;
       }
 
       .reports-display-content {
@@ -237,7 +285,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-jjvjiuWh.js"></script>
+  <script type="module" crossorigin src="/assets/index-DoTdUfY4.js"></script>
 </head>
 
 <body class="bg-gray-50 text-gray-900 antialiased select-none">

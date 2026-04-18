@@ -45,8 +45,8 @@ app.use((req, res, next) => {
   next();
 });
 
-const MONGO_URI = process.env.MONGO_URI;
-const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
+const PORT = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const USE_FALLBACK_DB = process.env.USE_FALLBACK_DB === 'true';
 
@@ -350,5 +350,26 @@ app.get('/health', (req, res) => res.json({
 module.exports = app;
 
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log('Press Ctrl+C to stop the server');
+  });
+
+  server.on('error', (err) => {
+    console.error('Server failed to start:', err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Try using a different port.`);
+    }
+  });
+
+  process.on('SIGINT', () => {
+    console.log('Shutting down server...');
+    server.close(() => {
+      console.log('Server shut down.');
+      process.exit(0);
+    });
+  });
+
+  // Keep-alive just in case
+  setInterval(() => {}, 60000);
 }

@@ -41,7 +41,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
     const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
     const [isSaving, setIsSaving] = useState(false);
-    
+
     const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
     const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -130,7 +130,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
         const db = getDB();
         if (!db) await initDB();
-        
+
         const items = generateBlueprintTemplate(getDB()!, curriculum, selectedTerm, selectedPaperType);
         const paperType = paperTypes.find(p => p.id === selectedPaperType);
 
@@ -156,7 +156,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const handleRegeneratePattern = async () => {
         if (!currentBlueprint || !curriculum) return;
         if (!window.confirm("This will replace all current questions with a new random pattern. Continue?")) return;
-        
+
         const db = getDB();
         if (!db) await initDB();
 
@@ -190,7 +190,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
     const handleDownloadPDF = async (type: string = 'all') => {
         if (!currentBlueprint) return;
-        
+
         let pdf = new jsPDF('p', 'mm', 'a4');
         const MARGIN = 10;
         const pdfWidthPortrait = 210;
@@ -417,12 +417,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                     <div className="w-2 h-8 bg-blue-600 rounded-full"></div>
                                     <h2 className="text-2xl font-black text-gray-800 tracking-tight">Blueprints</h2>
                                 </div>
-                                <button 
-                                    onClick={handleCreateNew} 
+                                <button
+                                    onClick={handleCreateNew}
                                     className="group relative overflow-hidden bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-blue-200 hover:shadow-blue-300 transition-all active:scale-95 flex items-center font-bold text-sm"
                                 >
                                     <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
-                                    <Plus className="mr-1.5" size={18} /> 
+                                    <Plus className="mr-1.5" size={18} />
                                     <span>New</span>
                                 </button>
                             </div>
@@ -513,7 +513,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                                 {bp.questionPaperTypeName || 'N/A'}
                                                                 {!isOwner && ownerUser && <div className="text-xs text-gray-400 mt-0.5 font-normal italic">Shared by {ownerUser.name}</div>}
                                                             </td>
-                                                            <td className="p-4 text-gray-700">Class {bp.classLevel === 'SSLC' ? '11 (SSLC)' : bp.classLevel}</td>
+                                                            <td className="p-4 text-gray-700">Class {bp.classLevel === 'SSLC' ? '10 (SSLC)' : bp.classLevel}</td>
                                                             <td className="p-4 text-gray-700">{bp.subject}</td>
                                                             <td className="p-4 text-gray-600 text-sm font-medium">{bp.examTerm}</td>
                                                             <td className="p-4 text-sm text-center font-bold text-gray-800">{bp.setId || 'Set A'}</td>
@@ -532,15 +532,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                                     </button>
                                                                     {isOwner && (
                                                                         <>
-                                                                            <button 
-                                                                                onClick={() => setSharingBlueprintId(bp.id)} 
+                                                                            <button
+                                                                                onClick={() => setSharingBlueprintId(bp.id)}
                                                                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm text-green-700 hover:bg-green-100 bg-green-50 transition-all"
                                                                             >
                                                                                 <Share2 size={14} /> Share
                                                                             </button>
-                                                                            <button 
-                                                                                onClick={() => handleDelete(bp.id)} 
-                                                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${bp.isLocked ? 'text-gray-300' : 'text-red-500 hover:bg-red-50 bg-red-50/30'}`} 
+                                                                            <button
+                                                                                onClick={() => handleDelete(bp.id)}
+                                                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${bp.isLocked ? 'text-gray-300' : 'text-red-500 hover:bg-red-50 bg-red-50/30'}`}
                                                                                 disabled={bp.isLocked}
                                                                             >
                                                                                 <Trash2 size={14} />
@@ -561,7 +561,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                         {filteredBlueprints.map((bp, index) => {
                                             const isOwner = bp.ownerId === user.id;
                                             const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
-                                            
+
                                             // Dynamic colorful patterns based on index or ID
                                             const colors = [
                                                 'from-blue-600 to-indigo-700',
@@ -574,8 +574,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                             const bgGradient = colors[index % colors.length];
 
                                             return (
-                                                <div 
-                                                    key={bp.id} 
+                                                <div
+                                                    key={bp.id}
                                                     className="relative bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 transform active:scale-95 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
                                                     style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
                                                 >
@@ -587,7 +587,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                             <div className="absolute top-5 -left-10 w-24 h-24 rounded-full bg-white blur-xl"></div>
                                                             <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '20px 20px' }}></div>
                                                         </div>
-                                                        
+
                                                         {/* Bottom Curve */}
                                                         <div className="absolute bottom-0 left-0 right-0 h-6 bg-white" style={{ borderRadius: '50% 50% 0 0 / 100% 100% 0 0' }}></div>
 
@@ -608,7 +608,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        
+
                                                         <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white p-2 rounded-xl border border-white/30">
                                                             <div className="text-[10px] uppercase font-bold text-center leading-tight">Marks</div>
                                                             <div className="text-xl font-black text-center">{bp.totalMarks}</div>
@@ -656,14 +656,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                                             </button>
                                                             {isOwner && (
                                                                 <>
-                                                                    <button 
-                                                                        onClick={() => setSharingBlueprintId(bp.id)} 
+                                                                    <button
+                                                                        onClick={() => setSharingBlueprintId(bp.id)}
                                                                         className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm uppercase tracking-wider bg-green-500 text-white shadow-lg shadow-green-100 active:shadow-none active:translate-y-0.5 transition-all text-center"
                                                                     >
                                                                         <Share2 size={16} /> Share
                                                                     </button>
-                                                                    <button 
-                                                                        onClick={() => handleDelete(bp.id)} 
+                                                                    <button
+                                                                        onClick={() => handleDelete(bp.id)}
                                                                         disabled={bp.isLocked}
                                                                         className={`w-12 flex items-center justify-center rounded-xl transition-all ${bp.isLocked ? 'bg-gray-100 text-gray-200' : 'bg-red-50 text-red-500 border border-red-100 active:bg-red-500 active:text-white'}`}
                                                                     >
