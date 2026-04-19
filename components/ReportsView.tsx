@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Blueprint, Curriculum, BlueprintItem, CognitiveProcess, ItemFormat, QuestionPaperType, ExamTerm, KnowledgeLevel, Discourse } from '@/types';
-import { Download, FileText, Printer } from 'lucide-react';
+import { Blueprint, Curriculum, BlueprintItem, CognitiveProcess, ItemFormat, QuestionPaperType, ExamTerm, KnowledgeLevel, Discourse, ReportSettings } from '@/types';
+import { Download, FileText, Printer, Settings, X, Check } from 'lucide-react';
 import AnswerKeyView from './AnswerKeyView';
 
 interface ReportsViewProps {
@@ -11,13 +11,41 @@ interface ReportsViewProps {
     onDownloadPDF: (tab: string) => void;
     onDownloadWord: (tab: string) => void;
     isAdmin?: boolean;
+    onUpdateReportSettings?: (settings: Blueprint['reportSettings']) => void;
+    onMoveItem?: (itemId: string, newUnitId: string, newSectionId: string, newSubUnitId?: string) => void;
+    onUpdateItemField?: (id: string, field: keyof BlueprintItem, val: any) => void;
 }
 
-export const ReportsView = ({ blueprint, curriculum, discourses, paperType, onDownloadPDF, onDownloadWord, isAdmin = false }: ReportsViewProps) => {
+export const ReportsView = ({
+    blueprint,
+    curriculum,
+    discourses,
+    paperType,
+    onDownloadPDF,
+    onDownloadWord,
+    isAdmin = false,
+    onUpdateReportSettings,
+    onMoveItem,
+    onUpdateItemField
+}: ReportsViewProps) => {
     const [activeTab, setActiveTab] = useState('report1');
     const [customMinutes, setCustomMinutes] = useState<number | null>(null);
     const [isEditingTime, setIsEditingTime] = useState(false);
     const [tempMinutes, setTempMinutes] = useState<string>("");
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Default settings if missing
+    const settings: ReportSettings = blueprint.reportSettings || {
+        fontFamily: 'TAU-Pallai',
+        fontSizeBody: 12,
+        fontSizeTitle: 14,
+        fontSizeTamil: 14,
+        rowHeight: 35,
+        columnWidths: {},
+        showLogo: true,
+        compactMode: false,
+        orientation: 'p'
+    };
 
     const getDisplayTime = (item: BlueprintItem) => {
         if (item.time !== undefined && item.time !== null && item.time !== 0) return item.time;
@@ -261,7 +289,7 @@ export const ReportsView = ({ blueprint, curriculum, discourses, paperType, onDo
 html, body {
     margin: 0; padding: 0;
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 10pt;
+    font-size: ${settings.fontSizeBody}pt;
     background: white;
     color: black;
 }
@@ -309,10 +337,10 @@ html, body {
 /* ===== Preserve all original table styles ===== */
 table { border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid black; }
-.tamil-font { font-family: 'TAU-Paalai', 'Latha', Arial Unicode MS, serif !important; }
-.report-topic-cell, .report-lo-cell { font-family: 'TAU-Paalai', 'Latha', serif !important; font-size: 8px !important; line-height: 1.4 !important; }
+.tamil-font { font-family: '${settings.fontFamily}', 'Latha', Arial Unicode MS, serif !important; font-size: ${settings.fontSizeTamil}pt !important; }
+.report-topic-cell, .report-lo-cell { font-family: '${settings.fontFamily}', 'Latha', serif !important; font-size: ${settings.fontSizeTamil}pt !important; line-height: 1.4 !important; }
 .report-analysis-table { table-layout: fixed; width: 100% !important; border-collapse: collapse; }
-.report-analysis-table th, .report-analysis-table td { word-break: break-word; vertical-align: middle; border: 1px solid black !important; }
+.report-analysis-table th, .report-analysis-table td { word-break: break-word; vertical-align: middle; border: 1px solid black !important; height: ${settings.rowHeight}px !important; }
 .break-after-page { break-after: page; page-break-after: always; }
 .bg-gray-50 { background-color: #f9fafb !important; }
 .bg-gray-100 { background-color: #f3f4f6 !important; }
@@ -429,8 +457,8 @@ th, td {
     word-wrap: break-word;
 }
 .tamil-font, .report-topic-cell, .report-lo-cell {
-    font-family: "TAU-Paalai", "Latha", "Arial Unicode MS", serif;
-    font-size: 8pt;
+    font-family: "TAU-Pallai", "Latha", "Arial Unicode MS", serif;
+    font-size: 14pt;
     line-height: 1.4;
 }
 .bg-gray-50 { background: #f9fafb; }
@@ -1107,6 +1135,11 @@ ${bodyHTML}
                         className="bg-black text-white border-2 border-black px-5 py-2 font-bold hover:bg-gray-800 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
                         <Printer size={18} /> Print
                     </button>
+                    <button onClick={() => setIsSettingsOpen(true)}
+                        className="bg-gray-100 text-black border-2 border-gray-300 px-5 py-2 font-bold hover:bg-gray-200 flex items-center gap-2 transition-all text-sm md:text-base outline-none rounded-lg"
+                        title="Report Settings">
+                        <Settings size={18} />
+                    </button>
                 </div>
             </div>
 
@@ -1169,6 +1202,92 @@ ${bodyHTML}
                 </div>
             </div>
 
+            {/* ─── Settings Modal ─── */}
+            {isSettingsOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm no-print">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <Settings className="text-blue-600" size={20} /> Report Settings
+                            </h3>
+                            <button onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">Tamil Font Family</label>
+                                <select
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-gray-50"
+                                    value={settings.fontFamily}
+                                    onChange={(e) => {
+                                        onUpdateReportSettings && onUpdateReportSettings({
+                                            ...settings,
+                                            fontFamily: e.target.value
+                                        });
+                                    }}
+                                >
+                                    <option value="TAU-Pallai">TAU-Pallai (Recommended)</option>
+                                    <option value="Latha">Latha</option>
+                                    <option value="Arial Unicode MS">Arial Unicode MS</option>
+                                    <option value="serif">Browser Default Serif</option>
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">Tamil Font Size</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
+                                        value={settings.fontSizeTamil}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, fontSizeTamil: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">Title Font Size</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
+                                        value={settings.fontSizeTitle}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, fontSizeTitle: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">Body Font Size</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
+                                        value={settings.fontSizeBody}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, fontSizeBody: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">Row Height (px)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
+                                        value={settings.rowHeight}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, rowHeight: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 px-6 py-4 flex justify-end">
+                            <button
+                                onClick={() => setIsSettingsOpen(false)}
+                                className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg shadow-blue-100"
+                            >
+                                <Check size={20} /> Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ─── Styles ─── */}
             <style dangerouslySetInnerHTML={{
                 __html: `
@@ -1194,10 +1313,10 @@ ${bodyHTML}
 .tamil-font,
 .report-topic-cell,
 .report-lo-cell {
-    font-family: 'TAU-Paalai', 'Latha', Arial Unicode MS, serif !important;
+    font-family: '${settings.fontFamily}', 'Latha', Arial Unicode MS, serif !important;
 }
-.report-lo-cell  { font-size: 9px !important; line-height: 1.5 !important; }
-.report-topic-cell { font-size: 9px !important; line-height: 1.5 !important; }
+.report-lo-cell  { font-size: ${settings.fontSizeTamil - 5}pt !important; line-height: 1.5 !important; }
+.report-topic-cell { font-size: ${settings.fontSizeTamil - 5}pt !important; line-height: 1.5 !important; }
 
 /* Analysis table */
 .report-analysis-table {

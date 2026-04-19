@@ -56,6 +56,7 @@ const AdminDiscourseManager: React.FC = () => {
             loadData();
         } catch (error) {
             console.error('Error saving discourse:', error);
+            alert("Error saving discourse. Please check your connection and login session.");
         }
     };
 

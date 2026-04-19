@@ -12,6 +12,8 @@ import AdminUserManager from './AdminUserManager';
 import AdminDiscourseManager from './AdminDiscourseManager';
 import AdminQuestionPaperManager from './AdminQuestionPaperManager';
 import AdminQuestionConsolidator from './AdminQuestionConsolidator';
+import AdminAssignmentManager from './AdminAssignmentManager';
+import AdminTeacherDetailsView from './AdminTeacherDetailsView';
 import AnswerKeyView from './AnswerKeyView';
 import { getCurriculum, getQuestionPaperTypes, saveBlueprint, getDefaultFormat, getDefaultKnowledge, generateBlueprintTemplate, getDB, initDB, filterCurriculumByTerm, getDiscourses } from '../services/db';
 import { DocExportService } from '../services/docExport';
@@ -24,8 +26,15 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'config' | 'papertype' | 'users' | 'discourses' | 'blueprints' | 'consolidated'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'config' | 'papertype' | 'users' | 'discourses' | 'blueprints' | 'consolidated' | 'assignment' | 'teacher_details'>(() => {
+        const saved = localStorage.getItem('admin_active_tab');
+        return (saved as any) || 'dashboard';
+    });
     const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+    useEffect(() => {
+        localStorage.setItem('admin_active_tab', activeTab);
+    }, [activeTab]);
 
     // Viewing/Editing Paper State
     const [viewingBlueprint, setViewingBlueprint] = useState<Blueprint | null>(null);
@@ -105,7 +114,8 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                 onclone: (clonedDoc) => {
                     const tamilElements = clonedDoc.querySelectorAll('.tamil-font');
                     tamilElements.forEach(el => {
-                        (el as HTMLElement).style.fontFamily = "'TAU-Pallai', 'TAU-Palaai', 'Noto Serif', serif";
+                        (el as HTMLElement).style.fontFamily = "'TAU-Pallai', 'Noto Serif', serif";
+                        (el as HTMLElement).style.fontSize = "14pt";
                     });
                 }
             });
@@ -292,7 +302,9 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         { id: 'discourses', label: 'Discourses', icon: List },
         { id: 'blueprints', label: 'User Papers', icon: FileText },
         { id: 'consolidated', label: 'Mass View', icon: ClipboardList },
-        { id: 'users', label: 'User Management', icon: Users },
+        { id: 'assignment', label: 'Assign Paper', icon: RefreshCw },
+        { id: 'teacher_details', label: 'Teacher Details', icon: Users },
+        { id: 'users', label: 'User Management', icon: Settings },
     ];
 
     const renderContent = () => {
@@ -325,6 +337,8 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
             case 'discourses': return <AdminDiscourseManager />;
             case 'blueprints': return <AdminQuestionPaperManager onEditBlueprint={handleEditBlueprint} />;
             case 'consolidated': return <AdminQuestionConsolidator />;
+            case 'assignment': return <AdminAssignmentManager />;
+            case 'teacher_details': return <AdminTeacherDetailsView />;
             default: return <AdminDashboard />;
         }
     };
@@ -491,3 +505,4 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 };
 
 export default AdminPortal;
+

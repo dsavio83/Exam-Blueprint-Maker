@@ -1211,10 +1211,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
 
                     {/* ══════════════ PROFILE VIEW ═════════════════════════════════ */}
                     {view === 'profile' && (
-                        <UserProfile 
-                            user={user} 
-                            onUpdate={onUpdateUser} 
-                            onBack={() => setView('list')} 
+                        <UserProfile
+                            user={user}
+                            onUpdate={onUpdateUser}
+                            onBack={() => setView('list')}
                         />
                     )}
                 </div>

@@ -255,3 +255,4 @@ export const exportMassViewIcml = async (payload: MassViewExportPayload) => {
     const blob = new Blob([icml], { type: 'application/xml;charset=utf-8' });
     saveAs(blob, `${getBaseFileName(payload.blueprint)}.icml`);
 };
+

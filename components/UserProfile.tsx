@@ -325,6 +325,19 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                         </div>
                         <div className="profile-grid">
                             <div className="form-group">
+                                <label>Employee ID (Staff ID)</label>
+                                <div className="input-with-icon">
+                                    <CreditCard size={18} />
+                                    <input
+                                        type="text"
+                                        name="staffId"
+                                        value={formData.staffId || ''}
+                                        onChange={handleChange}
+                                        placeholder="e.g. EMP12345"
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-group">
                                 <label>PEN (Permanent Employee Number)</label>
                                 <div className="input-with-icon">
                                     <CreditCard size={18} />

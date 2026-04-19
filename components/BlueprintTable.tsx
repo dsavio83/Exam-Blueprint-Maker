@@ -63,13 +63,13 @@ export interface QuestionType {
  * Add additional keys here if new formats are introduced.
  */
 const LEVEL_COLORS: Record<string, string> = {
-  sr1:  'bg-blue-100 border-blue-300',
-  sr2:  'bg-orange-100 border-orange-300',
+  sr1: 'bg-blue-100 border-blue-300',
+  sr2: 'bg-orange-100 border-orange-300',
   crs1: 'bg-green-100 border-green-300',
   crs2: 'bg-purple-100 border-purple-300',
   crs3: 'bg-indigo-100 border-indigo-300',  // added — mirrors seed data CRS3
-  crl:  'bg-pink-100 border-pink-300',
-  as1:  'bg-teal-100 border-teal-300',
+  crl: 'bg-pink-100 border-pink-300',
+  as1: 'bg-teal-100 border-teal-300',
 };
 
 const FALLBACK_CELL_COLOR = 'bg-slate-100 border-slate-300';
@@ -217,7 +217,7 @@ const BlueprintTable: React.FC<BlueprintTableProps> = ({
           <thead>
             <tr className="bg-slate-800 text-white print:bg-white print:text-black print:border-b-2 print:border-black">
               <th className="p-3 w-32 border border-slate-600 print:border-slate-300 text-left">Unit</th>
-              <th className="p-3 w-48 border border-slate-600 print:border-slate-300 text-left">Lesson / Topic</th>
+              <th className="p-3 w-48 border border-slate-600 print:border-slate-300 text-left">Sub Unit</th>
               <th className="p-3 w-16 bg-indigo-700 print:bg-white print:text-black border border-slate-600 print:border-slate-300 text-center">
                 Marks
               </th>

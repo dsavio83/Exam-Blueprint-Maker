@@ -39,7 +39,8 @@ const blueprintSchema = new mongoose.Schema({
   sharedWith: [String],
   isLocked: Boolean,
   isHidden: Boolean,
-  isConfirmed: Boolean
+  isConfirmed: Boolean,
+  isAdminAssigned: Boolean
 }, { strict: false });
 
 const paperTypeSchema = new mongoose.Schema({

@@ -364,12 +364,12 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                     }
                 }
                 .tamil-font {
-                    font-family: 'TAU-Paalai', 'Noto Serif', serif;
+                    font-family: 'TAU-Pallai', 'Noto Serif', serif;
                     font-size: 14pt;
                     line-height: 1.05;
                 }
                 .tamil-heading-font {
-                    font-family: 'TAU-Urai Bold', 'TAU-Urai', 'TAU-Paalai', serif;
+                    font-family: 'TAU-Urai Bold', 'TAU-Urai', 'TAU-Pallai', serif;
                     font-weight: 700;
                     font-size: 16px;
                 }
@@ -429,7 +429,7 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                 .rubric-point {
                     flex-grow: 1;
                     line-height: 1.3;
-                    font-family: 'TAU-Paalai', serif;
+                    font-family: 'TAU-Pallai', serif;
                 }
                 /* Hidden helper for editor boxes that are empty in the final key */
                 .mark-indicator:empty:not(:focus) {
@@ -446,3 +446,4 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
 };
 
 export default AnswerKeyView;
+

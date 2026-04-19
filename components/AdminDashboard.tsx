@@ -4,7 +4,7 @@ import {
     Users, FileText, FileType, Settings, CheckCircle, Clock
 } from 'lucide-react';
 import {
-    getUsers, getBlueprints, getQuestionPaperTypes, getExamConfigs
+    getUsers, getBlueprints, getQuestionPaperTypes, getExamConfigs, getHealth
 } from '../services/db';
 import { Blueprint } from '../types';
 
@@ -15,25 +15,34 @@ const AdminDashboard = () => {
         paperTypes: 0,
         configs: 0
     });
+    const [health, setHealth] = useState({ status: 'connecting', database: 'initializing' });
     const [recentBlueprints, setRecentBlueprints] = useState<Blueprint[]>([]);
 
     useEffect(() => {
         const loadStats = async () => {
-            const [users, blueprints, paperTypes, configs] = await Promise.all([
-                getUsers(),
-                getBlueprints('all'), 
-                getQuestionPaperTypes(),
-                getExamConfigs()
-            ]);
-            
-            setStats({
-                users: users.length,
-                blueprints: blueprints.length,
-                paperTypes: paperTypes.length,
-                configs: configs.length
-            });
-            const sorted = [...blueprints].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setRecentBlueprints(sorted.slice(0, 5));
+            try {
+                const [users, blueprints, paperTypes, configs, healthData] = await Promise.all([
+                    getUsers(),
+                    getBlueprints('all'), 
+                    getQuestionPaperTypes(),
+                    getExamConfigs(),
+                    getHealth()
+                ]);
+                
+                setStats({
+                    users: users.length,
+                    blueprints: blueprints.length,
+                    paperTypes: paperTypes.length,
+                    configs: configs.length
+                });
+                setHealth(healthData);
+                const sorted = [...blueprints].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                setRecentBlueprints(sorted.slice(0, 5));
+            } catch (err) {
+                console.error("Failed to load dashboard stats:", err);
+                const healthData = await getHealth();
+                setHealth(healthData);
+            }
         };
         loadStats();
     }, []);
@@ -50,6 +59,8 @@ const AdminDashboard = () => {
         </div>
     );
 
+    const isHealthy = health.status === 'ok';
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
@@ -58,8 +69,8 @@ const AdminDashboard = () => {
                     <p className="text-gray-500 mt-1 font-medium italic">Welcome to the administrative control center.</p>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-bold text-gray-400 bg-gray-100/50 px-3 py-1.5 rounded-full">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    SYSTEM LIVE
+                    <span className={`w-2 h-2 rounded-full ${isHealthy ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                    {isHealthy ? 'SYSTEM LIVE' : 'SYSTEM ISSUES'}
                 </div>
             </div>
 
@@ -125,22 +136,32 @@ const AdminDashboard = () => {
                     </div>
                     <div className="p-8 flex flex-col items-center text-center">
                         <div className="relative mb-6">
-                            <div className="absolute inset-0 bg-green-400 blur-2xl opacity-20 animate-pulse"></div>
-                            <div className="relative w-24 h-24 rounded-3xl bg-green-50 flex items-center justify-center text-green-600 shadow-inner">
+                            <div className={`absolute inset-0 ${isHealthy ? 'bg-green-400' : 'bg-red-400'} blur-2xl opacity-20 animate-pulse`}></div>
+                            <div className={`relative w-24 h-24 rounded-3xl ${isHealthy ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'} flex items-center justify-center shadow-inner`}>
                                 <CheckCircle size={48} strokeWidth={1.5} />
                             </div>
                         </div>
-                        <h4 className="font-bold text-gray-900 text-xl font-display tracking-tight">Backend Operational</h4>
-                        <p className="text-sm text-gray-400 mt-2 font-medium leading-relaxed">System resources are optimized and database connections are healthy.</p>
+                        <h4 className="font-bold text-gray-900 text-xl font-display tracking-tight">
+                            {isHealthy ? 'Backend Operational' : 'Backend Issues'}
+                        </h4>
+                        <p className="text-sm text-gray-400 mt-2 font-medium leading-relaxed">
+                            {isHealthy 
+                                ? 'System resources are optimized and database connections are healthy.' 
+                                : 'There are issues connecting to the backend or database.'}
+                        </p>
                         
                         <div className="w-full mt-8 space-y-3">
                             <div className="flex justify-between items-center text-xs p-3 rounded-xl bg-gray-50/50 border border-gray-100">
-                                <span className="text-gray-500 font-bold uppercase tracking-wider">Storage Status</span>
-                                <span className="font-mono text-green-600 font-bold bg-green-100/50 px-2 py-0.5 rounded">EXCELLENT</span>
+                                <span className="text-gray-500 font-bold uppercase tracking-wider">Database</span>
+                                <span className={`font-mono ${isHealthy ? 'text-green-600 bg-green-100/50' : 'text-red-600 bg-red-100/50'} font-bold px-2 py-0.5 rounded uppercase`}>
+                                    {health.database}
+                                </span>
                             </div>
                             <div className="flex justify-between items-center text-xs p-3 rounded-xl bg-gray-50/50 border border-gray-100">
                                 <span className="text-gray-500 font-bold uppercase tracking-wider">Sync Integrity</span>
-                                <span className="font-mono text-blue-600 font-bold bg-blue-100/50 px-2 py-0.5 rounded">VERIFIED</span>
+                                <span className={`font-mono ${isHealthy ? 'text-blue-600 bg-blue-100/50' : 'text-gray-600 bg-gray-100/50'} font-bold px-2 py-0.5 rounded`}>
+                                    {isHealthy ? 'VERIFIED' : 'PENDING'}
+                                </span>
                             </div>
                         </div>
                         

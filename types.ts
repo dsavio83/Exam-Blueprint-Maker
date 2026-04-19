@@ -12,17 +12,23 @@ export enum Role {
   USER = 'USER'
 }
 
+export type UserRole = Role;
+
 export enum ClassLevel {
   _8 = 8,
   _9 = 9,
   _10 = 10,
-  _11 = 'SSLC',
+  _SSLC = 'SSLC',
 }
+
+export type ClassGrade = ClassLevel;
 
 export enum SubjectType {
   TAMIL_AT = 'Tamil AT',
   TAMIL_BT = 'Tamil BT'
 }
+
+export type Subject = SubjectType;
 
 export enum ExamTerm {
   FIRST = 'First Term Summative',
@@ -36,6 +42,12 @@ export enum KnowledgeLevel {
   PROFOUND = 'Profound'
 }
 
+export interface KnowledgeLevelOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export enum CognitiveProcess {
   CP1 = 'Conceptual Clarity',
   CP2 = 'Application Skill',
@@ -46,13 +58,27 @@ export enum CognitiveProcess {
   CP7 = 'Values/Attitudes'
 }
 
+export interface CognitiveLevel {
+  id: string;
+  code: string;
+  name: string;
+  color?: string;
+}
+
 export enum ItemFormat {
-  SR1 = 'MCI', // Multiple Choice
-  SR2 = 'MI',  // Matching
-  CRS1 = 'VSA', // Very Short Answer
-  CRS2 = 'SA', // Short Answer
-  CRS3 = 'SE', // Short Essay
-  CRL = 'E'    // Essay
+  SR1 = 'MCI', 
+  SR2 = 'MI',  
+  CRS1 = 'VSA', 
+  CRS2 = 'SA', 
+  CRL = 'E'    
+}
+
+export interface ItemFormatOption {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  abbreviation: string;
 }
 
 export enum QuestionType {
@@ -131,6 +157,17 @@ export interface BlueprintItem {
   furtherInfoB?: string;
   discourseId?: string;
   discourseIdB?: string;
+
+  // Aliases for compatibility with older components
+  numQuestions?: number;
+  marksPerItem?: number;
+  cognitiveId?: string;
+  formatId?: string;
+  knowledgeId?: string;
+}
+
+export interface BlueprintEntry extends BlueprintItem {
+  // Can be used interchangeably or with specific UI flags
 }
 
 export interface QuestionPatternSection {
@@ -150,6 +187,8 @@ export interface QuestionPaperType {
   description: string;
   sections: QuestionPatternSection[];
 }
+
+export type PaperType = QuestionPaperType;
 
 export interface ReportSettings {
   fontSizeBody: number;
@@ -181,7 +220,10 @@ export interface Blueprint {
   isHidden?: boolean; // Admin can hide a blueprint from the user
   isConfirmed?: boolean; // User has confirmed the pattern
   reportSettings?: ReportSettings;
+  isAdminAssigned?: boolean; // New field to track if assigned by admin
 }
+
+export type SavedBlueprint = Blueprint;
 
 export interface SharedBlueprint {
   id: string;
@@ -198,6 +240,7 @@ export interface User {
   password?: string; // For simple auth demo
   role: Role;
   name: string;
+  fullName?: string; // Added for compatibility
   
   // Profile fields
   pen?: string;
@@ -232,6 +275,7 @@ export interface User {
   basicPay?: number;
   salaryScale?: string;
   pensionScheme?: 'Statutory' | 'NPS';
+  staffId?: string;
 }
 
 // Configuration for Exam Weightage

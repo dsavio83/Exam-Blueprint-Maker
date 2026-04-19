@@ -227,7 +227,7 @@ app.post('/login', async (req, res) => {
     const user = await User.findOne({ username: new RegExp(`^${username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
     if (!user) {
       console.log(`Login attempt failed: User "${username}" not found`);
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(400).json({ error: `User "${username}" not found` });
     }
 
     const storedPassword = user.password || '';
@@ -235,13 +235,27 @@ app.post('/login', async (req, res) => {
 
     if (!isMatch) {
       console.log(`Login attempt failed: Incorrect password for "${username}"`);
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(400).json({ error: 'Incorrect password' });
     }
     
     console.log(`Login successful for user: ${username}`);
     const normalizedUserId = getEntityId(user);
     const token = jwt.sign({ id: normalizedUserId, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     res.json({ token, user: { id: normalizedUserId, username: user.username, role: user.role, name: user.name } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 2.05 GET /profile - Get current user (for validation)
+app.get('/profile', auth, async (req, res) => {
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const userId = req.user.id;
+    const query = { $or: [{ id: userId }] };
+    if (mongoose.Types.ObjectId.isValid(userId)) query.$or.push({ _id: userId });
+
+    const user = await User.findOne(query, { password: 0 });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(normalizeUser(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

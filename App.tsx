@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Role, User } from './types';
-import { initDB, logout } from './services/db';
+import { initDB, logout, validateSession } from './services/db';
 import { RefreshCw } from 'lucide-react';
 import Login from './components/Login';
 import AdminPortal from './components/AdminPortal';
@@ -24,7 +24,15 @@ const App = () => {
                 await initDB();
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {
-                    setCurrentUser(JSON.parse(savedUser));
+                    try {
+                        const user = await validateSession();
+                        setCurrentUser(user);
+                        localStorage.setItem('currentUser', JSON.stringify(user));
+                    } catch (authErr) {
+                        console.warn("Session validation failed, logging out:", authErr);
+                        logout();
+                        setCurrentUser(null);
+                    }
                 }
             } catch (err) {
                 console.error("Application initialization failed:", err);

@@ -72,10 +72,8 @@ const getAuthHeaders = () => {
 const handleResponse = async (response: Response) => {
   if (response.status === 401) {
     localStorage.removeItem('blueprint_token');
-    if (typeof window !== 'undefined') {
-      // window.location.href = '/login'; // Optional: handled by component redirects
-    }
-    return null;
+    localStorage.removeItem('currentUser');
+    throw new Error('Unauthorized');
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -116,6 +114,11 @@ export const initDB = async (): Promise<DB> => {
   }
 };
 
+export const validateSession = async (): Promise<User> => {
+  const res = await fetch(`${API_URL}/profile`, { headers: getAuthHeaders() });
+  return await handleResponse(res);
+};
+
 export const getDB = () => cachedDB;
 
 export const login = async (username: string, password: string): Promise<{ success: boolean, user?: User, error?: string }> => {
@@ -139,6 +142,7 @@ export const login = async (username: string, password: string): Promise<{ succe
     }
     const { token, user } = await handleResponse(res);
     localStorage.setItem('blueprint_token', token);
+    localStorage.setItem('currentUser', JSON.stringify(user));
     return { success: true, user };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Server connection failed' };
@@ -147,7 +151,20 @@ export const login = async (username: string, password: string): Promise<{ succe
 
 export const logout = () => {
   localStorage.removeItem('blueprint_token');
+  localStorage.removeItem('currentUser');
+  localStorage.removeItem('admin_active_tab');
+  localStorage.removeItem('user_dashboard_view');
+  localStorage.removeItem('user_current_blueprint');
   cachedDB = null;
+};
+
+export const getHealth = async (): Promise<{ status: string, database: string }> => {
+  try {
+    const res = await fetch(`${API_URL.replace(/\/api$/, '')}/health`);
+    return await res.json();
+  } catch (err) {
+    return { status: 'error', database: 'disconnected' };
+  }
 };
 
 export const getUsers = async (): Promise<User[]> => {
@@ -362,15 +379,16 @@ export const getDefaultFormat = (marks: number): ItemFormat => {
   if (marks === 1) return ItemFormat.SR1;
   if (marks === 2) return ItemFormat.CRS1;
   if (marks === 3) return ItemFormat.CRS2;
-  if (marks === 4) return ItemFormat.CRS3;
-  if (marks >= 5) return ItemFormat.CRL;
+  if (marks >= 4) return ItemFormat.CRL;
   return ItemFormat.CRS1;
 };
 
 export const getDefaultKnowledge = (marks: number): KnowledgeLevel => {
   if (marks === 1) return KnowledgeLevel.BASIC;
-  if (marks === 2) return KnowledgeLevel.AVERAGE;
-  return KnowledgeLevel.PROFOUND;
+  if (marks === 3) return KnowledgeLevel.AVERAGE;
+  if (marks === 6) return KnowledgeLevel.PROFOUND;
+  // For 2M and 5M, we usually mix, but default to AVERAGE for stability
+  return KnowledgeLevel.AVERAGE;
 };
 
 const shuffle = <T>(array: T[]): T[] => {
@@ -388,12 +406,13 @@ const partitionTokensToUnits = (
 ): { unit: Unit, tokens: { mark: number, sectionId: string }[] }[] | null => {
   const solve = (tokenIdx: number, deficits: number[]): { mark: number, sectionId: string }[][] | null => {
     if (tokenIdx === tokens.length) {
-      return deficits.every(d => Math.abs(d) < 0.1) ? deficits.map(() => []) : null;
+      // Allow slight tolerance due to integer marks
+      return deficits.every(d => Math.abs(d) <= 2) ? deficits.map(() => []) : null;
     }
     const token = tokens[tokenIdx];
     const unitIndices = shuffle(Array.from({ length: deficits.length }, (_, i) => i));
     for (const uIdx of unitIndices) {
-      if (deficits[uIdx] >= token.mark - 0.1) {
+      if (deficits[uIdx] >= token.mark - 1) {
         deficits[uIdx] -= token.mark;
         const result = solve(tokenIdx + 1, deficits);
         if (result) {
@@ -413,22 +432,67 @@ const partitionTokensToUnits = (
 
 const assignKnowledgeLevels = (items: BlueprintItem[], targets: Record<KnowledgeLevel, number>): boolean => {
   const klOrder = [KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND];
+  
+  // Refined rules: 1M must be BASIC, 3M must be AVERAGE, 6M must be PROFOUND
   const solve = (idx: number, currentDeficits: Record<string, number>): boolean => {
-    if (idx === items.length) return Object.values(currentDeficits).every(d => Math.abs(d) < 0.1);
+    if (idx === items.length) {
+      return Object.values(currentDeficits).every(d => d === 0);
+    }
+    
     const item = items[idx];
-    const options = shuffle(klOrder);
+    let allowedKL: KnowledgeLevel[] = [];
+    
+    if (item.marksPerQuestion === 1) {
+      allowedKL = [KnowledgeLevel.BASIC];
+    } else if (item.marksPerQuestion === 3) {
+      allowedKL = [KnowledgeLevel.AVERAGE];
+    } else if (item.marksPerQuestion === 6) {
+      allowedKL = [KnowledgeLevel.PROFOUND];
+    } else {
+      allowedKL = [...klOrder];
+    }
+    
+    // Randomize options each time to ensure different blueprints on reset
+    const options = shuffle(allowedKL);
     for (const kl of options) {
-      if (currentDeficits[kl] >= item.totalMarks - 0.1) {
+      if (currentDeficits[kl] >= item.totalMarks) {
         currentDeficits[kl] -= item.totalMarks;
         item.knowledgeLevel = kl;
-        if (item.hasInternalChoice) item.knowledgeLevelB = kl;
+        if (item.hasInternalChoice) item.knowledgeLevelB = kl; 
+        
         if (solve(idx + 1, currentDeficits)) return true;
         currentDeficits[kl] += item.totalMarks;
       }
     }
     return false;
   };
-  return solve(0, { ...targets });
+
+  const initialDeficits = { ...targets };
+  // Randomize item processing order to increase distribution variety
+  const shuffledItems = shuffle(items);
+  const success = solve(0, initialDeficits);
+  
+  if (!success) {
+     // Fallback solver if exact match is mathematically impossible
+     const solveWithTolerance = (idx: number, deficits: Record<string, number>): boolean => {
+        if (idx === items.length) return Object.values(deficits).every(d => Math.abs(d) <= 2);
+        const item = items[idx];
+        let allowed = item.marksPerQuestion === 1 ? [KnowledgeLevel.BASIC] : 
+                      item.marksPerQuestion === 3 ? [KnowledgeLevel.AVERAGE] : 
+                      item.marksPerQuestion === 6 ? [KnowledgeLevel.PROFOUND] : [...klOrder];
+        
+        for (const kl of shuffle(allowed)) {
+          deficits[kl] -= item.totalMarks;
+          item.knowledgeLevel = kl;
+          if (item.hasInternalChoice) item.knowledgeLevelB = kl;
+          if (solveWithTolerance(idx + 1, deficits)) return true;
+          deficits[kl] += item.totalMarks;
+        }
+        return false;
+     };
+     return solveWithTolerance(0, { ...targets });
+  }
+  return true;
 };
 
 export const generateBlueprintTemplate = (
@@ -476,17 +540,33 @@ export const generateBlueprintTemplate = (
 
   const items: BlueprintItem[] = [];
   const usageTracker: Record<string, number> = {};
+  const cpList = Object.values(CognitiveProcess);
+  let cpIdx = Math.floor(Math.random() * cpList.length);
+
+  const orTracker: Record<string, boolean> = {}; // Track section IDs that already got an OR item
 
   unitAllocation.forEach(alloc => {
-    alloc.tokens.forEach(token => {
+    // Randomize the order of tokens for this unit to ensure they don't always land in the same sub-units
+    const shuffledTokens = shuffle(alloc.tokens);
+    
+    shuffledTokens.forEach(token => {
       if (!usageTracker[alloc.unit.id]) usageTracker[alloc.unit.id] = 0;
+      
+      // Use the usage tracker with an offset based on blueprint ID or random to rotate starting sub-units
+      const subUnitOffset = Math.floor(Math.random() * alloc.unit.subUnits.length);
       const subUnitId = alloc.unit.subUnits.length > 0
-        ? alloc.unit.subUnits[usageTracker[alloc.unit.id] % alloc.unit.subUnits.length].id
+        ? alloc.unit.subUnits[(usageTracker[alloc.unit.id] + subUnitOffset) % alloc.unit.subUnits.length].id
         : 'general';
-      usageTracker[alloc.unit.id]++;
-
+      
       const section = paperType.sections.find(s => s.id === token.sectionId);
-      const hasInternalChoice = items.filter(i => i.sectionId === token.sectionId && i.hasInternalChoice).length < (section?.optionCount || 0);
+      
+      // Rule: Strictly ONE internal choice per section that allows it
+      const currentORCountInSection = items.filter(i => i.sectionId === token.sectionId && i.hasInternalChoice).length;
+      const hasInternalChoice = (section?.optionCount || 0) > 0 && currentORCountInSection === 0;
+
+      const cp = cpList[cpIdx % cpList.length];
+      cpIdx++;
+      usageTracker[alloc.unit.id]++;
 
       items.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -496,13 +576,12 @@ export const generateBlueprintTemplate = (
         totalMarks: token.mark,
         questionCount: 1,
         sectionId: token.sectionId,
-        knowledgeLevel: KnowledgeLevel.BASIC,
-        cognitiveProcess: CognitiveProcess.CP2,
+        knowledgeLevel: KnowledgeLevel.BASIC, 
+        cognitiveProcess: cp,
         itemFormat: getDefaultFormat(token.mark),
         questionType: token.mark === 1 ? QuestionType.SR1 : token.mark === 2 ? QuestionType.CRS1 : token.mark === 3 ? QuestionType.CRS2 : token.mark === 4 ? QuestionType.CRS3 : QuestionType.CRL,
         hasInternalChoice: hasInternalChoice,
-        knowledgeLevelB: KnowledgeLevel.BASIC,
-        cognitiveProcessB: CognitiveProcess.CP2,
+        cognitiveProcessB: cp,
         itemFormatB: getDefaultFormat(token.mark),
         questionText: '',
         answerText: ''
@@ -510,7 +589,29 @@ export const generateBlueprintTemplate = (
     });
   });
 
-  // Assign Knowledge Levels
+  // Final validation and fix for OR: Ensure every eligible section got EXACTLY one OR
+  paperType.sections.forEach(s => {
+    if (s.optionCount > 0) {
+      const sectionItems = items.filter(i => i.sectionId === s.id);
+      const withOR = sectionItems.filter(i => i.hasInternalChoice);
+      
+      if (withOR.length === 0 && sectionItems.length > 0) {
+        // Give OR to a random question in this section
+        const randIdx = Math.floor(Math.random() * sectionItems.length);
+        sectionItems[randIdx].hasInternalChoice = true;
+      } else if (withOR.length > 1) {
+        // Keep only the first one
+        withOR.forEach((item, idx) => {
+           if (idx > 0) item.hasInternalChoice = false;
+        });
+      }
+    } else {
+       // Ensure NO internal choices in other sections
+       items.filter(i => i.sectionId === s.id).forEach(i => i.hasInternalChoice = false);
+    }
+  });
+
+  // Assign Knowledge Levels with refined rules
   const klTargets = {
     [KnowledgeLevel.BASIC]: Math.round(paperType.totalMarks * 0.3),
     [KnowledgeLevel.AVERAGE]: Math.round(paperType.totalMarks * 0.5),
