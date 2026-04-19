@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import {
-    Trash2, Plus, Save, FileJson
+    Trash2, Plus, Save, FileJson, Settings2, Target, Percent, CheckCircle
 } from 'lucide-react';
 import {
     ClassLevel, SubjectType, ExamTerm, ExamConfiguration, Curriculum, UnitWeightage
@@ -25,7 +24,7 @@ const AdminExamConfigManager = () => {
             return;
         }
         const json = JSON.stringify(db.examConfigs, null, 2);
-        navigator.clipboard.writeText(json).then(() => alert("All Exam Configuration data copied to clipboard! You can use this to update INITIAL_EXAM_CONFIGS in db.ts."));
+        navigator.clipboard.writeText(json).then(() => alert("All Exam Configuration data copied to clipboard!"));
     };
 
     useEffect(() => {
@@ -100,126 +99,176 @@ const AdminExamConfigManager = () => {
     const totalPercent = currentConfig?.weightages.reduce((sum, w) => sum + w.percentage, 0) || 0;
 
     return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            <div className="flex justify-between items-center border-b pb-4">
-                <h2 className="text-xl font-bold text-gray-800">Exam Weightage Configuration</h2>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Exam Weightage</h2>
+                    <p className="text-gray-500 mt-1 font-medium italic">Define how marks are distributed across units for each term.</p>
+                </div>
                 <button
                     onClick={handleCopyJSON}
-                    className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 text-gray-600 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
-                    <FileJson size={16} /> Export JSON
+                    <FileJson size={18} className="text-blue-500" /> Export JSON
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <label className="text-[10px] font-black text-blue-500 uppercase tracking-wider block mb-1">Select Class</label>
-                    <select value={selectedClass} onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} className="w-full border-none bg-gray-50 rounded-xl p-2 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all">
-                        {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
+            {/* Selection Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Class Level</label>
+                    <select 
+                        value={selectedClass} 
+                        onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} 
+                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                    >
+                        {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Grade {v}</option>)}
                     </select>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <label className="text-[10px] font-black text-blue-500 uppercase tracking-wider block mb-1">Select Subject</label>
-                    <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} className="w-full border-none bg-gray-50 rounded-xl p-2 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Subject Area</label>
+                    <select 
+                        value={selectedSubject} 
+                        onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} 
+                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                    >
                         {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <label className="text-[10px] font-black text-blue-500 uppercase tracking-wider block mb-1">Select Term</label>
-                    <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value as ExamTerm)} className="w-full border-none bg-gray-50 rounded-xl p-2 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Exam Term</label>
+                    <select 
+                        value={selectedTerm} 
+                        onChange={(e) => setSelectedTerm(e.target.value as ExamTerm)} 
+                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                    >
                         {Object.values(ExamTerm).map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
                 </div>
             </div>
 
-            <div className="bg-white border rounded-[2rem] p-8 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-
-                <div className="flex justify-between items-center mb-8">
-                    <div>
-                        <h3 className="text-xl font-bold text-gray-800">Unit Distribution</h3>
-                        <p className="text-sm text-gray-400">Define how marks are spread across units</p>
+            {/* Main Configuration Card */}
+            <div className="ap-card overflow-hidden">
+                <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-200">
+                            <Settings2 size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-800 font-display">Unit Weightage Allocation</h3>
+                            <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Distribution Logic</p>
+                        </div>
                     </div>
-                    <div className={`px-4 py-2 rounded-2xl font-black text-sm shadow-sm border ${totalPercent === 100 ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-500 border-red-100'}`}>
-                        Total: {totalPercent}%
+                    <div className="flex items-center gap-3">
+                        <div className={`px-4 py-2 rounded-xl font-black text-sm border flex items-center gap-2 transition-all ${totalPercent === 100 ? 'bg-green-50 text-green-600 border-green-100 shadow-sm' : 'bg-red-50 text-red-500 border-red-100'}`}>
+                            <Percent size={14} />
+                            Total: {totalPercent}%
+                        </div>
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    {currentConfig?.weightages.length === 0 ? (
-                        <div className="text-center py-20 bg-gray-50 border-2 border-dashed border-gray-100 rounded-[1.5rem] flex flex-col items-center gap-4">
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm">
-                                <Plus className="text-gray-300" size={32} />
+                <div className="p-8">
+                    <div className="space-y-4">
+                        {currentConfig?.weightages.length === 0 ? (
+                            <div className="text-center py-16 bg-gray-50/50 border-2 border-dashed border-gray-100 rounded-[2rem] flex flex-col items-center gap-4 group">
+                                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-gray-300 group-hover:scale-110 group-hover:text-blue-400 transition-all shadow-sm">
+                                    <Plus size={32} />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-gray-500">No unit rules defined</p>
+                                    <p className="text-xs text-gray-400 mt-1">Start by adding a unit weightage rule below.</p>
+                                </div>
                             </div>
-                            <p className="font-bold text-gray-400">No units configured. Start adding below.</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 gap-3">
-                            {currentConfig?.weightages.map((w, idx) => {
-                                const unitInfo = curriculum?.units.find(u => u.unitNumber === w.unitNumber);
-                                return (
-                                    <div key={idx} className="flex items-center gap-6 p-4 bg-gray-50/50 rounded-2xl border border-transparent hover:border-blue-100 hover:bg-white transition-all group">
-                                        <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-blue-600 font-black border border-gray-100 group-hover:scale-110 transition-transform">
-                                            <input
-                                                type="number"
-                                                value={w.unitNumber}
-                                                onChange={(e) => updateWeightage(idx, 'unitNumber', parseInt(e.target.value))}
-                                                className="bg-transparent w-full text-center outline-none"
-                                            />
-                                        </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4">
+                                {currentConfig?.weightages.map((w, idx) => {
+                                    const unitInfo = curriculum?.units.find(u => u.unitNumber === w.unitNumber);
+                                    return (
+                                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-6 p-5 bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-50/50 transition-all group">
+                                            <div className="flex items-center gap-4 flex-1">
+                                                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex flex-col items-center justify-center border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">Unit</span>
+                                                    <input
+                                                        type="number"
+                                                        value={w.unitNumber}
+                                                        onChange={(e) => updateWeightage(idx, 'unitNumber', parseInt(e.target.value))}
+                                                        className="bg-transparent w-full text-center outline-none font-bold text-lg"
+                                                    />
+                                                </div>
 
-                                        <div className="flex-1">
-                                            <p className="font-bold text-gray-800">{unitInfo?.name || `Unit ${w.unitNumber}`}</p>
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Weightage Allocation</p>
-                                        </div>
-
-                                        <div className="flex items-center gap-4">
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    className="bg-white border-2 border-gray-100 rounded-xl p-3 w-24 text-center font-black text-gray-700 focus:border-blue-500 focus:shadow-lg focus:shadow-blue-50 outline-none transition-all"
-                                                    value={w.percentage}
-                                                    onChange={(e) => updateWeightage(idx, 'percentage', parseInt(e.target.value))}
-                                                />
-                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-gray-300 text-xs">%</span>
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-gray-800 text-lg font-display">{unitInfo?.name || `Custom Unit ${w.unitNumber}`}</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Target size={12} className="text-blue-500" />
+                                                        <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest">Weightage Target</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <button
-                                                onClick={() => removeWeightage(idx)}
-                                                className="w-10 h-10 flex items-center justify-center text-red-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                            >
-                                                <Trash2 size={20} />
-                                            </button>
+
+                                            <div className="flex items-center gap-4">
+                                                <div className="relative group/input">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        className="bg-gray-50 border border-gray-100 rounded-xl p-4 w-28 text-center font-black text-xl text-gray-800 focus:bg-white focus:border-blue-500 focus:shadow-xl focus:shadow-blue-50 outline-none transition-all"
+                                                        value={w.percentage}
+                                                        onChange={(e) => updateWeightage(idx, 'percentage', parseInt(e.target.value))}
+                                                    />
+                                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-gray-300 text-sm group-focus-within/input:text-blue-500">%</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => removeWeightage(idx)}
+                                                    className="w-12 h-12 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                    title="Remove Rule"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                                    );
+                                })}
+                            </div>
+                        )}
 
-                    <button
-                        onClick={addWeightage}
-                        className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl font-bold text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50/30 transition-all flex items-center justify-center gap-2 mt-4"
-                    >
-                        <Plus size={20} /> Add Unit Rule
-                    </button>
-                </div>
+                        <button
+                            onClick={addWeightage}
+                            className="w-full py-5 border-2 border-dashed border-gray-200 rounded-2xl font-bold text-gray-400 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/30 transition-all flex items-center justify-center gap-3 mt-4 group"
+                        >
+                            <div className="p-1.5 rounded-lg bg-gray-100 group-hover:bg-blue-100 transition-colors">
+                                <Plus size={18} />
+                            </div>
+                            Add Unit Weightage Rule
+                        </button>
+                    </div>
 
-                <div className="mt-12">
-                    <button
-                        onClick={handleSave}
-                        className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-3 disabled:opacity-30 disabled:grayscale disabled:pointer-events-none"
-                        disabled={totalPercent !== 100}
-                    >
-                        <Save size={24} />
-                        Save Weightage Configuration
-                    </button>
-                    {totalPercent !== 100 && (
-                        <p className="text-center text-red-400 text-xs font-bold mt-4 uppercase tracking-widest animate-pulse">
-                            Total Must Be Exactly 100% (Current: {totalPercent}%)
-                        </p>
-                    )}
+                    <div className="mt-12 flex flex-col items-center">
+                        <button
+                            onClick={handleSave}
+                            className="w-full max-w-lg bg-blue-600 text-white font-bold text-lg py-5 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 hover:-translate-y-1 active:translate-y-0 transition-all flex items-center justify-center gap-3 disabled:opacity-30 disabled:grayscale disabled:pointer-events-none"
+                            disabled={totalPercent !== 100}
+                        >
+                            <Save size={24} />
+                            Save Configuration
+                        </button>
+                        
+                        {totalPercent !== 100 && (
+                            <div className="mt-6 flex flex-col items-center gap-1.5 animate-pulse">
+                                <p className="text-red-500 text-xs font-black uppercase tracking-[0.2em]">Validation Error</p>
+                                <p className="text-gray-400 text-[11px] font-medium italic">
+                                    Total allocation must be exactly 100% to proceed.
+                                </p>
+                            </div>
+                        )}
+                        
+                        {totalPercent === 100 && (
+                            <div className="mt-6 flex items-center gap-2 text-green-600">
+                                <CheckCircle size={14} />
+                                <p className="text-[11px] font-bold uppercase tracking-widest">Ready to Save</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

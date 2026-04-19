@@ -330,64 +330,144 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
+        <div className="ap-root min-h-screen flex flex-col md:flex-row">
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+                :root {
+                    --ap-bg: #f8fafc;
+                    --ap-surface: #ffffff;
+                    --ap-surface2: #f1f5f9;
+                    --ap-border: rgba(0,0,0,0.08);
+                    --ap-text: #1e293b;
+                    --ap-muted: #64748b;
+                    --ap-accent: #2563eb;
+                    --ap-accent-light: rgba(37, 99, 235, 0.1);
+                    --ap-radius: 16px;
+                    --ap-font: 'DM Sans', sans-serif;
+                    --ap-display: 'Syne', sans-serif;
+                }
+
+                .ap-root {
+                    background-color: var(--ap-bg);
+                    background-image: 
+                        radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.05) 0%, transparent 40%),
+                        radial-gradient(circle at 100% 100%, rgba(124, 58, 237, 0.05) 0%, transparent 40%);
+                    font-family: var(--ap-font);
+                    color: var(--ap-text);
+                }
+
+                .ap-header {
+                    background: rgba(255, 255, 255, 0.8);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border-bottom: 1px solid var(--ap-border);
+                }
+
+                .ap-sidebar {
+                    background: var(--ap-surface);
+                    border-right: 1px solid var(--ap-border);
+                }
+
+                .ap-nav-item {
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+
+                .ap-nav-item--active {
+                    background: var(--ap-accent-light);
+                    color: var(--ap-accent);
+                    font-weight: 600;
+                    box-shadow: inset 4px 0 0 -1px var(--ap-accent);
+                }
+
+                .ap-nav-item:not(.ap-nav-item--active):hover {
+                    background: var(--ap-surface2);
+                    color: var(--ap-text);
+                    transform: translateX(4px);
+                }
+
+                .ap-card {
+                    background: var(--ap-surface);
+                    border: 1px solid var(--ap-border);
+                    border-radius: var(--ap-radius);
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+                }
+
+                .ap-button-logout {
+                    border: 1px solid #fee2e2;
+                    color: #dc2626;
+                    transition: all 0.2s;
+                }
+
+                .ap-button-logout:hover {
+                    background: #fef2f2;
+                    border-color: #fca5a5;
+                }
+            `}</style>
+
             {/* Mobile Header */}
-            <header className="bg-white shadow p-4 flex justify-between items-center md:hidden z-20 sticky top-0 no-print">
-                <div className="font-bold text-lg text-blue-700">Admin Portal</div>
-                <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 focus:outline-none">
+            <header className="ap-header p-4 flex justify-between items-center md:hidden z-20 sticky top-0 no-print">
+                <div className="font-bold text-lg text-blue-700 font-display tracking-tight flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+                        <Settings size={18} />
+                    </div>
+                    Admin Portal
+                </div>
+                <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg focus:outline-none transition-colors">
                     {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
             </header>
 
             {/* Sidebar */}
             <aside className={`
-                fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                md:relative md:translate-x-0 transition duration-200 ease-in-out
-                bg-white w-64 shadow-lg z-30 flex flex-col no-print
+                ap-sidebar fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                md:relative md:translate-x-0 transition duration-300 ease-in-out
+                w-64 z-30 flex flex-col no-print
             `}>
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between md:justify-center">
-                    <h1 className="text-2xl font-bold text-blue-700 flex items-center">
-                        <Settings className="mr-2" /> Admin
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 font-display">
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                            <Settings size={20} />
+                        </div>
+                        <span className="tracking-tight">Admin Portal</span>
                     </h1>
-                    <button onClick={() => setSidebarOpen(false)} className="md:hidden text-gray-400">
+                    <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 text-gray-400 hover:bg-gray-100 rounded-lg">
                         <X size={20} />
                     </button>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
                     {menuItems.map(item => {
                         const Icon = item.icon;
+                        const isActive = activeTab === item.id;
                         return (
                             <button
                                 key={item.id}
                                 onClick={() => { setActiveTab(item.id as any); setSidebarOpen(false); setViewingBlueprint(null); }}
-                                className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === item.id
-                                    ? 'bg-blue-50 text-blue-700 font-semibold'
-                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                    }`}
+                                className={`w-full flex items-center p-3 rounded-xl ap-nav-item ${isActive ? 'ap-nav-item--active' : 'text-gray-500'}`}
                             >
-                                <Icon size={20} className="mr-3" />
-                                {item.label}
+                                <Icon size={19} className="mr-3" />
+                                <span className="text-[15px]">{item.label}</span>
                             </button>
                         );
                     })}
                 </nav>
 
-                <div className="p-4 border-t border-gray-100">
+                <div className="p-4 border-t border-gray-50 bg-gray-50/50">
                     <div className="flex items-center gap-3 mb-4 px-2">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+                        <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center text-blue-600 font-bold text-lg">
                             {user.name.charAt(0)}
                         </div>
                         <div className="overflow-hidden">
-                            <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{user.email || user.username}</p>
+                            <p className="text-sm font-bold text-gray-900 truncate">{user.name}</p>
+                            <p className="text-[11px] font-medium text-gray-400 truncate uppercase mt-0.5">{user.role}</p>
                         </div>
                     </div>
                     <button
                         onClick={onLogout}
-                        className="w-full flex items-center justify-center p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium border border-red-100"
+                        className="w-full flex items-center justify-center p-2.5 ap-button-logout rounded-xl transition-all font-semibold text-sm"
                     >
-                        <LogOut size={18} className="mr-2" /> Logout
+                        <LogOut size={16} className="mr-2" /> Logout
                     </button>
                 </div>
             </aside>

@@ -14,22 +14,27 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, 
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
+    const [hasChanges, setHasChanges] = useState(false);
     const [localSaving, setLocalSaving] = useState(false);
 
-    // If an external onSave is provided, we can wrap it to show a local state if needed
-    // But since UniversalBlueprintView already has isSaving, we prioritize that.
+    const handleLocalUpdate = (id: string, field: keyof BlueprintItem, val: string) => {
+        setHasChanges(true);
+        onUpdateItem(id, field, val);
+    };
+
     const handleSave = async () => {
         if (!onSave) return;
         setLocalSaving(true);
         try {
             await onSave();
+            setHasChanges(false);
         } finally {
-            // Success animation duration
             setTimeout(() => setLocalSaving(false), 1000);
         }
     };
 
     const isCurrentlySaving = isSaving || localSaving;
+    const isReadyToSave = hasChanges || isCurrentlySaving;
 
     useEffect(() => {
         const load = async () => {
@@ -93,18 +98,28 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, 
                 </h2>
                 <button
                     onClick={handleSave}
-                    disabled={isCurrentlySaving}
-                    className={`absolute top-6 right-6 p-3 rounded-2xl transition-all shadow-xl flex items-center justify-center group no-print z-10 
+                    disabled={isCurrentlySaving || !hasChanges}
+                    className={`fixed bottom-6 right-6 w-12 h-12 md:w-14 md:h-14 rounded-full transition-all shadow-2xl flex items-center justify-center group no-print z-[100] 
                         ${isCurrentlySaving 
-                            ? 'bg-blue-600 text-white cursor-wait animate-pulse shadow-blue-100' 
-                            : 'bg-green-600 text-white hover:bg-green-700 shadow-green-100 active:scale-95'
+                            ? 'bg-blue-600 text-white cursor-wait' 
+                            : hasChanges
+                                ? 'bg-green-600 text-white hover:bg-green-700 hover:scale-110 shadow-green-100 active:scale-95'
+                                : 'bg-gray-400 text-white opacity-60 cursor-not-allowed'
                         }`}
-                    title={isCurrentlySaving ? "Saving..." : "Save All Changes"}
+                    title={isCurrentlySaving ? "Saving..." : hasChanges ? "Save All Changes" : "No changes to save"}
                 >
                     {isCurrentlySaving ? (
-                        <RefreshCw size={24} className="animate-spin" />
+                        <RefreshCw size={20} className="animate-spin" />
                     ) : (
-                        <Save size={24} className="group-hover:scale-110 transition-transform" />
+                        <div className="relative">
+                            <Save size={20} className={hasChanges ? "group-hover:rotate-12 transition-transform" : ""} />
+                            {hasChanges && (
+                                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                </span>
+                            )}
+                        </div>
                     )}
                 </button>
             </div>
@@ -153,7 +168,7 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, 
                                 <QuestionRow
                                     item={item}
                                     index={index}
-                                    onUpdateItem={onUpdateItem}
+                                    onUpdateItem={handleLocalUpdate}
                                     availableDiscourses={itemDiscourses}
                                     systemSettings={settings}
                                     curriculum={curriculum}

@@ -622,7 +622,7 @@ const SummaryBar: React.FC<SummaryBarProps> = ({ result, totalMarks }) => {
   const pct = Math.min(100, Math.round((filled / Math.max(totalMarks, 1)) * 100));
 
   return (
-    <div className="flex items-center gap-4 text-xs">
+    <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-xs">
       {([KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND] as KnowledgeLevel[]).map(kl => {
         const { marks, target } = result.klSummary[kl] || { marks: 0, target: 0 };
         const c = KL_COLORS[kl];
@@ -633,9 +633,9 @@ const SummaryBar: React.FC<SummaryBarProps> = ({ result, totalMarks }) => {
           </div>
         );
       })}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-2 pr-2">
         <div className="text-gray-500">Total:</div>
-        <div className={`font-black text-lg ${filled === totalMarks ? 'text-green-600' : 'text-red-600'}`}>
+        <div className={`font-black text-sm md:text-lg ${filled === totalMarks ? 'text-green-600' : 'text-red-600'}`}>
           {filled}/{totalMarks}M
         </div>
       </div>
@@ -729,7 +729,7 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
   }, [getUnitTotal, blueprint.totalMarks]);
 
   return (
-    <div className="space-y-4 text-black">
+    <div className="flex flex-col space-y-4 text-black">
       {/* Header */}
       <div className="text-center">
         <h2 className="text-xl font-bold uppercase border-b-2 border-black inline-block px-6 pb-1 tracking-widest">
@@ -746,11 +746,16 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
       {/* Summary Bar */}
       <SummaryBar result={validation} totalMarks={blueprint.totalMarks} />
 
+      {/* Blueprint Summary (Detailed Table) - Moved to top on mobile */}
+      <div className="md:order-last">
+        <BlueprintSummaryTable blueprint={blueprint} paperType={paperType} validation={validation} />
+      </div>
+
       {/* Matrix + Validation side-by-side */}
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-col md:flex-row gap-4 items-start w-full">
         {/* Matrix table */}
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full text-sm border-collapse border border-gray-800 min-w-[600px]">
+        <div className="w-full overflow-x-auto border border-gray-200 md:border-none">
+          <table className="w-full text-sm border-collapse border border-gray-800 min-w-[800px] md:min-w-full">
             <thead>
               <tr className="bg-gray-900 text-white">
                 <th className="border border-gray-700 p-2 w-8 text-center">#</th>
@@ -902,7 +907,7 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
         </div>
 
         {/* Validation panel */}
-        <div className="w-64 shrink-0">
+        <div className="w-full md:w-64 shrink-0">
           <ValidationPanel
             result={validation}
             paperType={paperType}
@@ -911,9 +916,6 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
           />
         </div>
       </div>
-
-      {/* Blueprint Summary (like screenshot 1 bottom section) */}
-      <BlueprintSummaryTable blueprint={blueprint} paperType={paperType} validation={validation} />
     </div>
   );
 };
@@ -980,7 +982,7 @@ const BlueprintSummaryTable: React.FC<BlueprintSummaryTableProps> = ({ blueprint
       </button>
 
       {open && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-200">
           {/* Knowledge Level */}
           <SummaryColumn
             title="Knowledge Level"
@@ -1001,7 +1003,7 @@ const BlueprintSummaryTable: React.FC<BlueprintSummaryTableProps> = ({ blueprint
             title="Option / Choice"
             rows={[
               { label: 'Choice', count: items.filter(i => i.hasInternalChoice).reduce((a, i) => a + i.questionCount, 0), marks: withORMarks },
-              { label: 'Without Choice', count: items.filter(i => !i.hasInternalChoice).reduce((a, i) => a + i.questionCount, 0), marks: withoutORMarks },
+              { label: 'Without Choice', count: items.reduce((a, i) => a + i.questionCount, 0), marks: validation.grandTotal },
             ]}
           />
         </div>

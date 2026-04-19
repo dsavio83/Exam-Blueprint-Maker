@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    FileText, Lock, Unlock, Eye, EyeOff, Search, Trash2, User as UserIcon, Calendar, BookOpen, Clock, Share2, X, Plus, UserPlus, Edit2, CheckCircle, RotateCcw
+    FileText, Lock, Unlock, Eye, EyeOff, Search, Trash2, User as UserIcon, Calendar, BookOpen, Clock, Share2, X, Plus, UserPlus, Edit2, CheckCircle, RotateCcw, Loader2
 } from 'lucide-react';
 import { Blueprint, User } from '../types';
 import { getBlueprints, getUsers, deleteBlueprint, toggleBlueprintLock, toggleBlueprintHidden, getSharedWithUsers, removeShare, shareBlueprint, resetBlueprintConfirmation } from '../services/db';
@@ -16,6 +16,7 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
     const [selectedShareBp, setSelectedShareBp] = useState<string | null>(null);
     const [userSearchTerm, setUserSearchTerm] = useState('');
     const [sharedUsers, setSharedUsers] = useState<User[]>([]);
+    const [loadingShared, setLoadingShared] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -27,8 +28,15 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                 setSharedUsers([]);
                 return;
             }
-            const data = await getSharedWithUsers(selectedShareBp);
-            setSharedUsers(data);
+            setLoadingShared(true);
+            try {
+                const data = await getSharedWithUsers(selectedShareBp);
+                setSharedUsers(data);
+            } catch (error) {
+                console.error("Error loading shared users:", error);
+            } finally {
+                setLoadingShared(false);
+            }
         };
         loadSharedUsers();
     }, [selectedShareBp]);
@@ -70,7 +78,12 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
         if (window.confirm('Remove sharing access for this user?')) {
             await removeShare(bpId, userId);
             await loadData();
-            setSharedUsers(await getSharedWithUsers(bpId));
+            setLoadingShared(true);
+            try {
+                setSharedUsers(await getSharedWithUsers(bpId));
+            } finally {
+                setLoadingShared(false);
+            }
         }
     };
 
@@ -83,7 +96,12 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
         const success = await shareBlueprint(bpId, fromUserId, toUserId);
         if (success) {
             await loadData();
-            setSharedUsers(await getSharedWithUsers(bpId));
+            setLoadingShared(true);
+            try {
+                setSharedUsers(await getSharedWithUsers(bpId));
+            } finally {
+                setLoadingShared(false);
+            }
             setUserSearchTerm('');
         } else {
             alert('Could not share. User might already have access.');
@@ -421,19 +439,24 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                             {/* Current Shared Users */}
                             <div>
                                 <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                                    <Share2 size={16} /> Currently Shared With
+                                    <Share2 size={16} /> Currently Shared With / தற்போது பகிரப்பட்டது
                                 </h4>
                                 <div className="space-y-3">
-                                    {sharedUsers.length > 0 ? (
+                                    {loadingShared ? (
+                                        <div className="text-center py-10 bg-gray-50 rounded-xl border border-gray-100 flex flex-col items-center justify-center">
+                                            <Loader2 size={24} className="text-blue-600 animate-spin mb-2" />
+                                            <p className="text-xs text-gray-500">Loading shared users...</p>
+                                        </div>
+                                    ) : sharedUsers.length > 0 ? (
                                             sharedUsers.map(user => (
                                                 <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group hover:border-blue-200 hover:bg-blue-50/30 transition-all">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
-                                                            {user.name.charAt(0)}
+                                                            {user.name?.charAt(0) || '?'}
                                                         </div>
                                                         <div className="overflow-hidden">
-                                                            <div className="text-xs font-bold text-gray-900 truncate">{user.name}</div>
-                                                            <div className="text-[10px] text-secondary truncate">{user.username}</div>
+                                                            <div className="text-xs font-bold text-gray-900 truncate">{user.name || user.username}</div>
+                                                            <div className="text-[10px] text-gray-500 truncate">@{user.username}</div>
                                                         </div>
                                                     </div>
                                                     <button
@@ -453,23 +476,21 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                         )}
                                 </div>
                             </div>
-
-                            {/* Add New Users */}
-                            <div className="border-l border-gray-100 md:pl-6">
+                            {/* Share with New Users */}
+                            <div>
                                 <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                                    <UserPlus size={16} /> Share with New User
+                                    <UserPlus size={16} /> Share With New Users / புதிய பயனருடன் பகிர
                                 </h4>
                                 <div className="relative mb-4">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                                     <input
                                         type="text"
-                                        placeholder="Search by name..."
+                                        placeholder="Search users..."
                                         value={userSearchTerm}
                                         onChange={(e) => setUserSearchTerm(e.target.value)}
                                         className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                                     />
                                 </div>
-
                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                                     {users
                                         .filter(u =>

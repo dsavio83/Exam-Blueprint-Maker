@@ -74,77 +74,120 @@ const AdminCurriculumManager = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center border-b pb-4">
-                <h2 className="text-xl font-bold text-gray-800">Curriculum & Units</h2>
-                <div className="flex gap-2">
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Curriculum & Units</h2>
+                    <p className="text-gray-500 mt-1 font-medium italic">Manage syllabus structure and learning outcomes.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
                     <button
                         onClick={handleCopyJSON}
-                        className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                        className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 text-gray-600 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
                     >
-                        <FileJson size={16} /> Export JSON
+                        <FileJson size={18} className="text-blue-500" /> Export JSON
                     </button>
-                    <select value={selectedClass} onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} className="border p-2 rounded text-sm">
-                        {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
-                    </select>
-                    <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} className="border p-2 rounded text-sm">
-                        {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
+                    <div className="flex items-center gap-2 bg-gray-100/50 p-1 rounded-xl border border-gray-100">
+                        <select 
+                            value={selectedClass} 
+                            onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} 
+                            className="bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-700 px-3 cursor-pointer"
+                        >
+                            {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
+                        </select>
+                        <div className="w-px h-4 bg-gray-200"></div>
+                        <select 
+                            value={selectedSubject} 
+                            onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} 
+                            className="bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-700 px-3 cursor-pointer"
+                        >
+                            {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-6">
                 {curriculum?.units.map((unit, idx) => (
-                    <div key={unit.id} className="bg-white border rounded p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                            <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">Unit {unit.unitNumber}</span>
-                            <input
-                                className="font-semibold text-lg border-b border-transparent focus:border-blue-500 outline-none flex-1"
-                                value={unit.name}
-                                onChange={(e) => updateUnit(unit.id, 'name', e.target.value)}
-                                placeholder="Unit Name"
-                            />
-                            <button onClick={() => {
-                                const confirm = window.confirm("Delete Unit?");
-                                if (confirm && curriculum) saveCurr({ ...curriculum, units: curriculum.units.filter(u => u.id !== unit.id) });
-                            }} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
-                        </div>
-
-                        {/* Learning Outcomes Input */}
-                        <div className="ml-8 mb-4">
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Learning Outcomes (LOs)</label>
-                            <textarea
-                                className="w-full text-sm border rounded p-2 bg-gray-50 focus:ring-2 focus:ring-blue-100 outline-none resize-none"
-                                rows={2}
-                                value={unit.learningOutcomes || ''}
-                                onChange={(e) => updateUnit(unit.id, 'learningOutcomes', e.target.value)}
-                                placeholder="Enter Learning Outcomes for this unit..."
-                            />
-                        </div>
-
-                        <div className="ml-8 space-y-2">
-                            {unit.subUnits.map(sub => (
-                                <div key={sub.id} className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
+                    <div key={unit.id} className="ap-card group hover:border-blue-200 transition-all duration-300">
+                        <div className="p-5">
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6">
+                                <div className="flex items-center gap-3 flex-1">
+                                    <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-lg shadow-blue-100">Unit {unit.unitNumber}</span>
                                     <input
-                                        className="text-sm border-b border-gray-100 focus:border-blue-300 outline-none w-full"
-                                        value={sub.name}
-                                        onChange={(e) => updateSubUnit(unit.id, sub.id, e.target.value)}
-                                        placeholder="Subunit Name"
+                                        className="font-bold text-xl text-gray-900 bg-transparent border-b-2 border-transparent focus:border-blue-500 outline-none flex-1 transition-all font-display"
+                                        value={unit.name}
+                                        onChange={(e) => updateUnit(unit.id, 'name', e.target.value)}
+                                        placeholder="Enter Unit Name"
                                     />
-                                    <button onClick={() => {
-                                        saveCurr({ ...curriculum, units: curriculum.units.map(u => u.id === unit.id ? { ...u, subUnits: u.subUnits.filter(s => s.id !== sub.id) } : u) })
-                                    }} className="text-gray-300 hover:text-red-500"><X size={14} /></button>
                                 </div>
-                            ))}
-                            <button onClick={() => addSubUnit(unit.id)} className="text-xs text-blue-600 flex items-center mt-2 hover:underline">
-                                <Plus size={12} className="mr-1" /> Add Sub-unit
-                            </button>
+                                <button onClick={() => {
+                                    const confirm = window.confirm("Delete Unit?");
+                                    if (confirm && curriculum) saveCurr({ ...curriculum, units: curriculum.units.filter(u => u.id !== unit.id) });
+                                }} className="self-end md:self-center p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete Unit">
+                                    <Trash2 size={20} />
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* Learning Outcomes Section */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
+                                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Learning Outcomes</label>
+                                    </div>
+                                    <textarea
+                                        className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none resize-none min-h-[120px] transition-all font-medium text-gray-700 leading-relaxed"
+                                        value={unit.learningOutcomes || ''}
+                                        onChange={(e) => updateUnit(unit.id, 'learningOutcomes', e.target.value)}
+                                        placeholder="What should students learn in this unit?"
+                                    />
+                                </div>
+
+                                {/* Sub-units Section */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
+                                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Chapters / Sub-units</label>
+                                    </div>
+                                    <div className="space-y-3 bg-gray-50/30 p-4 rounded-2xl border border-gray-50/50">
+                                        {unit.subUnits.map((sub, sIdx) => (
+                                            <div key={sub.id} className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all group/item">
+                                                <span className="text-[10px] font-bold text-gray-300 w-5">{(sIdx + 1).toString().padStart(2, '0')}</span>
+                                                <input
+                                                    className="text-sm font-semibold text-gray-700 bg-transparent outline-none w-full"
+                                                    value={sub.name}
+                                                    onChange={(e) => updateSubUnit(unit.id, sub.id, e.target.value)}
+                                                    placeholder="Chapter Name"
+                                                />
+                                                <button onClick={() => {
+                                                    saveCurr({ ...curriculum, units: curriculum.units.map(u => u.id === unit.id ? { ...u, subUnits: u.subUnits.filter(s => s.id !== sub.id) } : u) })
+                                                }} className="text-gray-200 hover:text-red-400 transition-colors">
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <button 
+                                            onClick={() => addSubUnit(unit.id)} 
+                                            className="w-full py-3 bg-white border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Plus size={16} /> Add Sub-unit
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 ))}
-                <button onClick={handleAddUnit} className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-500 rounded hover:border-blue-500 hover:text-blue-500 transition flex justify-center items-center">
-                    <Plus className="mr-2" /> Add New Unit
+                
+                <button 
+                    onClick={handleAddUnit} 
+                    className="w-full py-8 border-3 border-dashed border-gray-200 text-gray-400 rounded-[24px] hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all duration-300 flex flex-col justify-center items-center gap-3"
+                >
+                    <div className="w-12 h-12 rounded-full bg-white shadow-lg flex items-center justify-center text-blue-500">
+                        <Plus size={28} />
+                    </div>
+                    <span className="font-bold font-display text-lg tracking-tight">Add New Curriculum Unit</span>
                 </button>
             </div>
         </div>

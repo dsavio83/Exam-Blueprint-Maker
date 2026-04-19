@@ -111,7 +111,7 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
                             <div className="flex flex-col col-span-2 sm:col-span-1">
                                 <label className="text-[9px] font-bold text-gray-400 uppercase md:hidden px-1">Unit</label>
                                 <select
-                                    className="border rounded px-1.5 py-1 text-[11px] bg-white focus:ring-2 focus:ring-blue-100 outline-none w-full md:max-w-[150px]"
+                                    className="border-2 border-slate-100 rounded-lg px-2 py-1 text-[11px] font-bold text-gray-900 bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-50 transition-all outline-none w-full md:max-w-[150px]"
                                     value={item.unitId}
                                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                                         onUpdateItem(item.id, 'unitId', e.target.value);
@@ -126,7 +126,7 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
                             <div className="flex flex-col col-span-2 sm:col-span-1">
                                 <label className="text-[9px] font-bold text-gray-400 uppercase md:hidden px-1">Sub-Unit</label>
                                 <select
-                                    className="border rounded px-1.5 py-1 text-[11px] bg-white focus:ring-2 focus:ring-blue-100 outline-none w-full md:max-w-[150px]"
+                                    className="border-2 border-slate-100 rounded-lg px-2 py-1 text-[11px] font-bold text-gray-900 bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-50 transition-all outline-none w-full md:max-w-[150px]"
                                     value={item.subUnitId}
                                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onUpdateItem(item.id, 'subUnitId', e.target.value)}
                                     disabled={!item.unitId || availableSubUnits.length === 0}
@@ -141,7 +141,7 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
                     <div className="flex flex-col">
                         <label className="text-[9px] font-bold text-gray-400 uppercase md:hidden px-1">Level</label>
                         <select
-                            className={`border rounded px-1.5 py-1 text-[11px] bg-white focus:ring-2 focus:ring-blue-100 outline-none w-full ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
+                            className={`border-2 border-slate-100 rounded-lg px-2 py-1 text-[11px] font-bold text-gray-900 bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-50 transition-all outline-none w-full ${item.marksPerQuestion === 1 ? 'opacity-75 bg-gray-50' : ''}`}
                             value={item.knowledgeLevel}
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onUpdateItem(item.id, 'knowledgeLevel', e.target.value)}
                             disabled={item.marksPerQuestion === 1}
@@ -153,7 +153,7 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
                     <div className="flex flex-col">
                         <label className="text-[9px] font-bold text-gray-400 uppercase md:hidden px-1">Process</label>
                         <select
-                            className="border rounded px-1.5 py-1 text-[11px] bg-white focus:ring-2 focus:ring-blue-100 outline-none w-full"
+                            className="border-2 border-slate-100 rounded-lg px-2 py-1 text-[11px] font-bold text-gray-900 bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-50 transition-all outline-none w-full"
                             value={item.cognitiveProcess}
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onUpdateItem(item.id, 'cognitiveProcess', e.target.value)}
                         >
@@ -164,7 +164,7 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
                     <div className="flex flex-col">
                         <label className="text-[9px] font-bold text-gray-400 uppercase md:hidden px-1">Format</label>
                         <select
-                            className="border rounded px-1.5 py-1 text-[11px] bg-white focus:ring-2 focus:ring-blue-100 outline-none w-full"
+                            className="border-2 border-slate-100 rounded-lg px-2 py-1 text-[11px] font-bold text-gray-900 bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-50 transition-all outline-none w-full"
                             value={item.itemFormat}
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onUpdateItem(item.id, 'itemFormat', e.target.value)}
                         >
@@ -174,15 +174,16 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
 
                     <div className="flex flex-col">
                         <label className="text-[9px] font-bold text-gray-400 uppercase md:hidden px-1">Time</label>
-                        <div className="flex items-center gap-1 border rounded px-1.5 py-1 bg-white focus-within:ring-2 focus-within:ring-blue-100">
+                        <div className="flex items-center gap-1 border-2 border-slate-100 rounded-lg px-2 py-1 bg-white focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50 transition-all">
                             <input
                                 type="number"
-                                className="w-8 text-[11px] outline-none"
+                                className="w-12 text-[11px] font-bold text-gray-900 outline-none bg-transparent text-center"
                                 value={item.time || ''}
                                 onChange={(e) => onUpdateItem(item.id, 'time', parseInt(e.target.value) || 0)}
                                 placeholder="Min"
                                 min="0"
                             />
+                            <span className="text-[9px] font-bold text-gray-400 uppercase">Min</span>
                         </div>
                     </div>
                 </div>

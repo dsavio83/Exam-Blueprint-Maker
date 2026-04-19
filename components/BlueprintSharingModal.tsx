@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Share2, Check, Trash2 } from 'lucide-react';
+import { X, Users, Share2, Check, Trash2, Loader2 } from 'lucide-react';
 import { User, Blueprint } from '../types';
 import { getUsers, shareBlueprint, removeShare, getSharedWithUsers } from '../services/db';
 
@@ -20,6 +20,7 @@ const BlueprintSharingModal: React.FC<BlueprintSharingModalProps> = ({
     const [sharedUsers, setSharedUsers] = useState<User[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
@@ -27,18 +28,22 @@ const BlueprintSharingModal: React.FC<BlueprintSharingModalProps> = ({
     }, []);
 
     const loadUsers = async () => {
+        setLoading(true);
         try {
-            const users = await getUsers();
+            const [users, shared] = await Promise.all([
+                getUsers(),
+                getSharedWithUsers(blueprint.id)
+            ]);
+            
             // Filter out current user and admin users
             const availableUsers = users.filter(u => u.id !== currentUserId && u.role !== 'ADMIN');
             setAllUsers(availableUsers);
-
-            // Load already shared users
-            const shared = await getSharedWithUsers(blueprint.id);
             setSharedUsers(shared);
         } catch (err) {
             console.error('Error loading users:', err);
             setMessage({ type: 'error', text: 'Failed to load users' });
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -128,7 +133,7 @@ const BlueprintSharingModal: React.FC<BlueprintSharingModalProps> = ({
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                             <Users size={20} className="text-blue-600" />
-                            Share with New User
+                            Share with New User / புதிய பயனருடன் பகிர
                         </h3>
 
                         {/* Search Input */}
@@ -175,10 +180,15 @@ const BlueprintSharingModal: React.FC<BlueprintSharingModalProps> = ({
                     <div>
                         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
                             <Check size={20} className="text-green-600" />
-                            Shared With ({sharedUsers.length})
+                            Shared With / தற்போது பகிரப்பட்டது ({sharedUsers.length})
                         </h3>
 
-                        {sharedUsers.length === 0 ? (
+                        {loading ? (
+                            <div className="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+                                <p className="text-gray-500 text-sm">Loading shared users...</p>
+                            </div>
+                        ) : sharedUsers.length === 0 ? (
                             <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
                                 <Users size={48} className="mx-auto text-gray-300 mb-2" />
                                 <p className="text-gray-500">This blueprint hasn't been shared with anyone yet.</p>
@@ -192,10 +202,10 @@ const BlueprintSharingModal: React.FC<BlueprintSharingModalProps> = ({
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold">
-                                                {user.name.charAt(0).toUpperCase()}
+                                                {user.name?.charAt(0).toUpperCase() || '?'}
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-gray-800">{user.name}</p>
+                                                <p className="font-semibold text-gray-800">{user.name || user.username}</p>
                                                 <p className="text-sm text-gray-500">@{user.username}</p>
                                             </div>
                                         </div>

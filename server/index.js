@@ -218,19 +218,27 @@ app.post('/login', async (req, res) => {
 
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
+    
     if (!username || !password) {
+      console.log('Login attempt failed: Username or password missing');
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
     const user = await User.findOne({ username: new RegExp(`^${username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
-    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+    if (!user) {
+      console.log(`Login attempt failed: User "${username}" not found`);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
 
-    const storedPassword = String(user.password || '');
+    const storedPassword = user.password || '';
     const isMatch = await bcrypt.compare(password, storedPassword).catch(() => false);
 
     if (!isMatch) {
+      console.log(`Login attempt failed: Incorrect password for "${username}"`);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
+    
+    console.log(`Login successful for user: ${username}`);
     const normalizedUserId = getEntityId(user);
     const token = jwt.sign({ id: normalizedUserId, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     res.json({ token, user: { id: normalizedUserId, username: user.username, role: user.role, name: user.name } });

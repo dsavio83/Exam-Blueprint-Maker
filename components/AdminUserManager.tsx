@@ -68,136 +68,161 @@ const AdminUserManager = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
-                <h2 className="text-xl font-bold text-gray-800">User Management</h2>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">User Management</h2>
+                    <p className="text-gray-500 mt-1 font-medium italic">Control access and roles for the blueprint system.</p>
+                </div>
                 <button
                     onClick={() => {
                         setEditingUser(null);
                         setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
                         setIsFormOpen(true);
                     }}
-                    className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded flex items-center justify-center shadow hover:bg-blue-700 transition-colors"
+                    className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 active:scale-95"
                 >
-                    <Plus size={18} className="mr-2" />
-                    <span>Add User</span>
+                    <Plus size={20} />
+                    <span>Create New User</span>
                 </button>
             </div>
 
             {isFormOpen && (
-                <div className="bg-white p-4 sm:p-6 rounded shadow border-l-4 border-blue-500 mb-6">
-                    <h3 className="font-bold mb-4">{editingUser ? 'Edit User' : 'Add New User'}</h3>
-                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Full Name *</label>
-                            <input
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.name}
-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Email</label>
-                            <input
-                                className="border w-full p-2 rounded mt-1"
-                                type="email"
-                                value={formData.email || ''}
-                                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Username *</label>
-                            <input
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.username}
-                                onChange={e => setFormData({ ...formData, username: e.target.value })}
-                                required
-                                disabled={!!editingUser}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Password {editingUser ? '(Leave blank to keep current)' : '*'}</label>
-                            <div className="relative mt-1">
+                <div className="ap-card border-blue-100 p-0 overflow-hidden animate-in zoom-in-95 duration-300">
+                    <div className="p-6 bg-gradient-to-r from-blue-50/50 to-white border-b border-blue-50 flex justify-between items-center">
+                        <h3 className="font-bold text-lg text-blue-700 font-display flex items-center gap-2">
+                            {editingUser ? <Edit2 size={20} /> : <Plus size={20} />}
+                            {editingUser ? 'Edit User Details' : 'Configure New User'}
+                        </h3>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name *</label>
                                 <input
-                                    className="border w-full p-2 pr-10 rounded"
-                                    type={showPassword ? "text" : "password"}
-                                    value={formData.password || ''}
-                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                    required={!editingUser}
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-gray-700"
+                                    value={formData.name}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                    required
+                                    placeholder="Enter full name"
                                 />
-                                <button
-                                    type="button"
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
-                                    onClick={() => setShowPassword(!showPassword)}
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                                <input
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-medium text-gray-600"
+                                    type="email"
+                                    value={formData.email || ''}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                    placeholder="email@example.com"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Username *</label>
+                                <input
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-mono font-bold text-gray-700 disabled:opacity-50"
+                                    value={formData.username}
+                                    onChange={e => setFormData({ ...formData, username: e.target.value })}
+                                    required
+                                    disabled={!!editingUser}
+                                    placeholder="unique_username"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                    Password {editingUser ? '(Empty to keep current)' : '*'}
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        className="w-full text-sm border border-gray-100 rounded-2xl p-4 pr-12 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-mono"
+                                        type={showPassword ? "text" : "password"}
+                                        value={formData.password || ''}
+                                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                        required={!editingUser}
+                                        placeholder="••••••••"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 hover:text-blue-500 transition-colors"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Access Role *</label>
+                                <select
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-gray-700 cursor-pointer appearance-none"
+                                    value={formData.role}
+                                    onChange={e => setFormData({ ...formData, role: e.target.value as Role })}
                                 >
-                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                </button>
+                                    <option value={Role.ADMIN}>Administrator (Full Access)</option>
+                                    <option value={Role.USER}>Standard User (Limited Access)</option>
+                                </select>
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Role *</label>
-                            <select
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.role}
-                                onChange={e => setFormData({ ...formData, role: e.target.value as Role })}
-                            >
-                                <option value={Role.ADMIN}>Admin</option>
-                                <option value={Role.USER}>User</option>
-                            </select>
-                        </div>
-                        <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+
+                        <div className="flex justify-end items-center gap-4 mt-10 pt-6 border-t border-gray-50">
                             <button
                                 type="button"
                                 onClick={() => setIsFormOpen(false)}
-                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                                className="px-6 py-2.5 text-gray-400 hover:text-gray-600 font-bold text-sm transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-3 rounded-2xl font-bold shadow-xl shadow-blue-100 transition-all text-sm flex items-center gap-2 active:scale-95"
                             >
-                                {editingUser ? 'Update User' : 'Create User'}
+                                {editingUser ? 'Update Profile' : 'Create Account'}
                             </button>
                         </div>
                     </form>
                 </div>
             )}
 
-            <div className="bg-white rounded shadow border overflow-hidden">
+            <div className="ap-card overflow-hidden">
                 {/* Desktop Table View */}
-                <div className="hidden md:block">
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
-                        <thead className="bg-gray-50 border-b">
-                            <tr>
-                                <th className="p-4 font-semibold text-gray-600">Name / Email</th>
-                                <th className="p-4 font-semibold text-gray-600">Username</th>
-                                <th className="p-4 font-semibold text-gray-600">Role</th>
-                                <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
+                        <thead>
+                            <tr className="bg-gray-50/50 border-b border-gray-50">
+                                <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest">User Details</th>
+                                <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest">Username</th>
+                                <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest">Role</th>
+                                <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest text-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-gray-50">
                             {userList.map(u => (
-                                <tr key={u.id} className="border-b hover:bg-gray-50">
-                                    <td className="p-4">
-                                        <div className="font-medium text-gray-900">{u.name}</div>
-                                        <div className="text-xs text-gray-500">{u.email || '-'}</div>
+                                <tr key={u.id} className="hover:bg-blue-50/30 transition-colors group">
+                                    <td className="p-5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-100 group-hover:scale-110 transition-transform">
+                                                {u.name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-gray-900 font-display">{u.name}</div>
+                                                <div className="text-[11px] text-gray-400 font-medium italic">{u.email || 'No email associated'}</div>
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td className="p-4 text-gray-600 font-mono text-sm">{u.username}</td>
-                                    <td className="p-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                    <td className="p-5 text-gray-600 font-mono text-xs font-bold">{u.username}</td>
+                                    <td className="p-5">
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
                                             {u.role}
                                         </span>
                                     </td>
-                                    <td className="p-4 text-right">
-                                        <div className="flex justify-end gap-3">
-                                            <button onClick={() => handleEdit(u)} className="text-blue-600 hover:text-blue-800" title="Edit User">
-                                                <Edit2 size={16} />
+                                    <td className="p-5">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => handleEdit(u)} className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit User">
+                                                <Edit2 size={18} />
                                             </button>
                                             {u.username !== 'admin' && (
-                                                <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700" title="Delete User">
-                                                    <Trash2 size={16} />
+                                                <button onClick={() => handleDelete(u.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete User">
+                                                    <Trash2 size={18} />
                                                 </button>
                                             )}
                                         </div>
@@ -209,44 +234,50 @@ const AdminUserManager = () => {
                 </div>
 
                 {/* Mobile Card View */}
-                <div className="md:hidden divide-y">
+                <div className="md:hidden divide-y divide-gray-50">
                     {userList.map(u => (
-                        <div key={u.id} className="p-4 space-y-3">
+                        <div key={u.id} className="p-5 space-y-4 hover:bg-blue-50/20 transition-colors">
                             <div className="flex justify-between items-start">
-                                <div>
-                                    <div className="font-bold text-gray-900">{u.name}</div>
-                                    <div className="text-sm text-gray-500">{u.email || 'No email provided'}</div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                                        {u.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-gray-900 font-display">{u.name}</div>
+                                        <div className="text-[11px] text-gray-400">{u.email || 'No email provided'}</div>
+                                    </div>
                                 </div>
-                                <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
                                     {u.role}
                                 </span>
                             </div>
                             
-                            <div className="flex justify-between items-center text-sm">
+                            <div className="flex justify-between items-center pt-2">
                                 <div className="text-gray-600">
-                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Username</span>
-                                    <span className="font-mono">{u.username}</span>
+                                    <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-0.5">Username</span>
+                                    <span className="font-mono text-sm font-bold text-gray-500">{u.username}</span>
                                 </div>
-                                <div className="flex gap-4">
-                                    <button onClick={() => handleEdit(u)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors">
-                                        <Edit2 size={20} />
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleEdit(u)} className="p-2.5 text-blue-500 bg-blue-50 rounded-xl">
+                                        <Edit2 size={18} />
                                     </button>
                                     {u.username !== 'admin' && (
-                                        <button onClick={() => handleDelete(u.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
-                                            <Trash2 size={20} />
+                                        <button onClick={() => handleDelete(u.id)} className="p-2.5 text-red-500 bg-red-50 rounded-xl">
+                                            <Trash2 size={18} />
                                         </button>
                                     )}
                                 </div>
                             </div>
                         </div>
                     ))}
-                    {userList.length === 0 && (
-                        <div className="p-8 text-center text-gray-500 italic">
-                            No users found.
-                        </div>
-                    )}
                 </div>
             </div>
+            
+            {userList.length === 0 && !isFormOpen && (
+                <div className="py-20 text-center ap-card border-dashed border-2 flex flex-col items-center gap-4">
+                    <p className="text-gray-400 font-medium italic">No users registered in the system.</p>
+                </div>
+            )}
         </div>
     );
 };
