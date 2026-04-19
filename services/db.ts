@@ -163,6 +163,15 @@ export const saveUsers = async (users: User[]): Promise<void> => {
   }).then(handleResponse);
 };
 
+export const updateUserProfile = async (profileData: Partial<User>): Promise<User> => {
+  const res = await fetch(`${API_URL}/profile`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(profileData)
+  });
+  return await handleResponse(res);
+};
+
 export const getCurriculum = async (cls: ClassLevel, sub: SubjectType): Promise<Curriculum | null> => {
   const res = await fetch(`${API_URL}/curriculums`);
   const list: Curriculum[] = await handleResponse(res) || [];

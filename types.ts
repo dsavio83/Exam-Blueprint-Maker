@@ -1,3 +1,12 @@
+// Removed duplicate SchoolType string type definition
+
+
+export type District = 
+    "Thiruvananthapuram" | "Kollam" | "Pathanamthitta" | "Alappuzha" | 
+    "Kottayam" | "Idukki" | "Ernakulam" | "Thrissur" | 
+    "Palakkad" | "Malappuram" | "Kozhikode" | "Wayanad" | 
+    "Kannur" | "Kasaragod";
+
 export enum Role {
   ADMIN = 'ADMIN',
   USER = 'USER'
@@ -53,6 +62,12 @@ export enum QuestionType {
   CRS2 = 'CRS2',
   CRS3 = 'CRS3',
   CRL = 'CRL'
+}
+
+export enum SchoolType {
+  GOVERNMENT = 'Government',
+  AIDED = 'Aided',
+  PRIVATE = 'Private'
 }
 
 export interface SubUnit {
@@ -183,7 +198,40 @@ export interface User {
   password?: string; // For simple auth demo
   role: Role;
   name: string;
+  
+  // Profile fields
+  pen?: string;
+  designation?: string;
+  mobile?: string;
+  phoneNumber?: string; // Ally with UserProfile for now
   email?: string;
+  emailPersonal?: string;
+  emailSchool?: string;
+  hmName?: string;
+  hmMobile?: string;
+  district?: string;
+  educationalDistrict?: string;
+  subdistrict?: string;
+  brcName?: string;
+  schoolCode?: string;
+  schoolName?: string;
+  schoolType?: SchoolType;
+  accountNo?: string;
+  bankAccountNumber?: string; // Align with UserProfile
+  bankName?: string;
+  branch?: string;
+  bankBranch?: string; // Align with UserProfile
+  ifscCode?: string;
+  bankIfsc?: string; // Align with UserProfile
+  
+  // New details
+  dob?: string;
+  joinDate?: string;
+  retirementDate?: string;
+  experience?: string;
+  basicPay?: number;
+  salaryScale?: string;
+  pensionScheme?: 'Statutory' | 'NPS';
 }
 
 // Configuration for Exam Weightage

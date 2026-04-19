@@ -22,10 +22,12 @@ import { BlueprintMatrix } from './BlueprintMatrix';
 import { ReportsView } from './ReportsView';
 import { SummaryTable } from './SummaryTable';
 import UniversalBlueprintView from './UniversalBlueprintView';
+import UserProfile from './UserProfile';
 
 interface UserDashboardProps {
     user: User;
     onLogout: () => void;
+    onUpdateUser: (user: User) => void;
 }
 
 // ─── Gradient palette per index ───────────────────────────────────────────────
@@ -38,8 +40,8 @@ const CARD_GRADIENTS = [
     { from: '#8b5cf6', to: '#ec4899', accent: '#e9d5ff' },
 ];
 
-const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
-    const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
+const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateUser }) => {
+    const [view, setView] = useState<'list' | 'create' | 'edit' | 'profile'>('list');
     const [currentBlueprint, setCurrentBlueprint] = useState<Blueprint | null>(null);
     const [selectedClass, setSelectedClass] = useState<ClassLevel>(ClassLevel._10);
     const [selectedSubject, setSelectedSubject] = useState<SubjectType>(SubjectType.TAMIL_AT);
@@ -879,7 +881,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div className="ud-user-chip">
+                        <div className="ud-user-chip" onClick={() => setView('profile')} style={{ cursor: 'pointer' }} title="View Profile">
                             <div className="ud-avatar">{user.name?.charAt(0)?.toUpperCase()}</div>
                             <span className="ud-username">{user.name}</span>
                         </div>
@@ -1205,6 +1207,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                                 />
                             )}
                         </div>
+                    )}
+
+                    {/* ══════════════ PROFILE VIEW ═════════════════════════════════ */}
+                    {view === 'profile' && (
+                        <UserProfile 
+                            user={user} 
+                            onUpdate={onUpdateUser} 
+                            onBack={() => setView('list')} 
+                        />
                     )}
                 </div>
             </div>

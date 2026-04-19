@@ -245,6 +245,40 @@ app.post('/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// 2.1 PUT /profile - Update user profile
+app.put('/profile', auth, async (req, res) => {
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const userId = req.user.id;
+    const updates = req.body;
+    
+    // Security: Prevent sensitive field changes
+    delete updates.role;
+    delete updates.username;
+    delete updates.password;
+    delete updates.id;
+    delete updates._id;
+
+    // Use a robust query that handles both custom id and MongoDB _id
+    const query = { $or: [{ id: userId }] };
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      query.$or.push({ _id: userId });
+    }
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(normalizeUser(user));
+  } catch (err) { 
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
 // 3. /users - User Management
 app.route('/users')
   .get(auth, async (req, res) => {
@@ -392,10 +426,33 @@ app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
   })
   .delete(auth, async (req, res) => {
     if (!(await ensureDbReady())) return serviceUnavailable(res);
-    await SharedBlueprint.deleteOne({ blueprintId: req.params.bId, sharedWithUserId: req.params.uId });
-    await Blueprint.findOneAndUpdate({ id: req.params.bId }, { $pull: { sharedWith: req.params.uId } });
     res.json({ success: true });
   });
+
+// 13. PUT /profile - Update User Profile
+app.put('/profile', auth, async (req, res) => {
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const userId = req.user.id;
+    const updateData = req.body;
+    
+    // Safety: Don't allow changing critical fields via simple profile update
+    delete updateData.role;
+    delete updateData.username;
+    delete updateData.password;
+    delete updateData._id;
+    delete updateData.id;
+
+    const user = await User.findOneAndUpdate(
+      { $or: [{ id: userId }, { _id: mongoose.isValidObjectId(userId) ? userId : null }] },
+      { $set: updateData },
+      { new: true }
+    );
+    
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(normalizeUser(user));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // 12. /health - System Health
 app.get('/health', (req, res) => {

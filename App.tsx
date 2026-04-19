@@ -91,7 +91,7 @@ const App = () => {
         return <AdminPortal user={currentUser} onLogout={handleLogout} />;
     }
 
-    return <UserDashboard user={currentUser} onLogout={handleLogout} />;
+    return <UserDashboard user={currentUser} onLogout={handleLogout} onUpdateUser={handleLogin} />;
 };
 
 export default App;
