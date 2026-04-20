@@ -255,7 +255,7 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
             </div>
 
             {/* Answer Key Table */}
-            <div className="overflow-hidden">
+            <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead>
                         <tr className="bg-white text-black">

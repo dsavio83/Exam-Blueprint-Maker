@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Users, Search, CheckCircle, AlertCircle, FileText,
     Settings, PlusCircle, ArrowRight, UserPlus,
-    BookOpen, Layers, Calendar, Loader2
+    BookOpen, Layers, Calendar, Loader2, List,
+    Printer, Trash2, Eye, Filter, RefreshCw, Edit
 } from 'lucide-react';
 import {
-    getUsers, saveBlueprint,
+    getUsers, saveBlueprint, getBlueprints, deleteBlueprint,
     getQuestionPaperTypes, generateBlueprintTemplate,
     getDB, initDB, getCurriculum, filterCurriculumByTerm
 } from '../services/db';
@@ -20,14 +21,73 @@ interface AdminAssignmentManagerProps {
 
 const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssign }) => {
     // State
+    const [activeTab, setActiveTab] = useState<'assign' | 'view'>('assign');
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingAssignments, setLoadingAssignments] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [listSearchTerm, setListSearchTerm] = useState('');
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [editingBlueprintIds, setEditingBlueprintIds] = useState<string[]>([]);
     const [isAssigning, setIsAssigning] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
+    const [assignedPapers, setAssignedPapers] = useState<Blueprint[]>([]);
 
+    const printRef = useRef<HTMLDivElement>(null);
+
+    const filteredAssignments = React.useMemo(() => {
+        return assignedPapers.filter(bp => {
+            const teacher = users.find(u => u.id === bp.ownerId);
+            const search = listSearchTerm.toLowerCase();
+            return (
+                teacher?.name.toLowerCase().includes(search) ||
+                bp.subject.toLowerCase().includes(search) ||
+                bp.questionPaperTypeName.toLowerCase().includes(search) ||
+                bp.classLevel.toString().includes(search) ||
+                bp.examTerm.toLowerCase().includes(search)
+            );
+        });
+    }, [assignedPapers, listSearchTerm, users]);
+
+    const groupedAssignments = React.useMemo(() => {
+        // First Level: Group by Class|Subject
+        const classSubjectGroups: Record<string, Record<string, Blueprint[]>> = {};
+
+        filteredAssignments.forEach(bp => {
+            const csKey = `${bp.classLevel}|${bp.subject}`;
+            if (!classSubjectGroups[csKey]) classSubjectGroups[csKey] = {};
+
+            const typeKey = bp.questionPaperTypeName;
+            if (!classSubjectGroups[csKey][typeKey]) classSubjectGroups[csKey][typeKey] = [];
+            classSubjectGroups[csKey][typeKey].push(bp);
+        });
+
+        return Object.keys(classSubjectGroups).sort((a, b) => {
+            const parse = (k: string) => {
+                const [cls, sub] = k.split('|');
+                let clsVal = 0;
+                if (cls === 'SSLC') clsVal = 11;
+                else clsVal = parseInt(cls);
+                const subVal = sub.includes('BT') ? 1 : 0;
+                return clsVal * 10 + subVal;
+            };
+            return parse(a) - parse(b);
+        }).map(csKey => {
+            const typeGroups = classSubjectGroups[csKey];
+            // Sort types: Type 1, Type 2, etc.
+            const sortedTypeKeys = Object.keys(typeGroups).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+            return {
+                key: csKey,
+                label: `Class ${csKey.split('|')[0]} - ${csKey.split('|')[1]}`,
+                types: sortedTypeKeys.map(typeKey => ({
+                    typeName: typeKey,
+                    blueprints: typeGroups[typeKey]
+                }))
+            };
+        });
+    }, [filteredAssignments]);
     // Paper Configuration State
     const [config, setConfig] = useState({
         classLevel: 10 as ClassLevel,
@@ -35,46 +95,130 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
         examTerm: ExamTerm.FIRST,
         paperType: '',
         setLabel: 'SET A',
-        examYear: new Date().getFullYear().toString(),
+        examYear: new Date().getFullYear().toString() + '-' + (new Date().getFullYear() + 1).toString().slice(2),
         totalMarks: 10,
-        timeDuration: '40 Mins'
     });
 
     // Options
-    const classOptions: ClassLevel[] = [ClassLevel._8, ClassLevel._9, ClassLevel._10, ClassLevel._11];
+    const classOptions = [ClassLevel._8, ClassLevel._9, ClassLevel._10, ClassLevel._SSLC];
     const subjectOptions = Object.values(SubjectType);
     const termOptions = Object.values(ExamTerm);
     const setOptions = ['SET A', 'SET B', 'SET C', 'SET D', 'GENERAL'];
 
     useEffect(() => {
-        const loadData = async () => {
-            try {
-                let db = getDB();
-                if (!db) db = await initDB();
-
-                const [allUsers, pTypes] = await Promise.all([
-                    getUsers(),
-                    getQuestionPaperTypes()
-                ]);
-
-                setUsers(allUsers.filter(u => u.role !== Role.ADMIN));
-                setPaperTypes(pTypes);
-
-                if (pTypes.length > 0) {
-                    setConfig(prev => ({
-                        ...prev,
-                        paperType: pTypes[0].id,
-                        totalMarks: pTypes[0].totalMarks
-                    }));
-                }
-            } catch (error) {
-                console.error('Failed to load data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadData();
+        loadBaseData();
     }, []);
+
+    useEffect(() => {
+        if (activeTab === 'view') {
+            loadAssignments();
+        }
+    }, [activeTab]);
+
+    const loadBaseData = async () => {
+        try {
+            setLoading(true);
+            let db = getDB();
+            if (!db) db = await initDB();
+
+            const [allUsers, pTypes] = await Promise.all([
+                getUsers(),
+                getQuestionPaperTypes()
+            ]);
+
+            setUsers(allUsers.filter(u => u.role !== Role.ADMIN));
+            setPaperTypes(pTypes);
+
+            if (pTypes.length > 0) {
+                setConfig(prev => ({
+                    ...prev,
+                    paperType: pTypes[0].id,
+                    totalMarks: pTypes[0].totalMarks
+                }));
+            }
+        } catch (error) {
+            console.error('Failed to load data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadAssignments = async () => {
+        try {
+            setLoadingAssignments(true);
+            const allBps = await getBlueprints('all');
+            // Filter only those assigned by admin
+            setAssignedPapers(allBps.filter(bp => bp.isAdminAssigned).sort((a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            ));
+        } catch (error) {
+            console.error('Failed to load assignments:', error);
+        } finally {
+            setLoadingAssignments(false);
+        }
+    };
+
+    const handleDeleteAssignment = async (ids: string | string[]) => {
+        const idArray = Array.isArray(ids) ? ids : [ids];
+        const msg = idArray.length > 1
+            ? `Are you sure you want to delete these ${idArray.length} assignments? (இந்த ${idArray.length} ஒதுக்கீடுகளை நீக்க விரும்புகிறீர்களா?)`
+            : 'Are you sure you want to delete this assignment? (இந்த ஒதுக்கீட்டை நீக்க விரும்புகிறீர்களா?)';
+
+        if (!window.confirm(msg)) return;
+
+        try {
+            for (const id of idArray) {
+                await deleteBlueprint(id);
+            }
+            loadAssignments();
+        } catch (error) {
+            console.error('Delete failed:', error);
+        }
+    };
+
+    const handlePrint = () => {
+        const content = printRef.current;
+        if (!content) return;
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        // Extract metadata from the first filtered assignment if available
+        const firstAssignment = filteredAssignments[0];
+        const academicYear = firstAssignment ? firstAssignment.academicYear : 'N/A';
+        const examTerm = firstAssignment ? firstAssignment.examTerm : 'N/A';
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Assignment List - வினாத்தாள் ஒதுக்கீடு பட்டியல்</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 10px; color: #333; }
+                        h1 { text-align: center; color: #1e40af; font-size: 18px; margin-bottom: 2px; }
+                        p.subtitle { text-align: center; color: #666; font-size: 11px; margin-bottom: 15px; font-weight: bold; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }
+                        th { background-color: #f3f4f6; color: #374151; font-weight: bold; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; }
+                        th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
+                        tr:nth-child(even) { background-color: #fafafa; }
+                        .print-teacher-name { font-size: 13px !important; font-weight: bold; color: #000; display: block; margin-bottom: 2px; }
+                        .print-school-info { font-size: 9px !important; color: #666 !important; font-style: italic; display: block; }
+                        .footer { margin-top: 20px; font-size: 9px; color: #999; text-align: right; border-top: 1px solid #eee; padding-top: 5px; }
+                        @media print {
+                            button, .no-print { display: none !important; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h1>Question Paper Assignment List (வினாத்தாள் ஒதுக்கீடு பட்டியல்)</h1>
+                    <p class="subtitle">Academic Year: ${academicYear} | Exam: ${examTerm}</p>
+                    ${content.innerHTML}
+                    <div class="footer">Generated on ${new Date().toLocaleString()}</div>
+                    <script>window.onload = () => { window.print(); window.close(); }</script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
 
     const filteredUsers = users.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -97,6 +241,31 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
         } else {
             setSelectedUserIds(filteredUsers.map(u => u.id));
         }
+    };
+
+    const handleEditAssignment = (bps: Blueprint[]) => {
+        setEditingBlueprintIds(bps.map(bp => bp.id));
+        const first = bps[0];
+        setConfig({
+            classLevel: first.classLevel,
+            subject: first.subject,
+            examTerm: first.examTerm,
+            paperType: first.questionPaperTypeId,
+            setLabel: first.setId || 'SET A',
+            examYear: first.academicYear,
+            totalMarks: first.totalMarks,
+        });
+        setSelectedUserIds(bps.map(bp => bp.ownerId));
+        setActiveTab('assign');
+
+        // Scroll to top to see the form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingBlueprintIds([]);
+        setSelectedUserIds([]);
+        // Reset to some defaults if needed, or just keep current config
     };
 
     const handleAssign = async () => {
@@ -136,7 +305,14 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                 return;
             }
 
-            // Create a blueprint for each selected user
+            // If updating, delete the old ones first
+            if (editingBlueprintIds.length > 0) {
+                for (const id of editingBlueprintIds) {
+                    await deleteBlueprint(id);
+                }
+            }
+
+            // Create new blueprints for all selected users
             for (const userId of selectedUserIds) {
                 // 3. Generate items based on template
                 const items = generateBlueprintTemplate(
@@ -181,19 +357,28 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                 await saveBlueprint(newBlueprint);
             }
 
+            const successMsg = editingBlueprintIds.length > 0
+                ? 'Successfully updated assignments. '
+                : `Successfully assigned blueprints to ${selectedUserIds.length} teachers.`;
+
             setStatus({
                 type: 'success',
-                message: `Successfully assigned blueprints to ${selectedUserIds.length} teachers. (வினாத்தாள்கள் ஆசிரியர்களுக்கு வெற்றிகரமாக ஒதுக்கப்பட்டன)`
+                message: successMsg
             });
+
+            setEditingBlueprintIds([]);
             setSelectedUserIds([]);
 
             if (onAssign) {
                 setTimeout(() => onAssign(), 2000);
             }
 
+            // If in view tab, reload
+            if (activeTab === 'view') loadAssignments();
+
         } catch (error: any) {
-            console.error('Assignment failed:', error);
-            setStatus({ type: 'error', message: `Assignment process failed: ${error.message}` });
+            console.error('Process failed:', error);
+            setStatus({ type: 'error', message: `Process failed: ${error.message}` });
         } finally {
             setIsAssigning(false);
         }
@@ -212,289 +397,458 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
-                <div>
-                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight flex items-center gap-3">
-                        <UserPlus className="text-blue-600" />
-                        Assign Question Papers
-                    </h2>
-                    <p className="text-gray-500 mt-2 font-medium">
-                        Create and assign new blueprints to specific teachers. (வினாத்தாள்களை ஆசிரியர்களுக்கு ஒதுக்கவும்)
-                    </p>
+                <div className="flex items-center gap-3">
+                    <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-100">
+                        <UserPlus size={24} />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 font-display tracking-tight">
+                            Assignment Manager
+                        </h2>
+                    </div>
+                </div>
+
+                <div className="flex p-1 bg-gray-100/80 rounded-xl backdrop-blur-md border border-gray-200 shadow-inner w-full md:w-auto">
+                    <button
+                        onClick={() => setActiveTab('assign')}
+                        className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'assign'
+                            ? 'bg-white text-blue-600 shadow-md'
+                            : 'text-gray-500 hover:text-gray-800'
+                            }`}
+                    >
+                        <PlusCircle size={16} /> New Assignment
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('view')}
+                        className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'view'
+                            ? 'bg-white text-blue-600 shadow-md'
+                            : 'text-gray-500 hover:text-gray-800'
+                            }`}
+                    >
+                        <List size={16} /> View Assignments
+                    </button>
                 </div>
             </div>
 
             {status.type && (
-                <div className={`p-5 rounded-2xl flex items-start gap-4 animate-in zoom-in-95 duration-300 shadow-sm border ${status.type === 'success'
-                        ? 'bg-green-50 text-green-700 border-green-100'
-                        : 'bg-red-50 text-red-700 border-red-100'
+                <div className={`p-4 rounded-xl flex items-start gap-3 animate-in zoom-in-95 duration-300 shadow-sm border ${status.type === 'success'
+                    ? 'bg-green-50 text-green-700 border-green-100'
+                    : 'bg-red-50 text-red-700 border-red-100'
                     }`}>
-                    {status.type === 'success' ? <CheckCircle className="mt-0.5 flex-shrink-0" size={24} /> : <AlertCircle className="mt-0.5 flex-shrink-0" size={24} />}
+                    {status.type === 'success' ? <CheckCircle className="mt-0.5 flex-shrink-0" size={20} /> : <AlertCircle className="mt-0.5 flex-shrink-0" size={20} />}
                     <div>
-                        <div className="font-black text-sm uppercase tracking-tight">{status.type === 'success' ? 'Operation Successful' : 'Assignment Failed'}</div>
-                        <div className="font-bold text-sm mt-0.5 opacity-80">{status.message}</div>
+                        <div className="font-black text-xs uppercase tracking-tight">{status.type === 'success' ? 'Operation Successful' : 'Assignment Failed'}</div>
+                        <div className="font-bold text-xs mt-0.5 opacity-80">{status.message}</div>
                     </div>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-                {/* Left Column: Configuration */}
-                <div className="xl:col-span-5 space-y-6">
-                    <div className="ap-card overflow-hidden">
-                        <div className="p-5 border-b border-gray-50 bg-gray-50/50 flex items-center justify-between">
-                            <h3 className="font-bold text-gray-800 font-display flex items-center gap-2">
-                                <Settings size={18} className="text-blue-600" />
-                                1. Paper Setup (வினாத்தாள் அமைப்பு)
-                            </h3>
+            {activeTab === 'assign' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left Column: Configuration */}
+                    <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-4">
+                        <div className="ap-card overflow-hidden border-blue-50 shadow-sm">
+                            <div className="p-4 border-b border-gray-50 bg-blue-50/30 flex items-center justify-between">
+                                <h3 className="font-bold text-blue-900 font-display flex items-center gap-2 text-sm">
+                                    <Settings size={16} className="text-blue-600" />
+                                    1. Paper Setup
+                                </h3>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Layers size={12} /> Class
+                                    </label>
+                                    <select
+                                        value={config.classLevel}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            const parsedVal = isNaN(Number(val)) ? val : Number(val);
+                                            setConfig({ ...config, classLevel: parsedVal as ClassLevel });
+                                        }}
+                                        className="ap-select w-full bg-gray-50/50 text-sm py-2"
+                                    >
+                                        {classOptions.map(opt => <option key={opt} value={opt}>Class {opt}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <BookOpen size={12} /> Subject
+                                    </label>
+                                    <select
+                                        value={config.subject}
+                                        onChange={(e) => setConfig({ ...config, subject: e.target.value as SubjectType })}
+                                        className="ap-select w-full bg-gray-50/50 text-sm py-2"
+                                    >
+                                        {subjectOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Calendar size={12} /> Exam Term
+                                    </label>
+                                    <select
+                                        value={config.examTerm}
+                                        onChange={(e) => setConfig({ ...config, examTerm: e.target.value as ExamTerm })}
+                                        className="ap-select w-full bg-gray-50/50 text-sm py-2"
+                                    >
+                                        {termOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <FileText size={12} /> Paper Type
+                                    </label>
+                                    <select
+                                        value={config.paperType}
+                                        onChange={(e) => {
+                                            const type = paperTypes.find(t => t.id === e.target.value);
+                                            setConfig({
+                                                ...config,
+                                                paperType: e.target.value,
+                                                totalMarks: type?.totalMarks || config.totalMarks
+                                            });
+                                        }}
+                                        className="ap-select w-full bg-gray-50/50 text-sm py-2"
+                                    >
+                                        <option value="" disabled>Select Type</option>
+                                        {paperTypes.map(type => (
+                                            <option key={type.id} value={type.id}>{type.name} ({type.totalMarks} Marks)</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <PlusCircle size={12} /> Question Set
+                                    </label>
+                                    <select
+                                        value={config.setLabel}
+                                        onChange={(e) => setConfig({ ...config, setLabel: e.target.value })}
+                                        className="ap-select w-full bg-gray-50/50 text-sm py-2"
+                                    >
+                                        {setOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Marks & Year</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="number"
+                                            value={config.totalMarks}
+                                            onChange={(e) => setConfig({ ...config, totalMarks: parseInt(e.target.value) || 0 })}
+                                            placeholder="Marks"
+                                            className="ap-input bg-gray-50/50 h-[38px] text-sm"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={config.examYear}
+                                            onChange={(e) => setConfig({ ...config, examYear: e.target.value })}
+                                            placeholder="Year"
+                                            className="ap-input bg-gray-50/50 h-[38px] text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Layers size={14} /> Class
-                                </label>
-                                <select
-                                    value={config.classLevel}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        const parsedVal = isNaN(Number(val)) ? val : Number(val);
-                                        setConfig({ ...config, classLevel: parsedVal as ClassLevel });
-                                    }}
-                                    className="ap-select w-full"
-                                >
-                                    <option value={8}>Class 8</option>
-                                    <option value={9}>Class 9</option>
-                                    <option value={10}>Class 10</option>
-                                    <option value={'SSLC'}>SSLC</option>
-                                </select>
+                    </div>
+
+                    {/* Right Column: Teacher Selection and Assign Button */}
+                    <div className="lg:col-span-8 space-y-4">
+                        <div className="ap-card flex flex-col h-[700px] shadow-lg shadow-gray-100 overflow-hidden">
+                            <div className="p-4 border-b border-gray-100 bg-white sticky top-0 z-10 backdrop-blur-md">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="font-bold text-gray-800 font-display flex items-center gap-2 text-sm">
+                                        <Users size={16} className="text-blue-600" />
+                                        2. Select Teachers
+                                    </h3>
+                                    <div className="px-3 py-1 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                                        {selectedUserIds.length} / {users.length} Selected
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <BookOpen size={14} /> Subject
-                                </label>
-                                <select
-                                    value={config.subject}
-                                    onChange={(e) => setConfig({ ...config, subject: e.target.value as SubjectType })}
-                                    className="ap-select w-full"
-                                >
-                                    {subjectOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Calendar size={14} /> Exam Term
-                                </label>
-                                <select
-                                    value={config.examTerm}
-                                    onChange={(e) => setConfig({ ...config, examTerm: e.target.value as ExamTerm })}
-                                    className="ap-select w-full"
-                                >
-                                    {termOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <FileText size={14} /> Paper Type
-                                </label>
-                                <select
-                                    value={config.paperType}
-                                    onChange={(e) => {
-                                        const type = paperTypes.find(t => t.id === e.target.value);
-                                        setConfig({
-                                            ...config,
-                                            paperType: e.target.value,
-                                            totalMarks: type?.totalMarks || config.totalMarks
-                                        });
-                                    }}
-                                    className="ap-select w-full"
-                                >
-                                    <option value="" disabled>Select Type</option>
-                                    {paperTypes.map(type => (
-                                        <option key={type.id} value={type.id}>{type.name} ({type.totalMarks} Marks)</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <PlusCircle size={14} /> Question Set
-                                </label>
-                                <select
-                                    value={config.setLabel}
-                                    onChange={(e) => setConfig({ ...config, setLabel: e.target.value })}
-                                    className="ap-select w-full"
-                                >
-                                    {setOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Marks & Year</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        type="number"
-                                        value={config.totalMarks}
-                                        onChange={(e) => setConfig({ ...config, totalMarks: parseInt(e.target.value) || 0 })}
-                                        placeholder="Marks"
-                                        className="ap-input"
-                                    />
+                            <div className="p-4 border-b border-gray-50 bg-gray-50/20">
+                                <div className="relative group">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={16} />
                                     <input
                                         type="text"
-                                        value={config.examYear}
-                                        onChange={(e) => setConfig({ ...config, examYear: e.target.value })}
-                                        placeholder="Year"
-                                        className="ap-input"
+                                        placeholder="Search teachers..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="ap-input pl-10 h-10 bg-white border-gray-200 focus:border-blue-500 focus:shadow-md transition-all text-sm"
                                     />
                                 </div>
                             </div>
+
+                            <div className="px-4 py-2 bg-gray-50/50 flex items-center justify-between border-b border-gray-50">
+                                <button
+                                    onClick={handleSelectAll}
+                                    className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm hover:shadow-md active:scale-95"
+                                >
+                                    <CheckCircle size={12} />
+                                    {selectedUserIds.length === filteredUsers.length && filteredUsers.length > 0 ? 'Deselect All' : 'Select All Filtered'}
+                                </button>
+                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                    <Filter size={10} />
+                                    {filteredUsers.length} Results
+                                </span>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
+                                {filteredUsers.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 mb-4 border border-dashed border-gray-200">
+                                            <Users size={32} />
+                                        </div>
+                                        <p className="font-bold text-gray-400 text-xs">No teachers found.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {filteredUsers.map(user => {
+                                            const isSelected = selectedUserIds.includes(user.id);
+                                            return (
+                                                <div
+                                                    key={user.id}
+                                                    onClick={() => toggleUserSelection(user.id)}
+                                                    className={`p-3 flex items-center justify-between cursor-pointer rounded-xl border transition-all duration-200 group/item ${isSelected
+                                                        ? 'bg-blue-50/50 border-blue-200 ring-1 ring-blue-50'
+                                                        : 'bg-white border-gray-100 hover:border-blue-200 hover:bg-gray-50/30'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-black transition-all ${isSelected
+                                                            ? 'bg-blue-600 text-white'
+                                                            : 'bg-gray-100 text-gray-400 group-hover/item:bg-blue-100 group-hover/item:text-blue-400'
+                                                            }`}>
+                                                            {user.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className={`font-bold text-sm truncate transition-colors ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                                                                {user.name}
+                                                            </div>
+                                                            <div className="text-[9px] text-gray-400 font-bold uppercase tracking-wider truncate">
+                                                                PEN: {user.pen || 'N/A'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${isSelected
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                                        : 'border-gray-200 bg-gray-50 group-hover/item:border-blue-200'
+                                                        }`}>
+                                                        {isSelected && <CheckCircle size={12} strokeWidth={3} />}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Summary and Assign Button Integrated into Footer */}
+                            <div className="p-4 bg-gradient-to-r from-blue-600 to-indigo-700 border-t border-blue-500/30 text-white shadow-2xl">
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                                        <div className="space-y-0.5">
+                                            <div className="text-[9px] font-black text-white/50 uppercase tracking-widest">Class & Subject</div>
+                                            <div className="font-extrabold text-white text-xs">Grade {config.classLevel} - {config.subject}</div>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <div className="text-[9px] font-black text-white/50 uppercase tracking-widest">Selected</div>
+                                            <div className="font-extrabold text-white text-xs">{selectedUserIds.length} Teachers</div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={handleAssign}
+                                        disabled={isAssigning || selectedUserIds.length === 0}
+                                        className="w-full sm:w-auto px-6 py-2.5 bg-white text-blue-700 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                                    >
+                                        {isAssigning ? (
+                                            <>
+                                                <Loader2 className="animate-spin" size={14} />
+                                                Processing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                {editingBlueprintIds.length > 0 ? 'Update Assignment' : 'Assign'}
+                                                <ArrowRight size={14} />
+                                            </>
+                                        )}
+                                    </button>
+                                    {editingBlueprintIds.length > 0 && (
+                                        <button
+                                            onClick={handleCancelEdit}
+                                            className="w-full sm:w-auto px-6 py-2.5 bg-red-500/20 text-white border border-red-400/30 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-500/30 transition-all"
+                                        >
+                                            Cancel Edit
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
+                </div>
+            ) : (
 
-                    {/* Summary Preview */}
-                    <div className="ap-card bg-blue-600 border-none text-white p-7 shadow-2xl shadow-blue-100 flex flex-col justify-between min-h-[280px]">
-                        <div>
-                            <div className="flex items-center gap-4 mb-6">
-                                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white">
-                                    <FileText size={24} />
+                <div className="space-y-6">
+                    {/* View Assignments List */}
+                    <div className="ap-card overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 bg-white flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-purple-100 rounded-2xl text-purple-600">
+                                    <List size={24} />
                                 </div>
                                 <div>
-                                    <h4 className="font-bold text-xl leading-tight uppercase tracking-tight">Assignment Preview</h4>
-                                    <p className="text-white/70 text-xs font-bold uppercase tracking-widest">ஒதுக்கீடு முன்னோட்டம்</p>
+                                    <h3 className="font-bold text-gray-900 text-lg">Assigned Question Papers</h3>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-y-5 gap-x-8">
-                                <div className="space-y-0.5">
-                                    <div className="text-[10px] font-black text-white/50 uppercase tracking-widest">Target Class</div>
-                                    <div className="font-extrabold text-white text-sm">Grade {config.classLevel}</div>
+                            <div className="flex items-center gap-3">
+                                <div className="relative w-full md:w-64">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search assignments..."
+                                        value={listSearchTerm}
+                                        onChange={(e) => setListSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-200 transition-all bg-gray-50/50"
+                                    />
                                 </div>
-                                <div className="space-y-0.5">
-                                    <div className="text-[10px] font-black text-white/50 uppercase tracking-widest">Examination</div>
-                                    <div className="font-extrabold text-white text-sm truncate">{config.examTerm}</div>
-                                </div>
-                                <div className="space-y-0.5">
-                                    <div className="text-[10px] font-black text-white/50 uppercase tracking-widest">Target Teachers</div>
-                                    <div className="font-extrabold text-white text-sm">{selectedUserIds.length} Teachers</div>
-                                </div>
-                                <div className="space-y-0.5">
-                                    <div className="text-[10px] font-black text-white/50 uppercase tracking-widest">Subject Details</div>
-                                    <div className="font-extrabold text-white text-sm truncate">{config.subject}</div>
-                                </div>
+                                <button
+                                    onClick={loadAssignments}
+                                    className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                    title="Refresh List"
+                                >
+                                    <RefreshCw size={20} className={loadingAssignments ? 'animate-spin' : ''} />
+                                </button>
+                                <button
+                                    onClick={handlePrint}
+                                    disabled={filteredAssignments.length === 0}
+                                    className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-500 hover:text-blue-600 text-gray-600 px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                >
+                                    <Printer size={18} /> Print List
+                                </button>
                             </div>
                         </div>
 
-                        <button
-                            onClick={handleAssign}
-                            disabled={isAssigning || selectedUserIds.length === 0}
-                            className="w-full mt-8 py-5 bg-white text-blue-700 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group shadow-lg shadow-blue-900/30"
-                        >
-                            {isAssigning ? (
-                                <>
-                                    <Loader2 className="animate-spin" size={18} />
-                                    Assigning...
-                                </>
-                            ) : (
-                                <>
-                                    Assign Blueprint to Teachers
-                                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                                </>
-                            )}
-                        </button>
+                        <div className="overflow-x-auto" ref={printRef}>
+                            <table className="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-50/80 border-b border-gray-100 text-left">
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Type</th>
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Teacher 1</th>
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Teacher 2</th>
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 text-right no-print border-l border-gray-100">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {loadingAssignments ? (
+                                        <tr>
+                                            <td colSpan={4} className="p-12 text-center">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Loader2 className="animate-spin text-blue-600" size={24} />
+                                                    <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest">Loading...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : groupedAssignments.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={4} className="p-12 text-center">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <FileText className="text-gray-200" size={32} />
+                                                    <p className="text-gray-400 font-bold text-xs">No assignments found.</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        groupedAssignments.map(group => (
+                                            <React.Fragment key={group.key}>
+                                                <tr className="bg-blue-50/40 border-y border-blue-100">
+                                                    <td colSpan={4} className="p-2 px-4 font-black text-blue-800 text-[9px] uppercase tracking-[0.15em]">
+                                                        {group.label}
+                                                    </td>
+                                                </tr>
+                                                {group.types.map(typeGroup => {
+                                                    const bps = typeGroup.blueprints;
+                                                    const teacher1 = users.find(u => u.id === bps[0]?.ownerId);
+                                                    const teacher2 = bps.length > 1 ? users.find(u => u.id === bps[1]?.ownerId) : null;
+
+                                                    return (
+                                                        <tr key={typeGroup.typeName} className="hover:bg-purple-50/20 transition-colors group border-b border-gray-100">
+                                                            <td className="p-3 align-middle border-x border-gray-50">
+                                                                <div className="font-bold text-gray-700 text-xs">
+                                                                    {typeGroup.typeName}
+                                                                </div>
+                                                            </td>
+
+                                                            <td className={`p-3 align-middle border-r border-gray-50 ${bps.length === 1 ? 'col-span-1' : ''}`} colSpan={bps.length === 1 ? 2 : 1}>
+                                                                {teacher1 && (
+                                                                    <div className="flex flex-col">
+                                                                        <div className="font-bold text-gray-900 text-sm leading-tight print-teacher-name">{teacher1.name}</div>
+                                                                        <div className="text-[10px] text-gray-500 font-medium truncate max-w-[200px] print-school-info">
+                                                                            {teacher1.schoolName} | {teacher1.district}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+
+                                                            {bps.length > 1 && (
+                                                                <td className="p-3 align-middle border-r border-gray-50">
+                                                                    {teacher2 && (
+                                                                        <div className="flex flex-col">
+                                                                            <div className="font-bold text-gray-900 text-sm leading-tight print-teacher-name">{teacher2.name}</div>
+                                                                            <div className="text-[10px] text-gray-500 font-medium truncate max-w-[200px] print-school-info">
+                                                                                {teacher2.schoolName} | {teacher2.district}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    {bps.length > 2 && (
+                                                                        <div className="text-[9px] text-blue-600 font-black mt-1">
+                                                                            + {bps.length - 2} more teachers
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            )}
+
+                                                            <td className="p-3 text-right no-print align-middle border-l border-gray-50">
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <button
+                                                                        onClick={() => handleEditAssignment(bps)}
+                                                                        className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                                        title="Edit Group Assignment"
+                                                                    >
+                                                                        <Edit size={14} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDeleteAssignment(bps.map(b => b.id))}
+                                                                        className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                                        title="Delete Group Assignment"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-
-                {/* Right Column: Teacher Selection Panel */}
-                <div className="xl:col-span-7 space-y-6">
-                    <div className="ap-card flex flex-col h-[670px]">
-                        <div className="p-5 border-b border-gray-100 bg-white/50 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
-                            <h3 className="font-bold text-gray-800 font-display flex items-center gap-2">
-                                <Users size={18} className="text-blue-600" />
-                                2. Select Teachers (ஆசிரியர்களைத் தேர்ந்தெடுக்கவும்)
-                            </h3>
-                            <div className="px-4 py-1.5 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100">
-                                {selectedUserIds.length} / {users.length} Selected
-                            </div>
-                        </div>
-
-                        <div className="p-4 border-b border-gray-50 bg-white">
-                            <div className="relative">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input
-                                    type="text"
-                                    placeholder="Search by name, email, or PEN..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="ap-input pl-12 h-14 bg-gray-50/50 border-gray-100 focus:bg-white"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="p-4 bg-gray-50/30 flex items-center justify-between border-b border-gray-50">
-                            <button
-                                onClick={handleSelectAll}
-                                className="text-[11px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors flex items-center gap-2"
-                            >
-                                <CheckCircle size={14} />
-                                {selectedUserIds.length === filteredUsers.length && filteredUsers.length > 0 ? 'Deselect All' : 'Select All Filtered'}
-                            </button>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                Total {filteredUsers.length} Results
-                            </span>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            {filteredUsers.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center p-12 text-center">
-                                    <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 mb-4 border border-gray-100">
-                                        <Users size={32} />
-                                    </div>
-                                    <p className="font-bold text-gray-400 text-sm">No teachers found matching your search.</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-gray-50">
-                                    {filteredUsers.map(user => {
-                                        const isSelected = selectedUserIds.includes(user.id);
-                                        return (
-                                            <div
-                                                key={user.id}
-                                                onClick={() => toggleUserSelection(user.id)}
-                                                className={`p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] ${isSelected ? 'bg-blue-50/40' : 'hover:bg-gray-50/80'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black transition-all duration-300 ${isSelected ? 'bg-blue-600 text-white shadow-xl shadow-blue-200 rotate-3' : 'bg-gray-100 text-gray-400 shadow-inner'
-                                                        }`}>
-                                                        {user.name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div>
-                                                        <div className={`font-black tracking-tight transition-colors ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
-                                                            {user.name}
-                                                        </div>
-                                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
-                                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 px-1.5 py-0.5 rounded">PEN: {user.pen || 'N/A'}</span>
-                                                            <span className="text-[10px] font-medium text-gray-400">{user.email || user.username}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className={`w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all duration-300 ${isSelected
-                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200'
-                                                        : 'border-gray-200 bg-white'
-                                                    }`}>
-                                                    {isSelected && <CheckCircle size={14} strokeWidth={3} />}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 };
 
 export default AdminAssignmentManager;
+
 

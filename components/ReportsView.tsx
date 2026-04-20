@@ -1097,7 +1097,7 @@ ${bodyHTML}
     // MAIN RENDER
     // ============================================================
     return (
-        <div className="mt-10 w-full text-black reports-container relative">
+        <div className="mt-10 w-full text-black reports-container relative overflow-x-auto">
 
             {/* ─── Time Warning ─── */}
             {timeWarning && (

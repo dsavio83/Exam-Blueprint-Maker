@@ -495,8 +495,8 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
             )}
 
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto h-[calc(100vh-64px)] md:h-screen p-4 md:p-8">
-                <div className="max-w-5xl mx-auto">
+            <main className={`flex-1 overflow-y-auto h-[calc(100vh-64px)] md:h-screen ${activeTab === 'consolidated' ? 'p-0' : 'p-4 md:p-8'}`}>
+                <div className={`${activeTab === 'consolidated' ? 'w-full h-full' : 'max-w-5xl mx-auto'}`}>
                     {renderContent()}
                 </div>
             </main>

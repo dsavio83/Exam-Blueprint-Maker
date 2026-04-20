@@ -61,7 +61,7 @@ export const SummaryTable = ({ items = [] }: { items?: BlueprintItem[] }) => {
 
     // 4. Option Stats
     const optionStats = items.reduce((acc, item) => {
-        const key = item.hasInternalChoice ? 'With Option' : 'No Option';
+        const key = item.hasInternalChoice ? 'With Choice' : 'Without Choice';
         if (!acc[key]) acc[key] = { count: 0, marks: 0 };
         acc[key].count += item.questionCount;
         acc[key].marks += item.totalMarks;
@@ -69,7 +69,7 @@ export const SummaryTable = ({ items = [] }: { items?: BlueprintItem[] }) => {
     }, {} as Record<string, { count: number, marks: number }>);
 
     const StatTable = ({ title, data }: { title: string, data: Record<string, { count: number, marks: number }> }) => (
-        <div className="bg-white flex-1 min-w-[200px]">
+        <div className="bg-white flex-1 min-w-[200px] overflow-x-auto">
             <table className="w-full text-xs">
                 <thead>
                     <tr className="bg-gray-100 border-b">

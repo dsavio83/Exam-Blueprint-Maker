@@ -116,25 +116,6 @@ const MARK_COLORS: Record<number, string> = {
   6: 'bg-purple-50 border-purple-200 text-purple-900',
 };
 
-// ─── Language Subject Helper ─────────────────────────────────────────────────
-
-/** CP3 (Computational Thinking) is not applicable to language subjects. */
-const LANGUAGE_KEYWORDS = [
-  'tamil', 'english', 'hindi', 'sanskrit', 'french', 'urdu',
-  'arabic', 'telugu', 'kannada', 'malayalam', 'language', 'மொழி', 'lang'
-];
-
-export const isLanguageSubject = (subject: string): boolean => {
-  const lower = (subject || '').toLowerCase();
-  return LANGUAGE_KEYWORDS.some(kw => lower.includes(kw));
-};
-
-/** Returns the allowed CognitiveProcess list for a given subject. */
-const getAllowedCPs = (subject: string): CognitiveProcess[] =>
-  isLanguageSubject(subject)
-    ? Object.values(CognitiveProcess).filter(cp => cp !== CognitiveProcess.CP3)
-    : Object.values(CognitiveProcess);
-
 // ─── Validation Engine ───────────────────────────────────────────────────────
 
 interface ValidationError {
@@ -285,14 +266,14 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
   });
 
   // ── 5. OR Sub-unit & Unit spread validation ─────────────────────────────────
-  // Rule A (always)   : ஒரே sub-unit-ல் ஒரே section-இல் OR > 1 வரக்கூடாது
-  // Rule B (multi)    : ஒரே பாடத்தில் OR > 60% குவியக்கூடாது
-  // Rule C (single)   : ஒரே sub-unit-ல் OR > 1 வரக்கூடவே கூடாது
+  // Rule A: ஒரே sub-unit-ல் OR வரக்கூடாது → alert
+  // Rule B: ஒரே unit-ல் OR குவியக்கூடாது (multiple units exist) → alert
   const choiceItems = items.filter(i => i.hasInternalChoice);
   const totalUnitCount = curriculum.units.length;
 
   if (choiceItems.length > 0 && items.length > 0) {
-    const subUnitOrMap = new Map<string, string[]>();
+    // Sub-unit clash check
+    const subUnitOrMap = new Map<string, string[]>(); // subUnitId → [sectionIds]
     choiceItems.forEach(item => {
       const existing = subUnitOrMap.get(item.subUnitId) || [];
       subUnitOrMap.set(item.subUnitId, [...existing, item.sectionId]);
@@ -308,9 +289,9 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       }
     });
 
+    // Unit concentration check (only when > 1 unit)
     if (totalUnitCount > 1) {
-      // Multi-subject: flag if one unit holds > 60% of all ORs
-      const unitOrMap = new Map<string, number>();
+      const unitOrMap = new Map<string, number>(); // unitId → count
       choiceItems.forEach(item => {
         unitOrMap.set(item.unitId, (unitOrMap.get(item.unitId) || 0) + item.questionCount);
       });
@@ -322,29 +303,14 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
         if (pct > 60) {
           pushError({
             type: 'warning', code: `OR_UNIT_CONCENTRATION_${unitId}`,
-            message: `"${unitName}" — OR வினாக்களில் ${pct}% குவிந்துள்ளது (பல பாடங்கள்)`,
-            detail: 'பல பாடங்கள் உள்ளதால் OR வினாக்களை வெவ்வேறு பாடங்களில் சீராக பரவச் செய்யவும்.'
-          });
-        }
-      });
-    } else {
-      // Single-subject: every OR must come from a DIFFERENT sub-unit
-      const singleSubMap = new Map<string, number>();
-      choiceItems.forEach(item => {
-        singleSubMap.set(item.subUnitId, (singleSubMap.get(item.subUnitId) || 0) + item.questionCount);
-      });
-      singleSubMap.forEach((cnt, subUnitId) => {
-        if (cnt > 1) {
-          const subName = curriculum.units.flatMap(u => u.subUnits).find(su => su.id === subUnitId)?.name || subUnitId;
-          pushError({
-            type: 'warning', code: `OR_SINGLE_SUBUNIT_PILE_${subUnitId}`,
-            message: `"${subName}" — ஒரே பாடப்பகுதியில் ${cnt} OR வினாக்கள் (ஒரே பாடம்)`,
-            detail: 'ஒரே பாடம் மட்டும் உள்ளதால் ஒவ்வொரு OR வினாவும் வெவ்வேறு பாடப்பகுதியில் இருக்க வேண்டும்.'
+            message: `"${unitName}" — OR வினாக்களில் ${pct}% குவிந்துள்ளது`,
+            detail: 'OR வினாக்களை வெவ்வேறு பாடங்களில் பரவச் செய்வது சிறந்தது.'
           });
         }
       });
     }
 
+    // KL mismatch between Option A & B
     choiceItems.forEach(item => {
       if (item.knowledgeLevelB && item.knowledgeLevel !== item.knowledgeLevelB) {
         pushError({
@@ -355,12 +321,13 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       }
     });
 
+    // All good OR spread
     const subUnitClashes = [...subUnitOrMap.values()].filter(v => v.length > 1).length;
     if (subUnitClashes === 0 && choiceItems.length > 1) {
       pushError({
         type: 'info', code: 'EXCELLENCE_OR',
         message: 'OR வினாக்கள் சரியாக பரவியுள்ளன',
-        detail: 'சாய்ஸ் வினாக்கள் வெவ்வேறு பாடப்பகுதிகளில் சீராக உள்ளன.'
+        detail: 'சாய்ஸ் வினாக்கள் வெவ்வேறு பாடங்களில் சீராக உள்ளன.'
       });
     }
   }
@@ -441,103 +408,6 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
     });
   }
 
-  // ── 10. CP3 (Computational Thinking) in language subjects ──────────────────
-  if (items.length > 0 && isLanguageSubject(blueprint.subject)) {
-    const cp3Items = items.filter(i =>
-      i.cognitiveProcess === CognitiveProcess.CP3 ||
-      (i.hasInternalChoice && i.cognitiveProcessB === CognitiveProcess.CP3)
-    );
-    if (cp3Items.length > 0) {
-      pushError({
-        type: 'warning', code: 'CP3_IN_LANGUAGE_SUBJECT',
-        message: `"Computational Thinking" மொழிப்பாடத்திற்கு பொருந்தாது (${cp3Items.length} வினாக்கள்)`,
-        detail: 'மொழிப்பாடங்களில் Computational Thinking பயன்படுத்துவதை தவிர்க்கவும். Auto-fill மூலம் சரிசெய்யலாம்.'
-      });
-    }
-  }
-
-  // ── 11. KL total sanity ────────────────────────────────────────────────────
-  if (items.length > 0) {
-    const klSum = Object.values(klMarks).reduce((a, b) => a + b, 0);
-    if (klSum !== blueprint.totalMarks) {
-      pushError({
-        type: 'warning', code: 'KL_SUM_MISMATCH',
-        message: `KL மொத்தம் ${klSum}M ≠ மொத்த மதிப்பெண் ${blueprint.totalMarks}M`,
-        detail: 'Knowledge Level மதிப்பெண்கள் மொத்தம் சரியாக இல்லை. Auto-fill பயன்படுத்தவும்.'
-      });
-    }
-  }
-
-  // ── 12. Cognitive Process diversity ───────────────────────────────────────
-  if (items.length > 4) {
-    const allowedCPs = getAllowedCPs(blueprint.subject);
-    const cpCounts = new Map<string, number>();
-    items.forEach(i => cpCounts.set(i.cognitiveProcess, (cpCounts.get(i.cognitiveProcess) || 0) + 1));
-    const dominantCP = [...cpCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-    const dominantPct = Math.round((dominantCP[1] / items.length) * 100);
-    if (dominantPct > 50) {
-      pushError({
-        type: 'info', code: 'CP_IMBALANCE',
-        message: `"${dominantCP[0]}" — ${dominantPct}% வினாக்கள் (அதிகம்)`,
-        detail: `${allowedCPs.length} வகை Cognitive Process-களை சீராக பயன்படுத்துவது சிறந்தது.`
-      });
-    } else if (cpCounts.size >= Math.min(4, allowedCPs.length)) {
-      pushError({
-        type: 'info', code: 'EXCELLENCE_CP',
-        message: `Cognitive Process: ${cpCounts.size} வகைகள் பயன்படுத்தப்பட்டுள்ளன`,
-        detail: 'சிறந்த Cognitive diversity கடைப்பிடிக்கப்படுகிறது.'
-      });
-    }
-  }
-
-  // ── 13. Higher-order thinking (Profound ≥ 15%) ────────────────────────────
-  if (items.length > 0) {
-    const profoundPct = blueprint.totalMarks > 0
-      ? Math.round((klMarks[KnowledgeLevel.PROFOUND] / blueprint.totalMarks) * 100) : 0;
-    if (profoundPct < 15) {
-      pushError({
-        type: 'info', code: 'LOW_PROFOUND',
-        message: `Profound மட்டம்: ${profoundPct}% — கீழ் வரம்பில் உள்ளது`,
-        detail: 'உயர்நிலை சிந்தனை வினாக்கள் (Profound) குறைந்தது 15% இருக்க பரிந்துரைக்கப்படுகிறது.'
-      });
-    }
-  }
-
-  // ── 14. Section mark concentration (no section > 50% of total) ────────────
-  if (items.length > 0) {
-    paperType.sections.forEach(s => {
-      const sMarks = items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.totalMarks, 0);
-      const sPct = blueprint.totalMarks > 0 ? Math.round((sMarks / blueprint.totalMarks) * 100) : 0;
-      if (sPct > 50) {
-        pushError({
-          type: 'warning', code: `SECTION_OVERWEIGHT_${s.id}`,
-          message: `${s.marks}M பிரிவு — ${sPct}% மதிப்பெண்கள் (அதிகம்)`,
-          detail: 'ஒரே பிரிவில் 50%-க்கு அதிகமான மதிப்பெண்கள் குவிவதை தவிர்க்கவும்.'
-        });
-      }
-    });
-  }
-
-  // ── 15. Blueprint completeness score ──────────────────────────────────────
-  if (items.length > 0) {
-    const finalErrors = rawErrors.filter(e => e.type === 'error').length;
-    const finalWarnings = rawErrors.filter(e => e.type === 'warning').length;
-    const score = Math.max(0, 100 - finalErrors * 20 - finalWarnings * 5);
-    if (score === 100) {
-      pushError({
-        type: 'info', code: 'BLUEPRINT_PERFECT',
-        message: '🏆 Blueprint 100% சரியாக உள்ளது!',
-        detail: 'அனைத்து விதிகளும் பூர்த்தி செய்யப்பட்டுள்ளன. உறுதிப்படுத்தலாம்.'
-      });
-    } else if (score >= 80) {
-      pushError({
-        type: 'info', code: 'BLUEPRINT_GOOD',
-        message: `Blueprint தரம்: ${score}/100`,
-        detail: 'சிறிய திருத்தங்களுடன் Blueprint தயாராகும்.'
-      });
-    }
-  }
-
   return {
     errors: rawErrors,
     klSummary,
@@ -553,36 +423,18 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
 /**
  * Produces corrected items array:
  * 1. KL targets satisfied (Basic 30%, Average 50%, Profound 20%)
- * 2. CP3 removed for language subjects; reassigned with allowed CPs
- * 3. OR: exactly s.optionCount per section, spread across different sub-units
- * 4. No OR in same sub-unit twice
+ * 2. OR: exactly s.optionCount per section, spread across different sub-units
+ * 3. No OR in same sub-unit twice
  */
 export function autoFillBlueprint(
   items: BlueprintItem[],
   paperType: PaperType,
   curriculum: Curriculum,
-  totalMarks: number,
-  subject?: string
+  totalMarks: number
 ): BlueprintItem[] {
   if (!items.length || !paperType || !curriculum) return items;
 
   const result = items.map(item => ({ ...item }));
-  const allowedCPs = getAllowedCPs(subject ?? curriculum.subject ?? '');
-
-  // Step 0: Fix any CP3 usage in language subjects
-  if (isLanguageSubject(subject ?? curriculum.subject ?? '')) {
-    let cpIdx = 0;
-    result.forEach(item => {
-      if (item.cognitiveProcess === CognitiveProcess.CP3) {
-        item.cognitiveProcess = allowedCPs[cpIdx % allowedCPs.length];
-        cpIdx++;
-      }
-      if (item.cognitiveProcessB === CognitiveProcess.CP3) {
-        item.cognitiveProcessB = allowedCPs[cpIdx % allowedCPs.length];
-        cpIdx++;
-      }
-    });
-  }
 
   // Step 1: Fix KL distribution
   const klTargetMarks: Record<KnowledgeLevel, number> = {
@@ -1179,44 +1031,33 @@ interface SummaryColumnProps {
   title: string;
   rows: { label: string; count: number; marks: number }[];
 }
-const SummaryColumn: React.FC<SummaryColumnProps> = ({ title, rows }) => {
-  const totalQns = rows.reduce((sum, r) => sum + r.count, 0);
-  const totalMarks = rows.reduce((sum, r) => sum + r.marks, 0);
-
-  return (
-    <div className="p-3">
-      <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider mb-2">{title}</div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-gray-400 text-[10px]">
-            <th className="text-left font-normal pb-1"></th>
-            <th className="text-center font-normal pb-1">Qns</th>
-            <th className="text-center font-normal pb-1">Marks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => {
-            const isTamil = /[\u0B80-\u0BFF]/.test(r.label);
-            return (
-              <tr key={i} className="border-t border-gray-100">
-                <td className={`py-1 text-gray-700 font-medium whitespace-nowrap ${isTamil ? 'tamil-font' : ''}`}
-                  lang={isTamil ? 'ta' : 'en'}>{r.label}</td>
-                <td className="py-1 text-center text-gray-600">{r.count}</td>
-                <td className="py-1 text-center font-bold text-gray-800">{r.marks}</td>
-              </tr>
-            );
-          })}
-          {/* Total Row */}
-          <tr className="border-t-2 border-gray-200 bg-gray-50/50">
-            <td className="py-1.5 text-gray-900 font-black uppercase text-[9px]">Total</td>
-            <td className="py-1.5 text-center text-gray-900 font-black">{totalQns}</td>
-            <td className="py-1.5 text-center text-blue-700 font-black">{totalMarks}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-};
+const SummaryColumn: React.FC<SummaryColumnProps> = ({ title, rows }) => (
+  <div className="p-3">
+    <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider mb-2">{title}</div>
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-gray-400 text-[10px]">
+          <th className="text-left font-normal pb-1"></th>
+          <th className="text-center font-normal pb-1">Qns</th>
+          <th className="text-center font-normal pb-1">Marks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => {
+          const isTamil = /[\u0B80-\u0BFF]/.test(r.label);
+          return (
+            <tr key={i} className="border-t border-gray-100">
+              <td className={`py-1 text-gray-700 font-medium whitespace-nowrap ${isTamil ? 'tamil-font' : ''}`}
+                lang={isTamil ? 'ta' : 'en'}>{r.label}</td>
+              <td className="py-1 text-center text-gray-600">{r.count}</td>
+              <td className="py-1 text-center font-bold text-gray-800">{r.marks}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+);
 
 // ─── BlueprintMatrix (main export) ────────────────────────────────────────────
 
@@ -1328,176 +1169,170 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
         onConfirm={onConfirm}
       />
 
-      {/* Matrix + Validation side-by-side */}
-      <div className="flex flex-col xl:flex-row gap-4 items-start w-full">
-        {/* Left side: Table + Summary */}
-        <div className="w-full xl:flex-1 flex flex-col gap-4">
-          {/* Matrix table container */}
-          <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm custom-scrollbar">
-            <table className="w-full text-[10px] border-collapse border border-gray-300 table-fixed">
-              <thead>
-                <tr className="bg-slate-900 text-white">
-                  <th className="border border-slate-700 p-1 w-[2%] text-center">#</th>
-                  <th className="border border-slate-700 p-1 text-left w-[4%] text-[9px]">UNIT</th>
-                  <th className="border border-slate-700 p-1 text-left w-[20%]">SUB UNIT</th>
-                  <th className="border border-slate-700 p-1 text-center bg-amber-500 text-black font-black w-[4%]">M</th>
-                  {sections.map(s => {
-                    const sectionWidth = Math.floor(70 / sections.length);
-                    return (
-                      <th key={s.id} style={{ width: `${sectionWidth}%` }} className="border border-slate-700 p-1 text-center">
-                        <div className="font-black text-[10px] leading-tight">{s.marks}M</div>
-                        <div className="text-[7px] text-slate-400 font-bold uppercase tracking-tighter">({s.count} Q)</div>
-                        {s.optionCount > 0 && (
-                          <div className="text-[7px] text-purple-400 font-bold tracking-tighter">OR:{s.optionCount}</div>
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {curriculum.units.map(unit => {
-                  const unitPct = getUnitPercent(unit.id);
-                  const unitTotal = getUnitTotal(unit.id);
-                  return (
-                    <React.Fragment key={unit.id}>
-                      {unit.subUnits.map((subUnit, sIdx) => {
-                        const subTotal = getSubUnitTotal(unit.id, subUnit.id);
-                        const subPct = getSubUnitPercent(unit.id, subUnit.id);
-                        return (
-                          <tr key={subUnit.id} className="hover:bg-slate-50 group/row transition-colors">
-                            {sIdx === 0 && (
-                              <td rowSpan={unit.subUnits.length}
-                                className="border border-gray-200 p-1 text-center font-black text-slate-400 bg-white align-middle text-[10px]">
-                                {unit.unitNumber}
-                              </td>
-                            )}
-                            {sIdx === 0 && (
-                              <td rowSpan={unit.subUnits.length}
-                                className="border border-gray-200 p-0.5 text-center bg-white align-middle">
-                                <div className="flex flex-col items-center justify-center gap-1">
-                                  <div className="font-black text-indigo-800 [writing-mode:vertical-rl] rotate-180 py-1 whitespace-nowrap text-[7px] uppercase tracking-wider">
-                                    {unit.name}
-                                  </div>
-                                  <div className="text-[7px] text-indigo-500 font-black">{unitPct}%</div>
-                                </div>
-                              </td>
-                            )}
+      {/* Blueprint Summary Table */}
+      <div className="md:order-last">
+        <BlueprintSummaryTable blueprint={blueprint} validation={validation} />
+      </div>
 
-                            {/* Sub-unit name + per-lesson progress */}
-                            <td className="border border-gray-200 p-1 align-top bg-white/50">
-                              <div className="flex flex-col gap-0.5">
-                                <div className="text-slate-600 font-medium text-[10px] leading-tight tamil-font break-words">{subUnit.name}</div>
-                                {subTotal > 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <div className="flex-1 h-0.5 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-indigo-500 rounded-full"
-                                        style={{ width: `${Math.min(subPct, 100)}%` }} />
-                                    </div>
-                                    <span className="text-[7px] font-black text-indigo-500">{subPct}%</span>
-                                  </div>
-                                )}
+      {/* Matrix + Validation side-by-side */}
+      <div className="flex flex-col md:flex-row gap-4 items-start w-full">
+        {/* Matrix table */}
+        <div className="w-full overflow-x-auto border border-gray-200 md:border-none">
+          <table className="w-full text-sm border-collapse border border-gray-800 min-w-[800px] md:min-w-full">
+            <thead>
+              <tr className="bg-gray-900 text-white">
+                <th className="border border-gray-700 p-2 w-8 text-center">#</th>
+                <th className="border border-gray-700 p-2 text-left">UNIT</th>
+                <th className="border border-gray-700 p-2 text-left">SUB UNIT</th>
+                <th className="border border-gray-700 p-2 text-center bg-yellow-500 text-black font-bold w-14">MARKS</th>
+                {sections.map(s => (
+                  <th key={s.id} className="border border-gray-700 p-2 text-center">
+                    <div className="font-bold">{s.marks} Marks</div>
+                    <div className="text-[10px] text-gray-300 font-normal">COUNT: {s.count}</div>
+                    {s.optionCount > 0 && (
+                      <div className="text-[10px] text-purple-300 font-normal">+OR:{s.optionCount}</div>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {curriculum.units.map(unit => {
+                const unitPct = getUnitPercent(unit.id);
+                const unitTotal = getUnitTotal(unit.id);
+                return (
+                  <React.Fragment key={unit.id}>
+                    {unit.subUnits.map((subUnit, sIdx) => {
+                      const subTotal = getSubUnitTotal(unit.id, subUnit.id);
+                      const subPct = getSubUnitPercent(unit.id, subUnit.id);
+                      return (
+                        <tr key={subUnit.id} className="hover:bg-gray-50 group">
+                          {sIdx === 0 && (
+                            <td rowSpan={unit.subUnits.length}
+                              className="border border-gray-300 p-2 text-center font-bold text-gray-500 bg-white align-middle">
+                              {unit.unitNumber}
+                            </td>
+                          )}
+                          {sIdx === 0 && (
+                            <td rowSpan={unit.subUnits.length}
+                              className="border border-gray-300 p-1 text-center bg-white align-middle w-10">
+                              <div className="flex flex-col items-center justify-center gap-1">
+                                <div className="font-bold text-blue-800 [writing-mode:vertical-rl] rotate-180 py-2 whitespace-nowrap text-[10px]">
+                                  {unit.name}
+                                </div>
+                                <div className="text-[10px] text-indigo-700 font-bold">{unitPct}%</div>
                               </div>
                             </td>
+                          )}
 
-                            {/* Sub-unit marks total */}
-                            <td className="border border-gray-200 p-1 text-center font-black bg-amber-50/30 text-slate-700 text-[10px]">
-                              {subTotal || '-'}
-                            </td>
-
-                            {/* Section cells */}
-                            {sections.map(section => {
-                              const cellItems = getCellItems(unit.id, subUnit.id, section.id);
-                              return (
-                                <td key={section.id}
-                                  className="border border-gray-200 p-0.5 align-top min-h-[2rem] relative group/cell"
-                                  onDragOver={handleDragOver}
-                                  onDrop={e => handleDrop(e, unit.id, subUnit.id, section.id)}>
-                                  <div className="space-y-0.5 relative">
-                                    {cellItems.map(item => (
-                                      <div key={item.id} className="relative">
-                                        <ItemCard
-                                          item={item}
-                                          readOnly={readOnly}
-                                          isEditing={editingItemId === item.id}
-                                          onEdit={() => setEditingItemId(item.id)}
-                                          onClose={() => setEditingItemId(null)}
-                                          onUpdate={onUpdateItem}
-                                          onRemove={onRemoveItem}
-                                          onDragStart={handleDragStart}
-                                        />
-                                      </div>
-                                    ))}
-                                    {!readOnly && (
-                                      <button
-                                        onClick={() => onAddItem(unit.id, subUnit.id, section.id)}
-                                        className="w-full text-[10px] text-slate-200 hover:text-indigo-500 hover:bg-indigo-50 border border-dashed border-slate-100 hover:border-indigo-200 rounded py-0 transition-all opacity-0 group/row:opacity-100 group/cell:opacity-100"
-                                        title="Add question">
-                                        +
-                                      </button>
-                                    )}
+                          {/* Sub-unit name + per-lesson progress */}
+                          <td className="border border-gray-300 p-2 align-top">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="text-gray-600 italic text-xs leading-tight">{subUnit.name}</div>
+                              {subTotal > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-500"
+                                      style={{ width: `${Math.min(subPct, 100)}%` }} />
                                   </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
+                                  <span className="text-[10px] font-black text-indigo-600 whitespace-nowrap">{subPct}%</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Sub-unit marks total */}
+                          <td className="border border-gray-300 p-2 text-center font-bold bg-yellow-50 text-sm">
+                            {subTotal || '-'}
+                          </td>
+
+                          {/* Section cells */}
+                          {sections.map(section => {
+                            const cellItems = getCellItems(unit.id, subUnit.id, section.id);
+                            return (
+                              <td key={section.id}
+                                className="border border-gray-300 p-1 align-top min-h-[3rem] min-w-[5rem] relative"
+                                onDragOver={handleDragOver}
+                                onDrop={e => handleDrop(e, unit.id, subUnit.id, section.id)}>
+                                <div className="space-y-0.5 relative">
+                                  {cellItems.map(item => (
+                                    <div key={item.id} className="relative group/item">
+                                      <ItemCard
+                                        item={item}
+                                        readOnly={readOnly}
+                                        isEditing={editingItemId === item.id}
+                                        onEdit={() => setEditingItemId(item.id)}
+                                        onClose={() => setEditingItemId(null)}
+                                        onUpdate={onUpdateItem}
+                                        onRemove={onRemoveItem}
+                                        onDragStart={handleDragStart}
+                                      />
+                                    </div>
+                                  ))}
+                                  {!readOnly && (
+                                    <button
+                                      onClick={() => onAddItem(unit.id, subUnit.id, section.id)}
+                                      className="w-full text-[10px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1 transition-all mt-0.5"
+                                      title="Add question">
+                                      +
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+
+                    {/* Unit total row */}
+                    <tr className="bg-indigo-900 text-white font-bold text-center text-xs">
+                      <td colSpan={3} className="border border-indigo-700 p-1.5 text-right uppercase tracking-wider pr-3">
+                        Unit {unit.unitNumber} Total:
+                      </td>
+                      <td className="border border-indigo-700 p-1.5 bg-yellow-400 text-black font-black">
+                        {unitTotal}
+                      </td>
+                      {sections.map(s => {
+                        const count = blueprint.items
+                          .filter(i => i.unitId === unit.id && i.sectionId === s.id)
+                          .reduce((acc, i) => acc + i.questionCount, 0);
+                        return (
+                          <td key={s.id} className="border border-indigo-700 p-1.5 text-indigo-200">
+                            {count || ''}
+                          </td>
                         );
                       })}
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
 
-                      {/* Unit total row */}
-                      <tr className="bg-indigo-50/50 text-indigo-900 font-black text-center text-[9px]">
-                        <td colSpan={3} className="border border-indigo-100 p-0.5 text-right uppercase tracking-widest pr-2 italic opacity-60">
-                          Unit {unit.unitNumber} Total:
-                        </td>
-                        <td className="border border-indigo-100 p-0.5 bg-amber-400 text-black font-black">
-                          {unitTotal}
-                        </td>
-                        {sections.map(s => {
-                          const count = blueprint.items
-                            .filter(i => i.unitId === unit.id && i.sectionId === s.id)
-                            .reduce((acc, i) => acc + i.questionCount, 0);
-                          return (
-                            <td key={s.id} className="border border-indigo-100 p-0.5 text-indigo-400">
-                              {count || ''}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </React.Fragment>
+              {/* Grand Total row */}
+              <tr className="bg-gray-900 text-white font-black text-center text-sm">
+                <td colSpan={3} className="border border-gray-700 p-3 text-right uppercase tracking-widest pr-4">
+                  Total Aggregates
+                </td>
+                <td className={`border border-gray-700 p-3 text-xl ${validation.grandTotal === blueprint.totalMarks ? 'bg-green-500' : 'bg-red-500'} text-white`}>
+                  {validation.grandTotal}
+                </td>
+                {sections.map(s => {
+                  const total = blueprint.items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.questionCount, 0);
+                  const totalM = blueprint.items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.totalMarks, 0);
+                  return (
+                    <td key={s.id} className="border border-gray-700 p-2 align-middle">
+                      <div className="text-lg">{total}</div>
+                      <div className="text-[10px] opacity-60 font-normal">{totalM}M</div>
+                    </td>
                   );
                 })}
-
-                {/* Grand Total row */}
-                <tr className="bg-slate-900 text-white font-black text-center text-[10px]">
-                  <td colSpan={3} className="border border-slate-700 p-2 text-right uppercase tracking-widest pr-4">
-                    Aggregates
-                  </td>
-                  <td className={`border border-slate-700 p-2 ${validation.grandTotal === blueprint.totalMarks ? 'bg-green-500' : 'bg-red-500'} text-white`}>
-                    {validation.grandTotal}
-                  </td>
-                  {sections.map(s => {
-                    const total = blueprint.items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.questionCount, 0);
-                    const totalM = blueprint.items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.totalMarks, 0);
-                    return (
-                      <td key={s.id} className="border border-slate-700 p-1 align-middle">
-                        <div className="text-[11px]">{total}</div>
-                        <div className="text-[8px] opacity-60 font-normal tracking-tighter">{totalM}M</div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Blueprint Summary Table directly under the table container */}
-          <div className="mt-0">
-            <BlueprintSummaryTable blueprint={blueprint} validation={validation} />
-          </div>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        {/* Validation panel - stays on the right on large screens */}
-        <div className="w-full xl:w-64 shrink-0">
+        {/* Validation panel */}
+        <div className="w-full md:w-64 shrink-0">
           <ValidationPanel
             result={validation}
             paperType={paperType}

@@ -6,7 +6,7 @@ import {
 import {
     getUsers, getBlueprints, getQuestionPaperTypes, getExamConfigs, getHealth
 } from '../services/db';
-import { Blueprint } from '../types';
+import { Blueprint, User } from '../types';
 
 const AdminDashboard = () => {
     const [stats, setStats] = useState({
@@ -17,27 +17,37 @@ const AdminDashboard = () => {
     });
     const [health, setHealth] = useState({ status: 'connecting', database: 'initializing' });
     const [recentBlueprints, setRecentBlueprints] = useState<Blueprint[]>([]);
+    const [allBlueprints, setAllBlueprints] = useState<Blueprint[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
     useEffect(() => {
         const loadStats = async () => {
             try {
-                const [users, blueprints, paperTypes, configs, healthData] = await Promise.all([
+                const [userData, blueprintsData, paperTypesData, configsData, healthData] = await Promise.all([
                     getUsers(),
-                    getBlueprints('all'), 
+                    getBlueprints('all'),
                     getQuestionPaperTypes(),
                     getExamConfigs(),
                     getHealth()
                 ]);
-                
+
                 setStats({
-                    users: users.length,
-                    blueprints: blueprints.length,
-                    paperTypes: paperTypes.length,
-                    configs: configs.length
+                    users: userData.length,
+                    blueprints: blueprintsData.length,
+                    paperTypes: paperTypesData.length,
+                    configs: configsData.length
                 });
                 setHealth(healthData);
-                const sorted = [...blueprints].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                setRecentBlueprints(sorted.slice(0, 5));
+                setUsers(userData);
+                setAllBlueprints(blueprintsData);
+
+                // Default to term + year of the last created blueprint
+                if (blueprintsData.length > 0) {
+                    const sorted = [...blueprintsData].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                    const latest = sorted[0];
+                    setSelectedFilter(`${latest.examTerm}|${latest.academicYear || '2025-26'}`);
+                }
             } catch (err) {
                 console.error("Failed to load dashboard stats:", err);
                 const healthData = await getHealth();
@@ -46,6 +56,26 @@ const AdminDashboard = () => {
         };
         loadStats();
     }, []);
+
+    // Extract unique Term + Academic Year combinations
+    const filterOptions = React.useMemo(() => {
+        const options = new Set<string>();
+        allBlueprints.forEach(bp => {
+            const year = bp.academicYear || '2025-26';
+            options.add(`${bp.examTerm}|${year}`);
+        });
+        return Array.from(options).sort();
+    }, [allBlueprints]);
+
+    useEffect(() => {
+        let filtered = [...allBlueprints];
+        if (selectedFilter && selectedFilter !== 'all') {
+            const [term, year] = selectedFilter.split('|');
+            filtered = filtered.filter(bp => bp.examTerm === term && (bp.academicYear || '2025-26') === year);
+        }
+        const sorted = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setRecentBlueprints(sorted.slice(0, 5));
+    }, [selectedFilter, allBlueprints]);
 
     const StatCard = ({ title, count, icon: Icon, color }: any) => (
         <div className="ap-card p-6 flex items-center justify-between group hover:border-blue-300 transition-all duration-300 cursor-default">
@@ -83,52 +113,70 @@ const AdminDashboard = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 ap-card overflow-hidden h-fit">
-                    <div className="p-5 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+                    <div className="p-5 border-b border-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/30">
                         <h3 className="font-bold text-gray-800 font-display flex items-center gap-2">
                             <Clock size={16} className="text-blue-500" />
                             Recent Blueprints
                         </h3>
-                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full uppercase tracking-wider">Latest Activity</span>
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                            <select
+                                value={selectedFilter}
+                                onChange={(e) => setSelectedFilter(e.target.value)}
+                                className="text-[11px] font-bold border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-gray-700 shadow-sm"
+                            >
+                                <option value="all">All Exams</option>
+                                {filterOptions.map(opt => {
+                                    const [term, year] = opt.split('|');
+                                    return (
+                                        <option key={opt} value={opt}>{term} {year}</option>
+                                    );
+                                })}
+                            </select>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full uppercase tracking-wider whitespace-nowrap">Latest Activity</span>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-left text-gray-400 border-b border-gray-50 bg-gray-50/10">
-                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Date & Time</th>
-                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Details</th>
-                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Term</th>
-                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest text-center">Marks</th>
+                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Teacher / PEN</th>
+                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Class</th>
+                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Subject</th>
+                                    <th className="p-4 font-bold uppercase text-[10px] tracking-widest">Question Type</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {recentBlueprints.length === 0 ? (
                                     <tr><td colSpan={4} className="p-10 text-center text-gray-400 font-medium italic">No recent activity found.</td></tr>
                                 ) : (
-                                    recentBlueprints.map(bp => (
-                                        <tr key={bp.id} className="hover:bg-blue-50/30 transition-colors group">
-                                            <td className="p-4">
-                                                <div className="font-bold text-gray-800">{new Date(bp.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
-                                                <div className="text-[11px] text-gray-400 font-medium">{new Date(bp.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</div>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Class {bp.classLevel}</div>
-                                                <div className="text-[11px] text-gray-500 font-semibold">{bp.subject}</div>
-                                            </td>
-                                            <td className="p-4">
-                                                <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">{bp.examTerm}</span>
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600 text-white text-[11px] font-bold shadow-md shadow-blue-100">
-                                                    {bp.totalMarks}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))
+                                    recentBlueprints.map(bp => {
+                                        const owner = users.find(u => u.id === bp.ownerId);
+                                        return (
+                                            <tr key={bp.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                <td className="p-4">
+                                                    <div className="font-bold text-gray-800">{owner ? owner.name : 'Unknown'}</div>
+                                                    <div className="text-[11px] text-gray-400 font-medium">{owner?.pen || 'N/A'}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Class {bp.classLevel}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="font-bold text-gray-500">{bp.subject}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">{bp.questionPaperTypeName}</span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
                     </div>
                 </div>
+
+
+
 
                 <div className="ap-card flex flex-col h-fit">
                     <div className="p-5 border-b border-gray-50 bg-gray-50/30">
@@ -145,11 +193,11 @@ const AdminDashboard = () => {
                             {isHealthy ? 'Backend Operational' : 'Backend Issues'}
                         </h4>
                         <p className="text-sm text-gray-400 mt-2 font-medium leading-relaxed">
-                            {isHealthy 
-                                ? 'System resources are optimized and database connections are healthy.' 
+                            {isHealthy
+                                ? 'System resources are optimized and database connections are healthy.'
                                 : 'There are issues connecting to the backend or database.'}
                         </p>
-                        
+
                         <div className="w-full mt-8 space-y-3">
                             <div className="flex justify-between items-center text-xs p-3 rounded-xl bg-gray-50/50 border border-gray-100">
                                 <span className="text-gray-500 font-bold uppercase tracking-wider">Database</span>
@@ -164,7 +212,7 @@ const AdminDashboard = () => {
                                 </span>
                             </div>
                         </div>
-                        
+
                         <div className="mt-8 pt-6 border-t border-gray-50 w-full">
                             <div className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">Build Version</div>
                             <div className="text-sm font-black text-gray-400 mt-1">v.1.0-STABLE</div>

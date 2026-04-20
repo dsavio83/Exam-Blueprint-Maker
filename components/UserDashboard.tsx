@@ -52,6 +52,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     const [isConfigExpanded, setIsConfigExpanded] = useState(true);
     const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
     const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
+    const [listCombinedFilter, setListCombinedFilter] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [animateHeader, setAnimateHeader] = useState(false);
 
@@ -568,8 +569,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     background: var(--ap-surface);
                     border: 1px solid var(--ap-border);
                     border-radius: var(--ap-radius);
-                    overflow: hidden;
+                    overflow-x: auto;
                     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+
                     animation: fadeUp 0.6s 0.15s ease both;
                 }
                 @media (min-width: 1024px) { .ud-table-wrap { display: block; } }
@@ -923,6 +925,26 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                             </button>
                                         ))}
                                     </div>
+
+                                    {/* Exam and Year Filters (Combined) */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <select
+                                            value={listCombinedFilter}
+                                            onChange={(e) => setListCombinedFilter(e.target.value)}
+                                            className="px-2 py-1.5 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-600 shadow-sm"
+                                        >
+                                            <option value="">Select Exam</option>
+                                            <option value="all">All Exams & Years</option>
+                                            {Array.from(new Set(blueprints.map(bp => `${bp.examTerm}|${bp.academicYear || '2025-26'}`))).sort().map(opt => {
+                                                const [term, year] = opt.split('|');
+                                                return (
+                                                    <option key={opt} value={opt}>
+                                                        {term} ({year})
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    </div>
                                 </div>
                                 <button className="ud-new-btn" onClick={handleCreateNew}>
                                     <Plus size={16} />
@@ -934,9 +956,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                             {(() => {
                                 const filteredBlueprints = blueprints.filter(bp => {
                                     if (bp.isHidden) return false;
-                                    if (filterView === 'owned') return bp.ownerId === user.id;
-                                    if (filterView === 'shared') return bp.ownerId !== user.id;
-                                    return true;
+                                    if (!listCombinedFilter) return false;
+
+                                    const matchesType = filterView === 'owned' ? bp.ownerId === user.id :
+                                        filterView === 'shared' ? bp.ownerId !== user.id : true;
+
+                                    const currentBpFilter = `${bp.examTerm}|${bp.academicYear || '2025-26'}`;
+                                    const matchesFilter = listCombinedFilter === 'all' || currentBpFilter === listCombinedFilter;
+
+                                    return matchesType && matchesFilter;
                                 });
 
                                 if (filteredBlueprints.length === 0) return (

@@ -56,27 +56,32 @@ const AdminTeacherDetailsView = () => {
                         table { 
                             width: 100%; 
                             border-collapse: collapse; 
-                            margin-top: 20px;
-                            font-size: 11px;
+                            margin-top: 10px;
+                            font-size: 10px;
                         }
                         th { 
-                            background: #f8fafc; 
-                            padding: 12px 8px; 
+                            background: #f1f5f9; 
+                            padding: 6px 4px; 
                             text-align: left; 
-                            border: 1px solid #e2e8f0;
-                            font-weight: 700;
+                            border: 1px solid #cbd5e1;
+                            font-weight: 800;
                             text-transform: uppercase;
-                            color: #475569;
+                            color: #334155;
+                            font-size: 8px;
                         }
                         td { 
-                            padding: 10px 8px; 
-                            border: 1px solid #e2e8f0; 
-                            vertical-align: top;
+                            padding: 6px 4px; 
+                            border: 1px solid #cbd5e1; 
+                            vertical-align: middle;
                         }
+                        .teacher-name { font-size: 12px; font-weight: bold; color: #000; }
+                        .pen-no { font-size: 9px; color: #2563eb; font-weight: bold; }
+                        .school-name { font-weight: bold; color: #334155; }
+                        .sub-info { font-size: 8px; color: #64748b; }
                         .footer { 
-                            margin-top: 30px; 
+                            margin-top: 20px; 
                             text-align: right; 
-                            font-size: 10px; 
+                            font-size: 8px; 
                             color: #94a3b8; 
                         }
                         @media print {
@@ -145,105 +150,54 @@ const AdminTeacherDetailsView = () => {
             {/* Table Container */}
             <div className="ap-card overflow-hidden">
                 <div className="overflow-x-auto" ref={printRef}>
-                    <table className="w-full text-left border-collapse min-w-[1200px]">
+                    <table className="w-full text-left border-collapse min-w-[1000px] text-[11px]">
                         <thead>
                             <tr className="bg-gray-50/80 border-b border-gray-100">
-                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-widest items-center gap-1.5 min-w-[200px]">
-                                    <UserIcon size={12} className="inline mr-1" /> Teacher & Designation
+                                <th className="p-2 font-black text-[9px] text-gray-400 uppercase tracking-widest border-x border-gray-100">
+                                    Teacher Name (PEN)
                                 </th>
-                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-widest items-center gap-1.5 min-w-[250px]">
-                                    <Building size={12} className="inline mr-1" /> School & Service
+                                <th className="p-2 font-black text-[9px] text-gray-400 uppercase tracking-widest border-x border-gray-100">
+                                    School Name (Code)
                                 </th>
-                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-widest items-center gap-1.5 min-w-[130px]">
-                                    <CreditCard size={12} className="inline mr-1" /> Professional Info
+                                <th className="p-2 font-black text-[9px] text-gray-400 uppercase tracking-widest border-x border-gray-100">
+                                    Mobile & Email
                                 </th>
-                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-widest items-center gap-1.5 min-w-[150px]">
-                                    <Phone size={12} className="inline mr-1" /> Contact
+                                <th className="p-2 font-black text-[9px] text-gray-400 uppercase tracking-widest border-x border-gray-100">
+                                    Basic Pay
                                 </th>
-                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-widest items-center gap-1.5 min-w-[300px]">
-                                    <Landmark size={12} className="inline mr-1" /> Bank Information
+                                <th className="p-2 font-black text-[9px] text-gray-400 uppercase tracking-widest border-x border-gray-100">
+                                    Account No & Bank
+                                </th>
+                                <th className="p-2 font-black text-[9px] text-gray-400 uppercase tracking-widest border-x border-gray-100">
+                                    IFSC & Branch
                                 </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 bg-white text-gray-800">
                             {filteredTeachers.map(t => (
                                 <tr key={t.id} className="hover:bg-blue-50/20 transition-colors group">
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">
-                                                {t.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <div className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{t.name}</div>
-                                                <div className="flex flex-col gap-1 mt-1">
-                                                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tight">{t.designation || 'No Designation'}</span>
-                                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-mono font-black inline-block w-fit">
-                                                        {t.pen || 'PENDING'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <td className="p-2 border-x border-gray-50">
+                                        <div className="teacher-name">{t.name}</div>
+                                        <div className="pen-no">({t.pen || 'PENDING'})</div>
                                     </td>
-                                    <td className="p-4">
-                                        <div className="space-y-2">
-                                            <div>
-                                                <div className="text-xs font-bold text-gray-700">{t.schoolName || 'Not Set'}</div>
-                                                <div className="text-[10px] text-gray-400 flex items-center gap-1">
-                                                    <Globe size={10} /> {t.schoolCode || 'N/A'} • {t.schoolType || '—'}
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">{t.district || '—'}</span>
-                                                <span className="text-[9px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded font-bold">{t.educationalDistrict || '—'}</span>
-                                            </div>
-                                        </div>
+                                    <td className="p-2 border-x border-gray-50">
+                                        <div className="school-name">{t.schoolName || 'Not Set'}</div>
+                                        <div className="sub-info">({t.schoolCode || 'N/A'})</div>
                                     </td>
-                                    <td className="p-4">
-                                        <div className="space-y-1.5">
-                                            <div className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
-                                                <IndianRupee size={11} className="text-blue-500" />
-                                                {t.basicPay ? t.basicPay.toLocaleString('en-IN') : '—'}
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-1">
-                                                <div className="text-[9px] text-gray-400 flex items-center justify-between">
-                                                    <span>Join:</span>
-                                                    <span className="font-bold text-gray-600">{t.joinDate || '—'}</span>
-                                                </div>
-                                                <div className="text-[9px] text-gray-400 flex items-center justify-between">
-                                                    <span>Retire:</span>
-                                                    <span className="font-bold text-gray-600">{t.retirementDate || '—'}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <td className="p-2 border-x border-gray-50">
+                                        <div className="font-bold text-gray-700">{t.phoneNumber || t.mobile || '—'}</div>
+                                        <div className="sub-info lowercase">{t.email || '—'}</div>
                                     </td>
-                                    <td className="p-4">
-                                        <div className="space-y-1.5">
-                                            <div className="text-[11px] font-medium text-gray-600 flex items-center gap-1.5">
-                                                <Phone size={12} className="text-gray-300" /> {t.phoneNumber || t.mobile || '—'}
-                                            </div>
-                                            <div className="text-[11px] font-medium text-gray-400 flex items-center gap-1.5">
-                                                <Mail size={12} className="text-gray-300 flex-shrink-0" /> 
-                                                <span className="truncate max-w-[120px]">{t.email || '—'}</span>
-                                            </div>
-                                        </div>
+                                    <td className="p-2 border-x border-gray-50 font-bold text-gray-900">
+                                        {t.basicPay ? `₹${t.basicPay.toLocaleString('en-IN')}` : '—'}
                                     </td>
-                                    <td className="p-4">
-                                        <div className="grid grid-cols-2 gap-3 bg-gray-50/50 p-3 rounded-xl border border-gray-100">
-                                            <div className="space-y-0.5">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase block tracking-tighter">Account Number</span>
-                                                <span className="text-[11px] font-mono font-bold text-gray-600">{t.bankAccountNumber || t.accountNo || '—'}</span>
-                                            </div>
-                                            <div className="space-y-0.5">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase block tracking-tighter">IFSC Code</span>
-                                                <span className="text-[11px] font-mono font-bold text-blue-600">{t.bankIfsc || t.ifscCode || '—'}</span>
-                                            </div>
-                                            <div className="col-span-2 space-y-0.5 border-t border-gray-100/50 pt-2 mt-0.5">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase block tracking-tighter">Bank & Branch</span>
-                                                <span className="text-[10px] font-bold text-gray-500">
-                                                    {t.bankName || '—'}{t.bankBranch || t.branch ? ` (${t.bankBranch || t.branch})` : ''}
-                                                </span>
-                                            </div>
-                                        </div>
+                                    <td className="p-2 border-x border-gray-50">
+                                        <div className="font-mono font-bold text-gray-700">{t.bankAccountNumber || t.accountNo || '—'}</div>
+                                        <div className="sub-info font-bold uppercase">{t.bankName || '—'}</div>
+                                    </td>
+                                    <td className="p-2 border-x border-gray-50">
+                                        <div className="font-mono font-bold text-blue-600">{t.bankIfsc || t.ifscCode || '—'}</div>
+                                        <div className="sub-info font-bold uppercase">{t.bankBranch || t.branch || '—'}</div>
                                     </td>
                                 </tr>
                             ))}

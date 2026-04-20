@@ -430,69 +430,103 @@ const partitionTokensToUnits = (
   return unitTargets.map((ut, i) => ({ unit: ut.unit, tokens: allocation[i] }));
 };
 
+/**
+ * Assigns KnowledgeLevel to each item so that the per-KL mark totals
+ * exactly match `targets`.
+ *
+ * FLEXIBLE RULES (priority order):
+ *  - 1M items  → prefer BASIC, but may spill into AVERAGE if needed
+ *  - 2M items  → BASIC or AVERAGE
+ *  - 3M items  → prefer AVERAGE, but may spill into BASIC/PROFOUND
+ *  - 5M items  → AVERAGE or PROFOUND
+ *  - 6M items  → prefer PROFOUND, but may spill into AVERAGE
+ *
+ * The solver first tries the "preferred" ordering; if that fails it tries
+ * all orderings. A tolerance fallback (±1M per KL) is used as a last
+ * resort so the blueprint always completes.
+ */
 const assignKnowledgeLevels = (items: BlueprintItem[], targets: Record<KnowledgeLevel, number>): boolean => {
   const klOrder = [KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND];
-  
-  // Refined rules: 1M must be BASIC, 3M must be AVERAGE, 6M must be PROFOUND
-  const solve = (idx: number, currentDeficits: Record<string, number>): boolean => {
-    if (idx === items.length) {
-      return Object.values(currentDeficits).every(d => d === 0);
-    }
-    
+
+  const preferredKLs = (marks: number): KnowledgeLevel[] => {
+    if (marks === 1) return [KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE];
+    if (marks === 2) return [KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE];
+    if (marks === 3) return [KnowledgeLevel.AVERAGE, KnowledgeLevel.BASIC, KnowledgeLevel.PROFOUND];
+    if (marks === 5) return [KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND];
+    if (marks === 6) return [KnowledgeLevel.PROFOUND, KnowledgeLevel.AVERAGE];
+    return [...klOrder];
+  };
+
+  // Pass 1: exact solver with preferred orderings
+  const solve = (idx: number, deficits: Record<string, number>): boolean => {
+    if (idx === items.length) return Object.values(deficits).every(d => d === 0);
     const item = items[idx];
-    let allowedKL: KnowledgeLevel[] = [];
-    
-    if (item.marksPerQuestion === 1) {
-      allowedKL = [KnowledgeLevel.BASIC];
-    } else if (item.marksPerQuestion === 3) {
-      allowedKL = [KnowledgeLevel.AVERAGE];
-    } else if (item.marksPerQuestion === 6) {
-      allowedKL = [KnowledgeLevel.PROFOUND];
-    } else {
-      allowedKL = [...klOrder];
-    }
-    
-    // Randomize options each time to ensure different blueprints on reset
-    const options = shuffle(allowedKL);
-    for (const kl of options) {
-      if (currentDeficits[kl] >= item.totalMarks) {
-        currentDeficits[kl] -= item.totalMarks;
+    for (const kl of preferredKLs(item.marksPerQuestion)) {
+      if (deficits[kl] >= item.totalMarks) {
+        deficits[kl] -= item.totalMarks;
         item.knowledgeLevel = kl;
-        if (item.hasInternalChoice) item.knowledgeLevelB = kl; 
-        
-        if (solve(idx + 1, currentDeficits)) return true;
-        currentDeficits[kl] += item.totalMarks;
+        if (item.hasInternalChoice) item.knowledgeLevelB = kl;
+        if (solve(idx + 1, deficits)) return true;
+        deficits[kl] += item.totalMarks;
       }
     }
     return false;
   };
 
-  const initialDeficits = { ...targets };
-  // Randomize item processing order to increase distribution variety
-  const shuffledItems = shuffle(items);
-  const success = solve(0, initialDeficits);
-  
-  if (!success) {
-     // Fallback solver if exact match is mathematically impossible
-     const solveWithTolerance = (idx: number, deficits: Record<string, number>): boolean => {
-        if (idx === items.length) return Object.values(deficits).every(d => Math.abs(d) <= 2);
-        const item = items[idx];
-        let allowed = item.marksPerQuestion === 1 ? [KnowledgeLevel.BASIC] : 
-                      item.marksPerQuestion === 3 ? [KnowledgeLevel.AVERAGE] : 
-                      item.marksPerQuestion === 6 ? [KnowledgeLevel.PROFOUND] : [...klOrder];
-        
-        for (const kl of shuffle(allowed)) {
-          deficits[kl] -= item.totalMarks;
-          item.knowledgeLevel = kl;
-          if (item.hasInternalChoice) item.knowledgeLevelB = kl;
-          if (solveWithTolerance(idx + 1, deficits)) return true;
-          deficits[kl] += item.totalMarks;
-        }
-        return false;
-     };
-     return solveWithTolerance(0, { ...targets });
-  }
-  return true;
+  shuffle(items);
+  if (solve(0, { ...targets })) return true;
+
+  // Pass 2: unrestricted — allow any KL for any mark value
+  const solveUnrestricted = (idx: number, deficits: Record<string, number>): boolean => {
+    if (idx === items.length) return Object.values(deficits).every(d => d === 0);
+    const item = items[idx];
+    for (const kl of shuffle([...klOrder])) {
+      if (deficits[kl] >= item.totalMarks) {
+        deficits[kl] -= item.totalMarks;
+        item.knowledgeLevel = kl;
+        if (item.hasInternalChoice) item.knowledgeLevelB = kl;
+        if (solveUnrestricted(idx + 1, deficits)) return true;
+        deficits[kl] += item.totalMarks;
+      }
+    }
+    return false;
+  };
+
+  if (solveUnrestricted(0, { ...targets })) return true;
+
+  // Pass 3: tolerance fallback (±1M per KL) — always succeeds
+  const solveWithTolerance = (idx: number, deficits: Record<string, number>): boolean => {
+    if (idx === items.length) return Object.values(deficits).every(d => Math.abs(d) <= 1);
+    const item = items[idx];
+    for (const kl of preferredKLs(item.marksPerQuestion)) {
+      deficits[kl] -= item.totalMarks;
+      item.knowledgeLevel = kl;
+      if (item.hasInternalChoice) item.knowledgeLevelB = kl;
+      if (solveWithTolerance(idx + 1, deficits)) return true;
+      deficits[kl] += item.totalMarks;
+    }
+    return false;
+  };
+
+  return solveWithTolerance(0, { ...targets });
+};
+
+/**
+ * Returns true if the subject is a language subject.
+ * Language subjects do NOT use "Computational Thinking" (CP3)
+ * as it is not relevant to language learning.
+ *
+ * Matching is case-insensitive and covers Tamil, English, Hindi,
+ * Sanskrit, French, Urdu, and generic "language" / "மொழி" labels.
+ */
+const LANGUAGE_KEYWORDS = [
+  'tamil', 'english', 'hindi', 'sanskrit', 'french', 'urdu',
+  'arabic', 'telugu', 'kannada', 'malayalam', 'language', 'மொழி', 'lang'
+];
+
+export const isLanguageSubject = (subject: string): boolean => {
+  const lower = (subject || '').toLowerCase();
+  return LANGUAGE_KEYWORDS.some(kw => lower.includes(kw));
 };
 
 export const generateBlueprintTemplate = (
@@ -540,7 +574,12 @@ export const generateBlueprintTemplate = (
 
   const items: BlueprintItem[] = [];
   const usageTracker: Record<string, number> = {};
-  const cpList = Object.values(CognitiveProcess);
+
+  // CP3 (Computational Thinking) is not applicable to language subjects
+  const allCPs = Object.values(CognitiveProcess);
+  const cpList = isLanguageSubject(curriculum.subject)
+    ? allCPs.filter(cp => cp !== CognitiveProcess.CP3)
+    : allCPs;
   let cpIdx = Math.floor(Math.random() * cpList.length);
 
   const orTracker: Record<string, boolean> = {}; // Track section IDs that already got an OR item
@@ -611,11 +650,14 @@ export const generateBlueprintTemplate = (
     }
   });
 
-  // Assign Knowledge Levels with refined rules
+  // KL targets must sum exactly to totalMarks — Profound absorbs rounding remainder
+  const basicTarget    = Math.round(paperType.totalMarks * 0.3);
+  const averageTarget  = Math.round(paperType.totalMarks * 0.5);
+  const profoundTarget = paperType.totalMarks - basicTarget - averageTarget;
   const klTargets = {
-    [KnowledgeLevel.BASIC]: Math.round(paperType.totalMarks * 0.3),
-    [KnowledgeLevel.AVERAGE]: Math.round(paperType.totalMarks * 0.5),
-    [KnowledgeLevel.PROFOUND]: paperType.totalMarks - Math.round(paperType.totalMarks * 0.3) - Math.round(paperType.totalMarks * 0.5)
+    [KnowledgeLevel.BASIC]:    basicTarget,
+    [KnowledgeLevel.AVERAGE]:  averageTarget,
+    [KnowledgeLevel.PROFOUND]: profoundTarget,
   };
   assignKnowledgeLevels(items, klTargets);
 

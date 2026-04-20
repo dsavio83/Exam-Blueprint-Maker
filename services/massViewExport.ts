@@ -1,4 +1,4 @@
-import { AlignmentType, BorderStyle, Document as DocxDocument, HeadingLevel, Packer, PageBreak, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
+import { AlignmentType, BorderStyle, Document as DocxDocument, HeadingLevel, Packer, PageBreak, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType, HeightRule, VerticalAlign } from 'docx';
 import { saveAs } from 'file-saver';
 import { Blueprint } from '../types';
 
@@ -10,8 +10,58 @@ interface MassViewExportPayload {
     includeAnswers: boolean;
 }
 
+const TAMIL_FONT = 'TAU-Pallai';
+const ENGLISH_FONT = 'Times New Roman';
+
 const getBaseFileName = (blueprint: Blueprint) =>
     `MassView_${blueprint.classLevel}_${blueprint.subject.replace(/\s+/g, '_')}_${(blueprint.setId || 'SetA').replace(/\s+/g, '_')}`;
+
+const isTamil = (text: string) => /[அ-ஹ]/.test(text);
+
+const splitTextByLanguage = (text: string) => {
+    const segments: Array<{ text: string, isTamil: boolean }> = [];
+    let currentText = '';
+    let currentIsTamil = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const charIsTamil = isTamil(char);
+
+        if (i === 0) {
+            currentIsTamil = charIsTamil;
+            currentText = char;
+        } else if (charIsTamil === currentIsTamil) {
+            currentText += char;
+        } else {
+            segments.push({ text: currentText, isTamil: currentIsTamil });
+            currentIsTamil = charIsTamil;
+            currentText = char;
+        }
+    }
+    if (currentText) {
+        segments.push({ text: currentText, isTamil: currentIsTamil });
+    }
+    return segments;
+};
+
+const createLanguageRuns = (text: string, options: any = {}) => {
+    const segments = splitTextByLanguage(text);
+    return segments.map(seg => new TextRun({
+        ...options,
+        text: seg.text,
+        font: seg.isTamil ? TAMIL_FONT : ENGLISH_FONT,
+        size: seg.isTamil ? (options.sizeTamil || options.size || 24) : (options.size || 24)
+    }));
+};
+
+const createHorizontalLine = () => {
+    return new Paragraph({
+        border: {
+            bottom: { color: "000000", space: 1, style: BorderStyle.SINGLE, size: 6 },
+        },
+        spacing: { before: 100, after: 100 }
+    });
+};
 
 const escapeXml = (value: string) => value
     .replace(/&/g, '&amp;')
@@ -19,27 +69,6 @@ const escapeXml = (value: string) => value
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-
-const isSeparator = (line: string) => /^=+$/.test(line.trim());
-
-const isLikelyHeader = (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed) return false;
-    if (isSeparator(trimmed)) return true;
-    return (
-        trimmed.startsWith('T') ||
-        trimmed.startsWith('GI') ||
-        trimmed.includes('சமக்ர சிக்ஷா கேரளம்') ||
-        trimmed.includes('தொகுத்தறி மதிப்பீடு') ||
-        trimmed.includes('Tamil Language Paper') ||
-        trimmed.includes('தமிழ் முதல் தாள்') ||
-        trimmed.includes('தமிழ் இரண்டாம் தாள்') ||
-        trimmed.includes('நேரம்:') ||
-        trimmed.includes('சிந்தனை நேரம்') ||
-        trimmed.includes('குறிப்புகள்') ||
-        trimmed.includes('Proforma for scoring key')
-    );
-};
 
 const buildMassViewXml = (payload: MassViewExportPayload) => {
     const questionNodes = payload.includeQuestions && payload.questionText
@@ -77,156 +106,236 @@ const buildMassViewXml = (payload: MassViewExportPayload) => {
 
 const parseXml = (xml: string) => new DOMParser().parseFromString(xml, 'application/xml');
 
-const createQuestionParagraphs = (xml: XMLDocument) => {
-    return Array.from(xml.querySelectorAll('questionDocument > line')).map((lineNode) => {
-        const line = lineNode.textContent || '';
-        const trimmed = line.trim();
-        if (!trimmed) {
-            return new Paragraph({ spacing: { after: 120 } });
-        }
-        if (isSeparator(trimmed)) {
-            return new Paragraph({
-                children: [new TextRun({ text: trimmed, bold: true, size: 18, color: '0F172A' })],
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 100, after: 100 }
-            });
-        }
-        const headerLike = isLikelyHeader(trimmed);
-        return new Paragraph({
-            children: [
-                new TextRun({
-                    text: line,
-                    bold: headerLike,
-                    color: headerLike ? '1D4ED8' : '1F2937',
-                    size: headerLike ? 26 : 24,
-                    font: /[அ-ஹ]/.test(line) ? 'TAU-Pallai' : 'Aptos'
-                })
-            ],
-            alignment: headerLike ? AlignmentType.CENTER : AlignmentType.LEFT,
-            spacing: { after: trimmed.includes('குறிப்புகள்') ? 120 : 90 }
-        });
-    });
-};
-
 const readRows = (nodes: Element[]) =>
     nodes.map(node => Array.from(node.querySelectorAll(':scope > cell')).map(cell => cell.textContent || ''));
 
-const createAnswerHeaderParagraphs = (rows: string[][]) => {
-    return rows.slice(0, 8).map((row, index) => {
-        const text = row.filter(Boolean).join(index >= 5 && index <= 6 ? '    ' : ' ');
-        return new Paragraph({
-            alignment: index === 5 || index === 6 ? AlignmentType.LEFT : AlignmentType.CENTER,
-            spacing: { after: 100 },
-            children: [
-                new TextRun({
-                    text,
-                    bold: index !== 7,
-                    size: index === 7 ? 24 : 26,
-                    color: index === 7 ? '9A3412' : '7C3AED',
-                    font: /[அ-ஹ]/.test(text) ? 'TAU-Pallai' : 'Aptos'
-                })
-            ]
-        });
-    });
-};
+const createHeader = (bp: Blueprint) => {
+    const setLabel = bp.setId || 'SET A';
+    const code = bp.subject.includes('BT') ? 'T1012' : 'T1002';
 
-const createAnswerTable = (rows: string[][]) => {
-    const headerRow = rows[8];
-    const dataRows = rows.slice(9);
-
-    return new Table({
+    const line1 = new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+        },
         rows: [
             new TableRow({
-                children: headerRow.map((cell, index) => new TableCell({
-                    shading: { fill: 'DBEAFE', type: ShadingType.CLEAR },
-                    borders: {
-                        top: { style: BorderStyle.SINGLE, size: 1, color: '111827' },
-                        bottom: { style: BorderStyle.SINGLE, size: 1, color: '111827' },
-                        left: { style: BorderStyle.SINGLE, size: 1, color: '111827' },
-                        right: { style: BorderStyle.SINGLE, size: 1, color: '111827' }
-                    },
-                    width: { size: index === 2 ? 55 : 15, type: WidthType.PERCENTAGE },
-                    children: [
-                        new Paragraph({
+                children: [
+                    new TableCell({
+                        width: { size: 20, type: WidthType.PERCENTAGE },
+                        children: [new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: setLabel,
+                                    bold: true,
+                                    size: 24,
+                                    font: ENGLISH_FONT,
+                                    border: { style: BorderStyle.SINGLE, size: 1, space: 1, color: "000000" }
+                                })
+                            ]
+                        })]
+                    }),
+                    new TableCell({
+                        width: { size: 60, type: WidthType.PERCENTAGE },
+                        children: [new Paragraph({
                             alignment: AlignmentType.CENTER,
-                            children: [new TextRun({ text: cell, bold: true, size: 22, font: /[அ-ஹ]/.test(cell) ? 'TAU-Pallai' : 'Aptos' })]
-                        })
-                    ]
-                }))
-            }),
-            ...dataRows.map(row => new TableRow({
-                children: row.map((cell, index) => new TableCell({
-                    borders: {
-                        top: { style: BorderStyle.SINGLE, size: 1, color: '111827' },
-                        bottom: { style: BorderStyle.SINGLE, size: 1, color: '111827' },
-                        left: { style: BorderStyle.SINGLE, size: 1, color: '111827' },
-                        right: { style: BorderStyle.SINGLE, size: 1, color: '111827' }
-                    },
-                    width: { size: index === 2 ? 55 : 15, type: WidthType.PERCENTAGE },
-                    children: [
-                        new Paragraph({
-                            alignment: index === 2 ? AlignmentType.LEFT : AlignmentType.CENTER,
-                            children: [new TextRun({ text: cell || ' ', size: 22, font: /[அ-ஹ]/.test(cell) ? 'TAU-Pallai' : 'Aptos' })]
-                        })
-                    ]
-                }))
-            }))
+                            children: createLanguageRuns("சமக்ர சிக்ஷா கேரளம்", { bold: true, size: 28, sizeTamil: 28 })
+                        })]
+                    }),
+                    new TableCell({
+                        width: { size: 20, type: WidthType.PERCENTAGE },
+                        children: [new Paragraph({
+                            alignment: AlignmentType.RIGHT,
+                            children: [
+                                new TextRun({
+                                    text: code,
+                                    bold: true,
+                                    size: 24,
+                                    font: ENGLISH_FONT,
+                                    color: "FFFFFF",
+                                    shading: { fill: "000000", type: ShadingType.CLEAR }
+                                })
+                            ]
+                        })]
+                    })
+                ]
+            })
         ]
     });
+
+    const term = bp.examTerm === 'First Term Summative' ? 'முதல் பருவத் தொகுத்தறி மதிப்பீடு 2026-27' : 'தொகுத்தறி மதிப்பீடு 2026-27';
+    const subTamil = bp.subject.includes('BT') ? 'தமிழ் இரண்டாம் தாள்' : 'தமிழ் முதல் தாள்';
+    const subEng = bp.subject.includes('BT') ? 'Tamil Language Paper II (BT)' : 'Tamil Language Paper I (AT)';
+
+    return [
+        line1,
+        new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 100 },
+            children: createLanguageRuns(term, { bold: true, size: 26 })
+        }),
+        new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: createLanguageRuns(subTamil, { bold: true, size: 26 })
+        }),
+        new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: createLanguageRuns(subEng, { bold: true, size: 24 })
+        }),
+        new Paragraph({
+            spacing: { before: 100 },
+            children: [
+                ...createLanguageRuns(`நேரம்: 90 நிமிடம்`, { size: 22 }),
+                new TextRun({ text: "\t\t\t\t\t\t\t\t", font: ENGLISH_FONT }),
+                ...createLanguageRuns(`வகுப்பு ${bp.classLevel}`, { size: 22 })
+            ]
+        }),
+        new Paragraph({
+            children: [
+                ...createLanguageRuns(`சிந்தனை நேரம் : 15 நிமிடம்`, { size: 22 }),
+                new TextRun({ text: "\t\t\t\t\t\t\t", font: ENGLISH_FONT }),
+                ...createLanguageRuns(`மதிப்பெண் : 40`, { size: 22 })
+            ]
+        }),
+        createHorizontalLine()
+    ];
+};
+
+const createNotes = () => {
+    return [
+        new Paragraph({
+            children: createLanguageRuns("குறிப்புகள்:", { bold: true, size: 22 })
+        }),
+        new Paragraph({
+            indent: { left: 360 },
+            children: createLanguageRuns("- முதல் 15 நிமிடம் சிந்தனை நேரமாகும்.", { size: 20 })
+        }),
+        new Paragraph({
+            indent: { left: 360 },
+            children: createLanguageRuns("- வினாக்களை வாசித்து விடைகளை வரிசைப்படுத்த இந்த நேரத்தைப் பயன்படுத்தலாம்.", { size: 20 })
+        }),
+        new Paragraph({
+            indent: { left: 360 },
+            children: createLanguageRuns("- வினாக்களையும் குறிப்புகளையும் நன்கு வாசித்துப் புரிந்து விடையளிக்கவும்.", { size: 20 })
+        }),
+        new Paragraph({
+            indent: { left: 360 },
+            children: createLanguageRuns("- விடையளிக்கும்போது மதிப்பெண், நேரம் போன்றவற்றை கவனித்து செயல்படவும்.", { size: 20 })
+        }),
+        new Paragraph({ spacing: { after: 200 } })
+    ];
 };
 
 export const exportMassViewDocx = async (payload: MassViewExportPayload) => {
-    const xml = parseXml(buildMassViewXml(payload));
     const children: any[] = [];
+    const bp = payload.blueprint;
 
     if (payload.includeQuestions && payload.questionText) {
-        children.push(
-            new Paragraph({
-                text: 'Question Export',
-                heading: HeadingLevel.HEADING_1,
-                thematicBreak: true
-            }),
-            ...createQuestionParagraphs(xml)
-        );
+        children.push(...createHeader(bp));
+        children.push(...createNotes());
+
+        const lines = payload.questionText.split('\n');
+        let startIndex = 0;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('---') || lines[i].includes('===')) {
+                startIndex = i + 1;
+                for (let j = i + 1; j < lines.length; j++) {
+                    if (lines[j].includes('===')) {
+                        startIndex = j + 1;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        lines.slice(startIndex).forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                children.push(new Paragraph({ spacing: { after: 120 } }));
+                return;
+            }
+
+            const isQuestion = /^\d+\./.test(trimmed);
+            const isOption = /^\s*\(.\)/.test(line);
+
+            children.push(new Paragraph({
+                alignment: AlignmentType.LEFT,
+                indent: isQuestion ? { left: 0, hanging: 0 } : (isOption ? { left: 720 } : { left: 360 }),
+                spacing: { after: 80 },
+                children: createLanguageRuns(line, { size: 24, sizeTamil: 24 })
+            }));
+        });
     }
 
     if (payload.includeAnswers && payload.answerRows?.length) {
-        const answerRows = [
-            ...readRows(Array.from(xml.querySelectorAll('answerDocument > header > row'))),
-            ...readRows(Array.from(xml.querySelectorAll('answerDocument > body > row')))
-        ];
-
-        if (children.length > 0) {
-            children.push(new Paragraph({ children: [new PageBreak()] }));
-        }
+        if (children.length > 0) children.push(new Paragraph({ children: [new PageBreak()] }));
 
         children.push(
             new Paragraph({
-                text: 'Answer Key Export',
-                heading: HeadingLevel.HEADING_1,
-                thematicBreak: true
+                alignment: AlignmentType.CENTER,
+                children: createLanguageRuns("விடைக்குறிப்பு / ANSWER KEY", { bold: true, size: 28 })
             }),
-            ...createAnswerHeaderParagraphs(answerRows),
-            new Paragraph({ spacing: { after: 150 } }),
-            createAnswerTable(answerRows)
+            new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: createLanguageRuns(`${bp.academicYear} | Grade ${bp.classLevel} | ${bp.subject}`, { size: 22 })
+            }),
+            createHorizontalLine()
         );
+
+        const headerRow = payload.answerRows[8] || [];
+        const dataRows = payload.answerRows.slice(9);
+
+        children.push(new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+                new TableRow({
+                    children: headerRow.map(cell => new TableCell({
+                        shading: { fill: "F3F4F6" },
+                        children: [new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            children: createLanguageRuns(cell, { bold: true, size: 20 })
+                        })]
+                    }))
+                }),
+                ...dataRows.map(row => new TableRow({
+                    children: row.map((cell, idx) => new TableCell({
+                        children: [new Paragraph({
+                            alignment: idx === 2 ? AlignmentType.LEFT : AlignmentType.CENTER,
+                            children: createLanguageRuns(cell, { size: 20 })
+                        })]
+                    }))
+                }))
+            ]
+        }));
     }
 
     const doc = new DocxDocument({
-        sections: [{ properties: {}, children }]
+        sections: [{
+            properties: {
+                page: {
+                    margin: { top: 720, right: 720, bottom: 720, left: 720 }
+                }
+            },
+            children
+        }]
     });
 
     const blob = await Packer.toBlob(doc);
-    saveAs(blob, `${getBaseFileName(payload.blueprint)}.docx`);
+    saveAs(blob, `${getBaseFileName(bp)}.docx`);
 };
 
 export const exportMassViewIcml = async (payload: MassViewExportPayload) => {
     const xml = parseXml(buildMassViewXml(payload));
     const lines: string[] = [];
 
-    if (payload.includeQuestions) {
-        lines.push(...Array.from(xml.querySelectorAll('questionDocument > line')).map(node => node.textContent || ''));
+    if (payload.includeQuestions && payload.questionText) {
+        lines.push(...payload.questionText.split('\n'));
     }
 
     if (payload.includeAnswers) {
@@ -255,4 +364,3 @@ export const exportMassViewIcml = async (payload: MassViewExportPayload) => {
     const blob = new Blob([icml], { type: 'application/xml;charset=utf-8' });
     saveAs(blob, `${getBaseFileName(payload.blueprint)}.icml`);
 };
-

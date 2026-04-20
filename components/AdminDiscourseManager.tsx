@@ -151,82 +151,139 @@ const AdminDiscourseManager: React.FC = () => {
             </div>
 
             {isFormOpen && (
-                <div className="bg-white p-6 rounded shadow border-l-4 border-blue-500 mb-6">
-                    <h3 className="font-bold mb-4">{editingDiscourse ? 'Edit Discourse' : 'New Discourse'}</h3>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Subject</label>
-                            <select
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.subject}
-                                onChange={e => setFormData({ ...formData, subject: e.target.value as SubjectType })}
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 flex-shrink-0">
+                            <h3 className="text-lg font-bold text-gray-900">{editingDiscourse ? 'Edit Discourse' : 'New Discourse'}</h3>
+                            <button
+                                onClick={() => setIsFormOpen(false)}
+                                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
                             >
-                                {Object.values(SubjectType).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                                <X size={20} />
+                            </button>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Marks Category</label>
-                            <select
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.marks}
-                                onChange={e => setFormData({ ...formData, marks: parseInt(e.target.value) })}
-                            >
-                                <option value="3">3 Marks</option>
-                                <option value="5">5 Marks</option>
-                                <option value="6">6 Marks</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Cognitive Process</label>
-                            <select
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.cognitiveProcess || ''}
-                                onChange={e => setFormData({ ...formData, cognitiveProcess: e.target.value as CognitiveProcess })}
-                            >
-                                <option value="">-- Select --</option>
-                                {Object.entries(CognitiveProcess).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                            </select>
-                        </div>
-                        <div className="col-span-full">
-                            <label className="block text-sm font-medium text-gray-700">Discourse Name</label>
-                            <input
-                                className="border w-full p-2 rounded mt-1"
-                                value={formData.name}
-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                placeholder="e.g. Essay, Letter"
-                            />
-                        </div>
-                    </div>
 
-                    <div className="bg-gray-50 p-4 rounded border mb-4">
-                        <h4 className="font-semibold text-sm mb-2 text-gray-600">Evaluation Rubrics (Optional)</h4>
-                        {(formData.rubrics || []).map((r, idx) => (
-                            <div key={idx} className="flex gap-2 mb-2 items-center">
-                                <input
-                                    className="border p-2 rounded flex-1 text-sm"
-                                    placeholder="Point / Description"
-                                    value={r.point}
-                                    onChange={e => updateRubric(idx, 'point', e.target.value)}
-                                />
-                                <input
-                                    type="number"
-                                    className="border p-2 rounded w-20 text-sm text-center"
-                                    placeholder="Marks"
-                                    step="0.5"
-                                    value={r.marks}
-                                    onChange={e => updateRubric(idx, 'marks', parseFloat(e.target.value))}
-                                />
-                                <button onClick={() => removeRubric(idx)} className="text-red-500 hover:text-red-700"><X size={16} /></button>
+                        <div className="p-6 overflow-y-auto flex-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Subject</label>
+                                    <select
+                                        className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        value={formData.subject}
+                                        onChange={e => setFormData({ ...formData, subject: e.target.value as SubjectType })}
+                                    >
+                                        {Object.values(SubjectType).map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Marks Category</label>
+                                    <select
+                                        className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        value={formData.marks}
+                                        onChange={e => setFormData({ ...formData, marks: parseInt(e.target.value) })}
+                                    >
+                                        <option value="3">3 Marks</option>
+                                        <option value="5">5 Marks</option>
+                                        <option value="6">6 Marks</option>
+                                        <option value="8">8 Marks</option>
+                                        <option value="10">10 Marks</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cognitive Process</label>
+                                    <select
+                                        className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        value={formData.cognitiveProcess || ''}
+                                        onChange={e => setFormData({ ...formData, cognitiveProcess: e.target.value as CognitiveProcess })}
+                                    >
+                                        <option value="">-- Select --</option>
+                                        {Object.entries(CognitiveProcess).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                    </select>
+                                </div>
+                                <div className="col-span-full">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Discourse Name</label>
+                                    <input
+                                        className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        value={formData.name}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        placeholder="e.g. Essay, Letter, Diary Entry"
+                                    />
+                                </div>
                             </div>
-                        ))}
-                        <button onClick={addRubric} className="text-xs text-blue-600 flex items-center hover:underline mt-2">
-                            <Plus size={14} className="mr-1" /> Add Rubric Point
-                        </button>
-                    </div>
 
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setIsFormOpen(false)} className="px-4 py-2 text-gray-600">Cancel</button>
-                        <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
+                            <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="font-bold text-gray-700 text-sm">Evaluation Rubrics (Optional)</h4>
+                                    <button onClick={addRubric} className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full flex items-center transition-all">
+                                        <Plus size={14} className="mr-1" /> Add Point
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    {(formData.rubrics || []).map((r, idx) => (
+                                        <div key={idx} className="flex gap-2 items-start group">
+                                            <div className="flex-1">
+                                                <input
+                                                    className="border w-full p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                                    placeholder="Point / Description"
+                                                    value={r.point}
+                                                    onChange={e => updateRubric(idx, 'point', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="w-24">
+                                                <input
+                                                    type="number"
+                                                    className="border w-full p-2 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                                    placeholder="Marks"
+                                                    step="0.5"
+                                                    value={r.marks}
+                                                    onChange={e => updateRubric(idx, 'marks', parseFloat(e.target.value))}
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={() => removeRubric(idx)} 
+                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-0.5"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {(!formData.rubrics || formData.rubrics.length === 0) && (
+                                        <div className="text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">
+                                            <p className="text-xs text-gray-400">No rubric points added yet</p>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {(formData.rubrics || []).length > 0 && (
+                                    <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end items-center gap-2">
+                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Rubric:</span>
+                                        <span className={`text-sm font-black px-3 py-1 rounded-full ${
+                                            (formData.rubrics || []).reduce((sum, r) => sum + r.marks, 0) === formData.marks 
+                                            ? 'bg-green-100 text-green-700' 
+                                            : 'bg-amber-100 text-amber-700'
+                                        }`}>
+                                            {formatMark((formData.rubrics || []).reduce((sum, r) => sum + r.marks, 0))} / {formData.marks}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
+                            <button 
+                                onClick={() => setIsFormOpen(false)} 
+                                className="px-6 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-100 transition-all shadow-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleSave} 
+                                className="px-8 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-100"
+                            >
+                                Save Discourse
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

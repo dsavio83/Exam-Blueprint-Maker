@@ -154,12 +154,8 @@ const AdminPaperTypeManager = () => {
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <div className="flex items-center gap-2 bg-purple-100/50 px-3 py-1.5 rounded-full border border-purple-100">
-                                        <span className="text-[10px] font-black text-purple-400 uppercase uppercase">Marks:</span>
+                                        <span className="text-[10px] font-black text-purple-400 uppercase">Marks:</span>
                                         <span className="text-sm font-black text-purple-700">{(formData.sections || []).reduce((sum, s) => sum + (s.marks * s.count), 0)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 bg-blue-100/50 px-3 py-1.5 rounded-full border border-blue-100">
-                                        <span className="text-[10px] font-black text-blue-400 uppercase uppercase">Time:</span>
-                                        <span className="text-sm font-black text-blue-700">{(formData.sections || []).reduce((sum, s) => sum + ((s.timePerQuestion || 0) * s.count), 0)}m</span>
                                     </div>
                                 </div>
                             </div>
@@ -167,7 +163,7 @@ const AdminPaperTypeManager = () => {
                             <div className="space-y-4">
                                 {(formData.sections || []).map((s, idx) => (
                                     <div key={idx} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group/sec relative">
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-6 items-end">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 items-end">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Q. Count</label>
                                                 <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={s.count} onChange={e => updateSection(idx, 'count', parseInt(e.target.value) || 0)} />
@@ -179,10 +175,6 @@ const AdminPaperTypeManager = () => {
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Options</label>
                                                 <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={s.optionCount || 0} onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Time (m)</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={s.timePerQuestion || 0} onChange={e => updateSection(idx, 'timePerQuestion', parseInt(e.target.value) || 0)} />
                                             </div>
                                             <div className="col-span-2 space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Section Instruction</label>
@@ -232,55 +224,73 @@ const AdminPaperTypeManager = () => {
                     </div>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {types.map(t => (
-                        <div key={t.id} className="ap-card group hover:border-purple-200 transition-all duration-300 flex flex-col h-full hover:shadow-xl hover:shadow-purple-50/50">
-                            <div className="p-6 flex-1">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="space-y-1">
-                                        <h3 className="font-bold text-gray-800 font-display tracking-tight group-hover:text-purple-700 transition-colors uppercase text-sm">{t.name}</h3>
-                                        <p className="text-[11px] font-medium text-gray-400 italic line-clamp-1">{t.description || 'General exam pattern definition'}</p>
-                                    </div>
-                                    <div className="bg-purple-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-lg shadow-purple-100">
-                                        {t.totalMarks} Marks
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2.5 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
-                                    {t.sections.slice(0, 3).map((s, i) => (
-                                        <div key={i} className="text-[11px] text-gray-600 flex justify-between items-center px-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-1 h-1 bg-purple-300 rounded-full"></span>
-                                                <span className="font-bold text-gray-500">{s.count} Qns</span>
-                                                <span className="text-gray-300">·</span>
-                                                <span className="font-medium">{s.marks} Marks ea.</span>
-                                            </div>
-                                            <span className="font-black text-purple-400/60">{s.marks * s.count}M</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                    {types.map(t => {
+                        const totalQns = t.sections.reduce((sum, s) => sum + s.count, 0);
+                        return (
+                            <div key={t.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-500 flex flex-col h-full group">
+                                <div className="p-8 flex-1">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="space-y-2">
+                                            <h3 className="text-lg font-black text-slate-800 tracking-tight group-hover:text-purple-600 transition-colors uppercase leading-tight">{t.name}</h3>
+                                            <p className="text-sm font-medium text-slate-400 italic line-clamp-2">{t.description || 'General exam pattern definition'}</p>
                                         </div>
-                                    ))}
-                                    {t.sections.length > 3 && (
-                                        <div className="text-[10px] text-gray-300 font-bold italic text-center pt-1 border-t border-gray-100/50">+{t.sections.length - 3} more sections</div>
-                                    )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100/50 text-center">
+                                            <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">Total Marks</div>
+                                            <div className="text-2xl font-black text-purple-700">{t.totalMarks}</div>
+                                        </div>
+                                        <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100/50 text-center">
+                                            <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Questions</div>
+                                            <div className="text-2xl font-black text-blue-700">{totalQns}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                            <div className="h-px bg-slate-100 flex-1"></div>
+                                            Mark Categories
+                                            <div className="h-px bg-slate-100 flex-1"></div>
+                                        </div>
+                                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                            {t.sections.map((s, i) => (
+                                                <div key={i} className="text-sm text-slate-600 flex justify-between items-center bg-slate-50/50 p-3 rounded-xl border border-slate-100/50 hover:bg-white transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center font-black text-purple-600 text-xs border border-purple-50">
+                                                            {i + 1}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-black text-slate-700">{s.count} Questions</div>
+                                                            <div className="text-[10px] text-slate-400 font-bold">{s.marks} Marks each</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="font-black text-purple-500">{s.marks * s.count}M</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-between items-center rounded-b-[2rem]">
+                                    <button
+                                        onClick={() => handleEdit(t)}
+                                        className="bg-white px-6 py-2.5 rounded-xl shadow-sm border border-slate-200 text-slate-600 hover:text-purple-600 hover:border-purple-200 text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all"
+                                    >
+                                        <Edit size={14} /> Edit Pattern
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteType(t.id)}
+                                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-300 hover:text-red-500 hover:border-red-100 transition-all shadow-sm"
+                                        title="Delete Type"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
                                 </div>
                             </div>
-
-                            <div className="px-6 py-4 bg-gray-50/30 border-t border-gray-50 flex justify-between items-center rounded-b-2xl">
-                                <button
-                                    onClick={() => handleEdit(t)}
-                                    className="text-blue-600 hover:text-blue-700 text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all hover:gap-3"
-                                >
-                                    <Edit size={14} strokeWidth={3} /> Edit Pattern
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteType(t.id)}
-                                    className="text-gray-300 hover:text-red-500 transition-all p-1"
-                                    title="Delete Type"
-                                >
-                                    <Trash2 size={18} strokeWidth={2} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
 
                     {types.length === 0 && (
                         <div className="col-span-full py-24 text-center ap-card bg-gray-50/50 border-dashed border-2 flex flex-col items-center gap-4">

@@ -9,16 +9,34 @@ export interface SpellIssue {
   confidence: 'high' | 'medium' | 'low';
 }
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 
 declare const __GEMINI_API_KEY__: string | undefined;
 
-const getGeminiApiKey = () =>
-  (typeof __GEMINI_API_KEY__ !== 'undefined' ? __GEMINI_API_KEY__ : undefined) ||
-  ((import.meta as any)?.env?.VITE_GEMINI_API_KEY) ||
-  ((import.meta as any)?.env?.GEMINI_API_KEY) ||
-  (typeof process !== 'undefined' ? (process as any)?.env?.GEMINI_API_KEY : undefined) ||
-  (typeof process !== 'undefined' ? (process as any)?.env?.API_KEY : undefined);
+const getGeminiApiKey = () => {
+  // 1. Check define from vite.config.ts
+  if (typeof __GEMINI_API_KEY__ !== 'undefined' && __GEMINI_API_KEY__) return __GEMINI_API_KEY__;
+  
+  // 2. Check Vite env variables
+  const env = (import.meta as any).env;
+  if (env?.VITE_GEMINI_API_KEY) return env.VITE_GEMINI_API_KEY;
+  if (env?.GEMINI_API_KEY) return env.GEMINI_API_KEY;
+  
+  // 3. Check process.env (Node/Webpack)
+  if (typeof process !== 'undefined') {
+    const pEnv = (process as any).env;
+    if (pEnv?.GEMINI_API_KEY) return pEnv.GEMINI_API_KEY;
+    if (pEnv?.VITE_GEMINI_API_KEY) return pEnv.VITE_GEMINI_API_KEY;
+    if (pEnv?.API_KEY) return pEnv.API_KEY;
+  }
+  
+  // 4. Final fallback: LocalStorage (allows manual override if needed)
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem('GEMINI_API_KEY') || '';
+  }
+  
+  return '';
+};
 
 const extractJson = (raw: string) => {
   const fenced = raw.match(/```json\s*([\s\S]*?)```/i) || raw.match(/```\s*([\s\S]*?)```/i);
@@ -93,7 +111,17 @@ ${text}
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || 'Spell check request failed');
+    try {
+        const errorJson = JSON.parse(errorText);
+        if (response.status === 429) {
+            const delay = errorJson?.error?.details?.find((d: any) => d.retryDelay)?.retryDelay || 'a few seconds';
+            throw new Error(`Rate limit exceeded (அதிகப்படியான கோரிக்கைகள்). Please wait ${delay} before trying again.`);
+        }
+        throw new Error(errorJson?.error?.message || 'AI request failed');
+    } catch (e: any) {
+        if (e.message.includes('Rate limit')) throw e;
+        throw new Error('AI analysis failed. Your free tier quota may be exhausted.');
+    }
   }
 
   const data = await response.json();
