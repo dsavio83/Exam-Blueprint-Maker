@@ -34,7 +34,8 @@ interface UniversalBlueprintViewProps {
     onConfirm: () => Promise<void>;
     onDownloadPDF: (type: string) => void;
     onDownloadWord: (type: string) => void;
-    onUpdateReportSettings?: (settings: Blueprint['reportSettings']) => void;
+    onUpdateReportSettings?: (settings: Blueprint['reportSettings'], perReport?: Blueprint['perReportSettings']) => void;
+    onSaveSettings?: () => Promise<void>;
     isSaving?: boolean;
 }
 
@@ -53,6 +54,7 @@ const UniversalBlueprintView: React.FC<UniversalBlueprintViewProps> = ({
     onDownloadPDF,
     onDownloadWord,
     onUpdateReportSettings,
+    onSaveSettings,
     isSaving = false
 }) => {
     const [showQuestions, setShowQuestions] = useState(false);
@@ -93,34 +95,32 @@ const UniversalBlueprintView: React.FC<UniversalBlueprintViewProps> = ({
             </div>
 
             {/* Navigation & Controls - Simplified */}
-            {(showQuestions || showReports) && (
-                <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md py-3 px-4 border-b flex flex-wrap justify-between items-center no-print shadow-sm gap-2 rounded-xl mb-6">
-                    <div className="flex w-full md:w-auto bg-gray-100 p-1 rounded-xl border border-gray-200 order-1 md:order-none">
-                        <button
-                            onClick={() => { setShowQuestions(false); setShowReports(false); }}
-                            className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Matrix' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            <List size={14} className="flex-shrink-0" /> <span className="truncate">Matrix</span>
-                        </button>
-                        {blueprint.isConfirmed && (
-                            <>
-                                <button
-                                    onClick={() => { setShowQuestions(true); setShowReports(false); }}
-                                    className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Questions' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                                >
-                                    <Settings size={14} className="flex-shrink-0" /> <span className="truncate">2. Questions</span>
-                                </button>
-                                <button
-                                    onClick={() => { setShowReports(true); setShowQuestions(false); }}
-                                    className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Reports' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                                >
-                                    <FileText size={14} className="flex-shrink-0" /> <span className="truncate">3. Reports</span>
-                                </button>
-                            </>
-                        )}
-                    </div>
+            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md py-3 px-4 border-b flex flex-wrap justify-between items-center no-print shadow-sm gap-2 rounded-xl mb-6">
+                <div className="flex w-full md:w-auto bg-gray-100 p-1 rounded-xl border border-gray-200 order-1 md:order-none">
+                    <button
+                        onClick={() => { setShowQuestions(false); setShowReports(false); }}
+                        className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Matrix' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <List size={14} className="flex-shrink-0" /> <span className="truncate">1. Matrix</span>
+                    </button>
+                    {blueprint.isConfirmed && (
+                        <>
+                            <button
+                                onClick={() => { setShowQuestions(true); setShowReports(false); }}
+                                className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Questions' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <Settings size={14} className="flex-shrink-0" /> <span className="truncate">2. Questions</span>
+                            </button>
+                            <button
+                                onClick={() => { setShowReports(true); setShowQuestions(false); }}
+                                className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Reports' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <FileText size={14} className="flex-shrink-0" /> <span className="truncate">3. Reports</span>
+                            </button>
+                        </>
+                    )}
                 </div>
-            )}
+            </div>
 
             {/* Content Area */}
             <div ref={printRef} className={`bg-white rounded-2xl shadow-sm border border-gray-100 ${activeMode === 'Reports' ? 'p-0 border-none bg-transparent shadow-none' : activeMode === 'Questions' ? 'p-0' : 'p-6'}`}>
@@ -159,6 +159,7 @@ const UniversalBlueprintView: React.FC<UniversalBlueprintViewProps> = ({
                         onMoveItem={onMoveItem}
                         onUpdateItemField={onUpdateItemField}
                         onUpdateReportSettings={onUpdateReportSettings}
+                        onSaveSettings={onSaveSettings}
                     />
                 )}
 

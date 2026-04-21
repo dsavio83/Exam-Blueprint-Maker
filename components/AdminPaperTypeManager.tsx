@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import {
     Trash2, Plus, X, FileJson, Edit, Save, FileText
 } from 'lucide-react';
@@ -30,8 +31,8 @@ const AdminPaperTypeManager = () => {
     }, []);
 
     const handleSave = async () => {
-        if (!formData.name) return alert("Name is required.");
-        if (!formData.sections || formData.sections.length === 0) return alert("At least one section is required.");
+        if (!formData.name) return Swal.fire("Required", "Name is required.", "warning");
+        if (!formData.sections || formData.sections.length === 0) return Swal.fire("Required", "At least one section is required.", "warning");
 
         const totalMarks = (formData.sections || []).reduce((sum, s) => sum + (s.marks * s.count), 0);
         const finalData: QuestionPaperType = {
@@ -46,24 +47,42 @@ const AdminPaperTypeManager = () => {
             ? types.map(t => t.id === editingId ? finalData : t)
             : [...types, finalData];
 
-        setTypes(newTypes);
-        await saveQuestionPaperTypes(newTypes);
-        setEditingId(null);
-        setFormData({ name: '', description: '', sections: [] });
-        setIsFormOpen(false);
+        try {
+            await saveQuestionPaperTypes(newTypes);
+            setTypes(newTypes);
+            setEditingId(null);
+            setFormData({ name: '', description: '', sections: [] });
+            setIsFormOpen(false);
+            Swal.fire("Saved", "Paper pattern saved successfully!", "success");
+        } catch (err) {
+            Swal.fire("Error", "Failed to save paper pattern.", "error");
+        }
     };
 
     const handleDeleteType = async (id: string) => {
-        if (window.confirm("Are you sure you want to delete this paper type? This cannot be undone.")) {
-            const newTypes = types.filter(t => t.id !== id);
-            setTypes(newTypes);
-            await saveQuestionPaperTypes(newTypes);
-        }
+        Swal.fire({
+            title: "Are you sure?",
+            text: "This will remove this paper type permanently!",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, delete it!"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                const newTypes = types.filter(t => t.id !== id);
+                setTypes(newTypes);
+                await saveQuestionPaperTypes(newTypes);
+                Swal.fire("Deleted", "Paper pattern has been removed.", "success");
+            }
+        });
     };
 
     const handleCopyJSON = () => {
         const json = JSON.stringify(types, null, 2);
-        navigator.clipboard.writeText(json).then(() => alert("JSON copied to clipboard! You can use this to update INITIAL_PAPER_TYPES in db.ts."));
+        navigator.clipboard.writeText(json).then(() => {
+            Swal.fire("Copied", "JSON copied to clipboard! You can use this to update INITIAL_PAPER_TYPES in db.ts.", "success");
+        });
     };
 
     const handleAddNew = () => {
@@ -186,8 +205,8 @@ const AdminPaperTypeManager = () => {
                                                 />
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={() => removeSection(idx)} 
+                                        <button
+                                            onClick={() => removeSection(idx)}
                                             className="absolute -top-2 -right-2 w-7 h-7 bg-white border border-red-50 text-red-300 hover:text-red-500 hover:border-red-200 rounded-full shadow-sm hover:shadow-md transition-all flex items-center justify-center"
                                         >
                                             <Trash2 size={14} />
@@ -256,7 +275,7 @@ const AdminPaperTypeManager = () => {
                                         </div>
                                         <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                                             {t.sections.map((s, i) => (
-                                                <div key={i} className="text-sm text-slate-600 flex justify-between items-center bg-slate-50/50 p-3 rounded-xl border border-slate-100/50 hover:bg-white transition-colors">
+                                                <div key={i} className="text-sm text-slate-600 flex justify-between items-center bg-slate-50/50 rounded-xl border border-slate-100/50 hover:bg-white transition-colors">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center font-black text-purple-600 text-xs border border-purple-50">
                                                             {i + 1}

@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import Swal from 'sweetalert2';
 import {
     LayoutDashboard, BookOpen, Settings, FileType, List, Users, Menu, X, LogOut, FileText, ChevronLeft, Save, Printer, Download, ClipboardList, RefreshCw, CheckCircle
 } from 'lucide-react';
+
 import { User, Blueprint, ClassLevel, SubjectType, ExamTerm, BlueprintItem, Curriculum, QuestionPaperType, Discourse } from '../types';
 import AdminDashboard from './AdminDashboard';
 import AdminCurriculumManager from './AdminCurriculumManager';
@@ -73,7 +75,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     const handleSaveBlueprint = async () => {
         if (!viewingBlueprint) return;
         await saveBlueprint(viewingBlueprint);
-        alert("Blueprint saved successfully!");
+        Swal.fire("Saved", "Blueprint saved successfully!", "success");
     };
 
     const updateItem = (updatedItem: BlueprintItem) => {
@@ -114,7 +116,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                 onclone: (clonedDoc) => {
                     const tamilElements = clonedDoc.querySelectorAll('.tamil-font');
                     tamilElements.forEach(el => {
-                        (el as HTMLElement).style.fontFamily = "'TAU-Pallai', 'Noto Serif', serif";
+                        (el as HTMLElement).style.fontFamily = "'TAU-Paalai', 'Noto Serif', serif";
                         (el as HTMLElement).style.fontSize = "14pt";
                     });
                 }
@@ -242,7 +244,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
             if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(viewingBlueprint, curriculum);
         } catch (error) {
             console.error("Word export failed:", error);
-            alert("Failed to export Word document.");
+            Swal.fire("Error", "Failed to export Word document.", "error");
         }
     };
 
@@ -274,16 +276,27 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 
     const handleRegeneratePattern = () => {
         if (!viewingBlueprint || !curriculum) return;
-        if (!window.confirm("This will replace all current questions with a new random pattern. Continue?")) return;
         
-        const db = getDB();
-        if (!db) {
-            alert("Database not initialized. Please refresh.");
-            return;
-        }
-
-        const newItems = generateBlueprintTemplate(db, curriculum, viewingBlueprint.examTerm, viewingBlueprint.questionPaperTypeId);
-        setViewingBlueprint({ ...viewingBlueprint, items: newItems, isConfirmed: false });
+        Swal.fire({
+            title: "Regenerate Pattern?",
+            text: "This will replace all current questions with a new random pattern. Continue?",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#2563eb",
+            cancelButtonColor: "#64748b",
+            confirmButtonText: "Yes, regenerate"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                const db = getDB();
+                if (!db) {
+                    Swal.fire("Error", "Database not initialized. Please refresh.", "error");
+                    return;
+                }
+                const newItems = generateBlueprintTemplate(db, curriculum, viewingBlueprint.examTerm, viewingBlueprint.questionPaperTypeId);
+                setViewingBlueprint({ ...viewingBlueprint, items: newItems, isConfirmed: false });
+                Swal.fire("Regenerated", "A new pattern has been generated.", "success");
+            }
+        });
     };
 
     const handleConfirmPattern = async () => {
@@ -291,7 +304,13 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
         const confirmed = { ...viewingBlueprint, isConfirmed: true };
         setViewingBlueprint(confirmed);
         await saveBlueprint(confirmed);
-        alert("Blueprint pattern confirmed!");
+        Swal.fire("Confirmed", "Blueprint pattern confirmed successfully!", "success");
+    };
+
+    const handleSaveReportSettings = async () => {
+        if (!viewingBlueprint) return;
+        await saveBlueprint(viewingBlueprint);
+        Swal.fire("Saved", "Report settings saved successfully!", "success");
     };
 
     const menuItems = [
@@ -324,7 +343,9 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     onRegenerate={handleRegeneratePattern}
                     onConfirm={handleConfirmPattern}
                     onDownloadPDF={(type) => handleDownloadPDF(type as any)}
-                    onDownloadWord={(type) => handleDownloadWord(type as any)} 
+                    onDownloadWord={(type) => handleDownloadWord(type as any)}
+                    onUpdateReportSettings={(s, p) => setViewingBlueprint(prev => prev ? { ...prev, reportSettings: s, perReportSettings: p } : null)}
+                    onSaveSettings={handleSaveReportSettings}
                 />
             );
         }

@@ -15,27 +15,58 @@
     /* Font settings for Reports */
     .reports-container,
     .print-only-container {
-      font-family: 'Noto Serif', serif;
+      font-family: 'Noto Serif', 'TAU-Paalai', serif;
     }
 
 
     @font-face {
       font-family: 'TAU-Urai';
-      src: url('/fonts/TAU-Urai-Bold.ttf') format('truetype');
+      src: url('/fonts/TAU-Urai.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: 'TAU-Urai';
+      src: url('/fonts/TAU-Urai Bold.ttf') format('truetype');
+      font-weight: bold;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: 'TAU-Paalai';
+      src: url('/fonts/TAU-Paalai.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    @font-face {
+      font-family: 'TAU-Paalai';
+      src: url('/fonts/TAU-Paalai Bold.ttf') format('truetype');
       font-weight: bold;
       font-style: normal;
     }
 
     .tamil-heading-font {
-      font-family: 'TAU-Urai Bold', serif;
+      font-family: 'TAU-Paalai', 'TAU-Urai Bold', 'TAU-Urai', serif;
       font-weight: 700;
     }
 
     /* Tamil specific font */
     [lang="ta"],
     .tamil-font {
-      font-family: 'TAU-Pallai', 'Noto Serif', serif;
+      font-family: 'TAU-Paalai', 'Noto Serif', serif;
       font-size: 14pt;
+    }
+
+    /* Hide number input spinners */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
     }
 
     .english-font {

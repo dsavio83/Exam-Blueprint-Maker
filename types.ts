@@ -194,11 +194,14 @@ export interface ReportSettings {
   fontSizeBody: number;
   fontSizeTitle: number;
   fontSizeTamil: number;
+  lineHeight: number;
   rowHeight: number;
   columnWidths: Record<string, number>;
   showLogo: boolean;
   compactMode: boolean;
   fontFamily: string;
+  fontFamilyEnglish?: string;
+  headerFontStyle?: string;
   orientation?: 'p' | 'l'; // p = portrait, l = landscape
 }
 
@@ -219,7 +222,8 @@ export interface Blueprint {
   isLocked?: boolean; // Admin can lock a blueprint
   isHidden?: boolean; // Admin can hide a blueprint from the user
   isConfirmed?: boolean; // User has confirmed the pattern
-  reportSettings?: ReportSettings;
+  reportSettings?: ReportSettings; // Global fallback
+  perReportSettings?: Record<string, ReportSettings>; // Per report (report1, report2, etc.)
   isAdminAssigned?: boolean; // New field to track if assigned by admin
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import {
     Trash2, Plus, Save, FileJson, Settings2, Target, Percent, CheckCircle
 } from 'lucide-react';
@@ -20,11 +21,13 @@ const AdminExamConfigManager = () => {
     const handleCopyJSON = () => {
         const db = getDB();
         if (!db) {
-            alert("Database not initialized yet.");
+            Swal.fire("Error", "Database not initialized yet.", "error");
             return;
         }
         const json = JSON.stringify(db.examConfigs, null, 2);
-        navigator.clipboard.writeText(json).then(() => alert("All Exam Configuration data copied to clipboard!"));
+        navigator.clipboard.writeText(json).then(() => {
+            Swal.fire("Copied", "All Exam Configuration data copied to clipboard!", "success");
+        });
     };
 
     useEffect(() => {
@@ -62,7 +65,7 @@ const AdminExamConfigManager = () => {
         if (!currentConfig) return;
         const totalPercent = currentConfig.weightages.reduce((sum, w) => sum + w.percentage, 0);
         if (totalPercent !== 100) {
-            alert("Total weightage must be exactly 100%");
+            Swal.fire("Validation Error", "Total weightage must be exactly 100%", "warning");
             return;
         }
 
@@ -75,7 +78,7 @@ const AdminExamConfigManager = () => {
         }
         setConfigs(newConfigs);
         await saveExamConfigs(newConfigs);
-        alert("Configuration Saved!");
+        Swal.fire("Saved", "Configuration Saved!", "success");
     };
 
     const addWeightage = () => {
@@ -121,7 +124,7 @@ const AdminExamConfigManager = () => {
                     <select 
                         value={selectedClass} 
                         onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} 
-                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['Times_New_Roman']"
                     >
                         {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Grade {v}</option>)}
                     </select>
@@ -131,7 +134,7 @@ const AdminExamConfigManager = () => {
                     <select 
                         value={selectedSubject} 
                         onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} 
-                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['TAU-Paalai']"
                     >
                         {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -161,7 +164,7 @@ const AdminExamConfigManager = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className={`px-4 py-2 rounded-xl font-black text-sm border flex items-center gap-2 transition-all ${totalPercent === 100 ? 'bg-green-50 text-green-600 border-green-100 shadow-sm' : 'bg-red-50 text-red-500 border-red-100'}`}>
+                        <div className={`px-4 py-2 rounded-xl font-black text-sm border flex items-center gap-2 transition-all ${totalPercent === 100 ? 'bg-green-50 text-green-600 border-green-100 shadow-sm' : 'bg-red-50 text-red-500 border-red-100'} font-['Times_New_Roman']`}>
                             <Percent size={14} />
                             Total: {totalPercent}%
                         </div>
@@ -193,12 +196,12 @@ const AdminExamConfigManager = () => {
                                                         type="number"
                                                         value={w.unitNumber}
                                                         onChange={(e) => updateWeightage(idx, 'unitNumber', parseInt(e.target.value))}
-                                                        className="bg-transparent w-full text-center outline-none font-bold text-lg"
+                                                        className="bg-transparent w-full text-center outline-none font-bold text-lg font-['Times_New_Roman'] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                     />
                                                 </div>
 
                                                 <div className="flex-1">
-                                                    <p className="font-bold text-gray-800 text-lg font-display">{unitInfo?.name || `Custom Unit ${w.unitNumber}`}</p>
+                                                    <p className="font-bold text-gray-800 text-lg font-['TAU-Paalai']">{unitInfo?.name || `Custom Unit ${w.unitNumber}`}</p>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <Target size={12} className="text-blue-500" />
                                                         <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest">Weightage Target</p>
@@ -212,7 +215,7 @@ const AdminExamConfigManager = () => {
                                                         type="number"
                                                         min="0"
                                                         max="100"
-                                                        className="bg-gray-50 border border-gray-100 rounded-xl p-4 w-28 text-center font-black text-xl text-gray-800 focus:bg-white focus:border-blue-500 focus:shadow-xl focus:shadow-blue-50 outline-none transition-all"
+                                                        className="bg-gray-50 border border-gray-100 rounded-xl p-4 w-28 text-center font-black text-xl text-gray-800 focus:bg-white focus:border-blue-500 focus:shadow-xl focus:shadow-blue-50 outline-none transition-all font-['Times_New_Roman'] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={w.percentage}
                                                         onChange={(e) => updateWeightage(idx, 'percentage', parseInt(e.target.value))}
                                                     />

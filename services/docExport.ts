@@ -50,7 +50,7 @@ export class DocExportService {
                             bold: options.bold,
                             size: options.size || (/[அ-ஹ]/.test(text) ? 28 : 22), // 14pt for Tamil, 11pt for English
                             italics: options.italic,
-                            font: options.font || (/[அ-ஹ]/.test(text) ? "TAU-Pallai" : "Inter")
+                            font: options.font || (/[அ-ஹ]/.test(text) ? "TAU-Paalai" : "Inter")
                         }),
                     ],
                     alignment: options.align || AlignmentType.CENTER,
@@ -85,7 +85,7 @@ export class DocExportService {
                     italics: options.italic,
                     size: options.size || (/[அ-ஹ]/.test(text) ? 28 : 22),
                     color: options.color,
-                    font: /[அ-ஹ]/.test(text) ? "TAU-Pallai" : "Inter"
+                    font: /[அ-ஹ]/.test(text) ? "TAU-Paalai" : "Inter"
                 }),
             ],
             alignment: options.align || AlignmentType.LEFT,

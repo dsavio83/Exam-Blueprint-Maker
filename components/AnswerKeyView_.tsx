@@ -10,29 +10,36 @@ interface AnswerKeyViewProps {
 }
 
 const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }: AnswerKeyViewProps) => {
-    const formatMarks = (marks: number) => {
-        const s = marks.toString();
-        let result = s;
+    // Returns plain string – safe to embed inside HTML template literals
+    const formatMarksStr = (marks: number): string => {
+        const s = marks.toString().replace(/M$/, '');
         if (s.endsWith('.5')) {
             const whole = s.split('.')[0];
-            result = whole === '0' ? '½' : `${whole}½`;
+            return whole === '0' ? '½' : `${whole}½`;
         }
-        return <span className="english-font" style={{ fontFamily: "'Times New Roman', serif" }}>{result}</span>;
+        return s;
     };
+
+    // Returns JSX – use only inside React render tree
+    const formatMarks = (marks: number) => (
+        <span className="english-font" style={{ fontFamily: "'Times New Roman', serif" }}>
+            {formatMarksStr(marks)}
+        </span>
+    );
 
     const renderMixedText = (text: string | undefined | null) => {
         if (!text) return '-';
         // Split by Tamil characters vs others (English/Numbers/Symbols)
         const segments = text.toString().split(/([அ-ஹ\u0B80-\u0BFF]+)/);
-        
+
         return segments.map((seg, i) => {
             if (!seg) return null;
             const isTamil = /[அ-ஹ\u0B80-\u0BFF]/.test(seg);
             return (
-                <span 
-                    key={i} 
+                <span
+                    key={i}
                     className={isTamil ? "tamil-font" : "english-font"}
-                    style={{ 
+                    style={{
                         fontFamily: isTamil ? `'TAU-Paalai', 'Latha', serif` : `'Times New Roman', serif`,
                         fontSize: isTamil ? 'inherit' : 'inherit',
                         lineHeight: isTamil ? '1.4' : '1.2'
@@ -56,8 +63,6 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
             .replace(/(^|[^0-9])0\.5/g, '$1½')
             .replace(/(\d+(?:\.\d+)?)M\b/g, '$1');
 
-        const paragraphs = Array.from(wrapper.querySelectorAll('p'));
-        // Deduplication logic removed to ensure all enabled sections (Write Content, Discourse) are visible.
 
 
         wrapper.querySelectorAll('ul').forEach((ul) => {
@@ -152,7 +157,7 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                 if (d.rubrics && d.rubrics.length > 0) {
                     dHtml += `<ul class="rubric-list">`;
                     d.rubrics.forEach(r => {
-                        dHtml += `<li><span class="rubric-point">${r.point}</span><strong class="rubric-mark english-font">${formatMarks(r.marks)}</strong></li>`;
+                        dHtml += `<li><span class="rubric-point">${r.point}</span><strong class="rubric-mark english-font">${formatMarksStr(r.marks)}</strong></li>`;
                     });
                     dHtml += `</ul>`;
                 }
@@ -308,14 +313,15 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                         {sortedItems.map((item, index) => {
                             if (!item.hasInternalChoice) {
                                 // Normal single row
+                                const answerHtml = renderItemAnswer(item);
                                 return (
                                     <tr key={item.id} className="min-h-[40px] text-black">
                                         <td className="border border-black p-1 text-center font-bold english-font">{index + 1}</td>
                                         <td className="border border-black p-1 text-center font-bold english-font">{formatMarks(item.marksPerQuestion)}</td>
                                         <td className="border border-black p-1 text-left">
                                             <div className="tamil-font leading-tight">
-                                                {renderItemAnswer(item) ? (
-                                                    <div className="answer-key-content" dangerouslySetInnerHTML={{ __html: renderItemAnswer(item) }} />
+                                                {answerHtml ? (
+                                                    <div className="answer-key-content" dangerouslySetInnerHTML={{ __html: answerHtml }} />
                                                 ) : (
                                                     <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
                                                 )}
@@ -330,6 +336,8 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                                 );
                             }
 
+                            const answerHtmlA = renderItemAnswer(item);
+                            const answerHtmlB = renderItemAnswer(item, true);
                             return (
                                 <React.Fragment key={item.id}>
                                     <tr className="min-h-[40px] text-black">
@@ -339,8 +347,8 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                                         <td className="border border-black p-1 text-center font-bold english-font">{formatMarks(item.marksPerQuestion)}</td>
                                         <td className="border border-black p-1 text-left">
                                             <div className="tamil-font leading-tight">
-                                                {renderItemAnswer(item) ? (
-                                                    <div className="answer-key-content" dangerouslySetInnerHTML={{ __html: renderItemAnswer(item) }} />
+                                                {answerHtmlA ? (
+                                                    <div className="answer-key-content" dangerouslySetInnerHTML={{ __html: answerHtmlA }} />
                                                 ) : (
                                                     <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
                                                 )}
@@ -359,8 +367,8 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                                         <td className="border border-black p-1 text-center font-bold english-font">{formatMarks(item.marksPerQuestion)}</td>
                                         <td className="border border-black p-1 text-left">
                                             <div className="tamil-font leading-tight">
-                                                {renderItemAnswer(item, true) ? (
-                                                    <div className="answer-key-content" dangerouslySetInnerHTML={{ __html: renderItemAnswer(item, true) }} />
+                                                {answerHtmlB ? (
+                                                    <div className="answer-key-content" dangerouslySetInnerHTML={{ __html: answerHtmlB }} />
                                                 ) : (
                                                     <span className="text-gray-400 italic font-normal text-xs">(விடை இன்னும் சேர்க்கப்படவில்லை)</span>
                                                 )}
@@ -486,4 +494,3 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
 };
 
 export default AnswerKeyView;
-

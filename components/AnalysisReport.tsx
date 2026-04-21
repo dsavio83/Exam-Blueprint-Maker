@@ -1,5 +1,5 @@
-
 import React, { useState, useMemo } from 'react';
+import Swal from 'sweetalert2';
 import { Subject, BlueprintEntry, SavedBlueprint, PaperType } from '../types';
 import { COGNITIVE_PROCESSES, KNOWLEDGE_LEVELS, ITEM_FORMATS } from '../constants';
 
@@ -24,7 +24,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
 
   const handleAutoGenerate = () => {
     if (!paperPattern) {
-      alert("Please select a Paper Pattern first.");
+      Swal.fire("Required", "Please select a Paper Pattern first.", "warning");
       return;
     }
 
@@ -71,88 +71,103 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({ blueprint, subject, pap
     };
 
     const targetBuckets = getTargetBuckets();
-    if (!confirm(`Confirm Auto-Generate?\nTerm Logic Applied: ${targetBuckets.map(b => b.target + ' Marks').join(' / ')}`)) return;
+    
+    Swal.fire({
+      title: "Confirm Auto-Generate?",
+      text: `Term Logic Applied: ${targetBuckets.map(b => b.target + ' Marks').join(' / ')}`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#2563eb",
+      confirmButtonText: "Generate Now"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        generatePattern(targetBuckets, totalMax, targetB, targetA);
+        Swal.fire("Generated", "Assessment pattern created successfully.", "success");
+      }
+    });
 
-    // 2. Knowledge Distribution Targets (30/50/20)
+    const generatePattern = (buckets: any[], totalMax: number, targetB: number, targetA: number) => {
+      // 3. Prepare Item Slots from Paper Pattern
+      const allSlots: { marks: number }[] = [];
+      paperPattern.questionTypes.forEach(qt => {
+        for (let i = 0; i < qt.maxQuestions; i++) allSlots.push({ marks: qt.marks });
+      });
+
+      // Sort descending to assign large marks first (essay types)
+      const sortedSlots = [...allSlots].sort((a, b) => b.marks - a.marks);
+
+      const results: BlueprintEntry[] = [];
+      const bucketProgress = buckets.map(b => ({ ...b, current: 0 }));
+      let runningB = 0, runningA = 0;
+
+      // 4. Exact Allocation Loop
+      sortedSlots.forEach((slot, slotIdx) => {
+        // Find a bucket that can fit this slot
+        let bucketIdx = bucketProgress.findIndex(b => b.current + slot.marks <= b.target);
+
+        // If no perfect fit, find the bucket with the largest remaining space
+        if (bucketIdx === -1) {
+          bucketIdx = bucketProgress.map((b, i) => b.target - b.current).indexOf(Math.max(...bucketProgress.map(b => b.target - b.current)));
+        }
+
+        const selectedBucket = bucketProgress[bucketIdx];
+        selectedBucket.current += slot.marks;
+
+        // Pick specific unit from indices (Round Robin or alternate)
+        const unitIndex = selectedBucket.indices[slotIdx % selectedBucket.indices.length];
+        const unit = subject.units[unitIndex] || subject.units[0];
+
+        // Select SubUnit (Round Robin)
+        const subUnit = unit.subUnits[Math.floor(Math.random() * unit.subUnits.length)];
+
+        // Knowledge Level
+        let kId = KNOWLEDGE_LEVELS[2].id; // Profound
+        if (runningB + slot.marks <= targetB + 1) {
+          kId = KNOWLEDGE_LEVELS[0].id;
+          runningB += slot.marks;
+        } else if (runningA + slot.marks <= targetA + 1) {
+          kId = KNOWLEDGE_LEVELS[1].id;
+          runningA += slot.marks;
+        }
+
+        // Format Logic (Requested strict rules)
+        let formatId = 'sr1';
+        if (slot.marks === 1) formatId = Math.random() > 0.5 ? 'sr1' : 'sr2';
+        else if (slot.marks === 2) formatId = 'crs1';
+        else if (slot.marks <= 4) formatId = 'crs2';
+        else formatId = 'crl';
+
+        const cognitiveId = COGNITIVE_PROCESSES[slotIdx % COGNITIVE_PROCESSES.length].id;
+
+        // Check for identical entry to increment
+        const existing = results.find(r =>
+          r.unitId === unit.id && r.subUnitId === subUnit.id &&
+          r.formatId === formatId && r.cognitiveId === cognitiveId &&
+          r.knowledgeId === kId && r.marksPerItem === slot.marks
+        );
+
+        if (existing) {
+          existing.numQuestions += 1;
+        } else {
+          results.push({
+            unitId: unit.id,
+            subUnitId: subUnit.id,
+            formatId,
+            numQuestions: 1,
+            marksPerItem: slot.marks,
+            cognitiveId,
+            knowledgeId: kId,
+            estimatedTime: slot.marks * 2.5
+          });
+        }
+      });
+
+      onSetEntries(results);
+    };
+
+    // move targetB/targetA definition up to be accessible
     const targetB = Math.round(totalMax * 0.30);
     const targetA = Math.round(totalMax * 0.50);
-
-    // 3. Prepare Item Slots from Paper Pattern
-    const allSlots: { marks: number }[] = [];
-    paperPattern.questionTypes.forEach(qt => {
-      for (let i = 0; i < qt.maxQuestions; i++) allSlots.push({ marks: qt.marks });
-    });
-
-    // Sort descending to assign large marks first (essay types)
-    const sortedSlots = [...allSlots].sort((a, b) => b.marks - a.marks);
-
-    const results: BlueprintEntry[] = [];
-    const bucketProgress = targetBuckets.map(b => ({ ...b, current: 0 }));
-    let runningB = 0, runningA = 0;
-
-    // 4. Exact Allocation Loop
-    sortedSlots.forEach((slot, slotIdx) => {
-      // Find a bucket that can fit this slot
-      let bucketIdx = bucketProgress.findIndex(b => b.current + slot.marks <= b.target);
-
-      // If no perfect fit, find the bucket with the largest remaining space
-      if (bucketIdx === -1) {
-        bucketIdx = bucketProgress.map((b, i) => b.target - b.current).indexOf(Math.max(...bucketProgress.map(b => b.target - b.current)));
-      }
-
-      const selectedBucket = bucketProgress[bucketIdx];
-      selectedBucket.current += slot.marks;
-
-      // Pick specific unit from indices (Round Robin or alternate)
-      const unitIndex = selectedBucket.indices[slotIdx % selectedBucket.indices.length];
-      const unit = subject.units[unitIndex] || subject.units[0];
-
-      // Select SubUnit (Round Robin)
-      const subUnit = unit.subUnits[Math.floor(Math.random() * unit.subUnits.length)];
-
-      // Knowledge Level
-      let kId = KNOWLEDGE_LEVELS[2].id; // Profound
-      if (runningB + slot.marks <= targetB + 1) {
-        kId = KNOWLEDGE_LEVELS[0].id;
-        runningB += slot.marks;
-      } else if (runningA + slot.marks <= targetA + 1) {
-        kId = KNOWLEDGE_LEVELS[1].id;
-        runningA += slot.marks;
-      }
-
-      // Format Logic (Requested strict rules)
-      let formatId = 'sr1';
-      if (slot.marks === 1) formatId = Math.random() > 0.5 ? 'sr1' : 'sr2';
-      else if (slot.marks === 2) formatId = 'crs1';
-      else if (slot.marks <= 4) formatId = 'crs2';
-      else formatId = 'crl';
-
-      const cognitiveId = COGNITIVE_PROCESSES[slotIdx % COGNITIVE_PROCESSES.length].id;
-
-      // Check for identical entry to increment
-      const existing = results.find(r =>
-        r.unitId === unit.id && r.subUnitId === subUnit.id &&
-        r.formatId === formatId && r.cognitiveId === cognitiveId &&
-        r.knowledgeId === kId && r.marksPerItem === slot.marks
-      );
-
-      if (existing) {
-        existing.numQuestions += 1;
-      } else {
-        results.push({
-          unitId: unit.id,
-          subUnitId: subUnit.id,
-          formatId,
-          numQuestions: 1,
-          marksPerItem: slot.marks,
-          cognitiveId,
-          knowledgeId: kId,
-          estimatedTime: slot.marks * 2.5
-        });
-      }
-    });
-
-    onSetEntries(results);
   };
 
   const getSubUnitEntryInCol = (uId: string, sId: string, marks: number) =>

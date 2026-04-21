@@ -119,14 +119,21 @@ const AdminTeacherDetailsView = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Action Bar */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-gray-100 pb-6">
-                <div>
-                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Teacher Details</h2>
-                    <p className="text-gray-500 mt-1 font-medium italic">Comprehensive directory of teachers and professional data.</p>
+            {/* Header Section */}
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+                {/* Left Side: Title and Subtitle */}
+                <div className="space-y-1">
+                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">
+                        Teacher Details
+                    </h2>
+                    <p className="text-gray-500 font-medium italic">
+                        Comprehensive directory of teachers and professional data.
+                    </p>
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <div className="relative flex-1 md:w-80">
+
+                {/* Right Side: Search Bar and Print Button */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                    <div className="relative flex-1 w-full lg:w-80">
                         <input
                             type="text"
                             placeholder="Search by name, PEN, or school..."
@@ -138,18 +145,18 @@ const AdminTeacherDetailsView = () => {
                     </div>
                     <button
                         onClick={handlePrint}
-                        className="bg-white text-gray-700 border border-gray-200 p-3.5 rounded-2xl font-bold hover:bg-gray-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                        className="w-full sm:w-auto bg-white text-gray-700 border border-gray-200 p-3.5 rounded-2xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95 whitespace-nowrap"
                         title="Print Report"
                     >
                         <Printer size={20} className="text-blue-600" />
-                        <span className="hidden sm:inline">Print List</span>
+                        <span>Print List</span>
                     </button>
                 </div>
             </div>
 
             {/* Table Container */}
             <div className="ap-card overflow-hidden">
-                <div className="overflow-x-auto" ref={printRef}>
+                <div className="overflow-x-auto scrollbar-hide" ref={printRef}>
                     <table className="w-full text-left border-collapse min-w-[1000px] text-[11px]">
                         <thead>
                             <tr className="bg-gray-50/80 border-b border-gray-100">
@@ -177,27 +184,27 @@ const AdminTeacherDetailsView = () => {
                             {filteredTeachers.map(t => (
                                 <tr key={t.id} className="hover:bg-blue-50/20 transition-colors group">
                                     <td className="p-2 border-x border-gray-50">
-                                        <div className="teacher-name">{t.name}</div>
-                                        <div className="pen-no">({t.pen || 'PENDING'})</div>
+                                        <div className="font-bold text-sm text-gray-900 leading-tight">{t.name}</div>
+                                        <div className="text-[10px] font-black text-blue-600">({t.pen || 'PENDING'})</div>
                                     </td>
                                     <td className="p-2 border-x border-gray-50">
-                                        <div className="school-name">{t.schoolName || 'Not Set'}</div>
-                                        <div className="sub-info">({t.schoolCode || 'N/A'})</div>
+                                        <div className="font-bold text-gray-800 leading-tight">{t.schoolName || 'Not Set'}</div>
+                                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">({t.schoolCode || 'N/A'})</div>
                                     </td>
                                     <td className="p-2 border-x border-gray-50">
                                         <div className="font-bold text-gray-700">{t.phoneNumber || t.mobile || '—'}</div>
-                                        <div className="sub-info lowercase">{t.email || '—'}</div>
+                                        <div className="text-[10px] text-gray-400 font-medium lowercase truncate max-w-[150px]">{t.email || '—'}</div>
                                     </td>
                                     <td className="p-2 border-x border-gray-50 font-bold text-gray-900">
                                         {t.basicPay ? `₹${t.basicPay.toLocaleString('en-IN')}` : '—'}
                                     </td>
                                     <td className="p-2 border-x border-gray-50">
                                         <div className="font-mono font-bold text-gray-700">{t.bankAccountNumber || t.accountNo || '—'}</div>
-                                        <div className="sub-info font-bold uppercase">{t.bankName || '—'}</div>
+                                        <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{t.bankName || '—'}</div>
                                     </td>
                                     <td className="p-2 border-x border-gray-50">
                                         <div className="font-mono font-bold text-blue-600">{t.bankIfsc || t.ifscCode || '—'}</div>
-                                        <div className="sub-info font-bold uppercase">{t.bankBranch || t.branch || '—'}</div>
+                                        <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{t.bankBranch || t.branch || '—'}</div>
                                     </td>
                                 </tr>
                             ))}
@@ -215,6 +222,16 @@ const AdminTeacherDetailsView = () => {
                     </div>
                 )}
             </div>
+
+            <style dangerouslySetInnerHTML={{ __html: `
+                .scrollbar-hide::-webkit-scrollbar {
+                    display: none;
+                }
+                .scrollbar-hide {
+                    -ms-overflow-style: none;
+                    scrollbar-width: none;
+                }
+            ` }} />
             
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-gray-400 font-medium bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                 <div className="flex items-center gap-2">

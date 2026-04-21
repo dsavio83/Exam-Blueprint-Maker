@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import {
     Trash2, Plus, X, FileJson
 } from 'lucide-react';
@@ -26,11 +27,13 @@ const AdminCurriculumManager = () => {
     const handleCopyJSON = () => {
         const db = getDB();
         if (!db) {
-            alert("Database not initialized yet.");
+            Swal.fire("Error", "Database not initialized yet.", "error");
             return;
         }
         const json = JSON.stringify(db.curriculums, null, 2);
-        navigator.clipboard.writeText(json).then(() => alert("All Curriculum data copied to clipboard! You can use this to update INITIAL_CURRICULUM in db.ts."));
+        navigator.clipboard.writeText(json).then(() => {
+            Swal.fire("Copied", "All Curriculum data copied to clipboard!", "success");
+        });
     };
 
     const saveCurr = async (curr: Curriculum) => {
@@ -115,15 +118,26 @@ const AdminCurriculumManager = () => {
                                 <div className="flex items-center gap-3 flex-1">
                                     <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-lg shadow-blue-100">Unit {unit.unitNumber}</span>
                                     <input
-                                        className="font-bold text-xl text-gray-900 bg-transparent border-b-2 border-transparent focus:border-blue-500 outline-none flex-1 transition-all font-display"
+                                        className="font-bold text-xl text-gray-900 bg-transparent border-b-2 border-transparent focus:border-blue-500 outline-none flex-1 transition-all"
+                                        style={{ fontFamily: "'TAU-Urai', 'Times New Roman', serif" }}
                                         value={unit.name}
                                         onChange={(e) => updateUnit(unit.id, 'name', e.target.value)}
                                         placeholder="Enter Unit Name"
                                     />
                                 </div>
                                 <button onClick={() => {
-                                    const confirm = window.confirm("Delete Unit?");
-                                    if (confirm && curriculum) saveCurr({ ...curriculum, units: curriculum.units.filter(u => u.id !== unit.id) });
+                                    Swal.fire({
+                                        title: "Delete Unit?",
+                                        text: "All sub-units will be removed as well.",
+                                        icon: "warning",
+                                        showCancelButton: true,
+                                        confirmButtonColor: "#d33",
+                                        confirmButtonText: "Yes, delete"
+                                    }).then(result => {
+                                        if (result.isConfirmed && curriculum) {
+                                            saveCurr({ ...curriculum, units: curriculum.units.filter(u => u.id !== unit.id) });
+                                        }
+                                    });
                                 }} className="self-end md:self-center p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete Unit">
                                     <Trash2 size={20} />
                                 </button>
@@ -137,7 +151,7 @@ const AdminCurriculumManager = () => {
                                         <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Learning Outcomes</label>
                                     </div>
                                     <textarea
-                                        className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none resize-none min-h-[120px] transition-all font-medium text-gray-700 leading-relaxed"
+                                        className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none resize-none min-h-[120px] transition-all font-medium text-gray-700 leading-relaxed tamil-font"
                                         value={unit.learningOutcomes || ''}
                                         onChange={(e) => updateUnit(unit.id, 'learningOutcomes', e.target.value)}
                                         placeholder="What should students learn in this unit?"
@@ -155,13 +169,23 @@ const AdminCurriculumManager = () => {
                                             <div key={sub.id} className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all group/item">
                                                 <span className="text-[10px] font-bold text-gray-300 w-5">{(sIdx + 1).toString().padStart(2, '0')}</span>
                                                 <input
-                                                    className="text-sm font-semibold text-gray-700 bg-transparent outline-none w-full"
+                                                    className="text-sm font-semibold text-gray-700 bg-transparent outline-none w-full tamil-font"
                                                     value={sub.name}
                                                     onChange={(e) => updateSubUnit(unit.id, sub.id, e.target.value)}
                                                     placeholder="Chapter Name"
                                                 />
                                                 <button onClick={() => {
-                                                    saveCurr({ ...curriculum, units: curriculum.units.map(u => u.id === unit.id ? { ...u, subUnits: u.subUnits.filter(s => s.id !== sub.id) } : u) })
+                                                    Swal.fire({
+                                                        title: "Delete Sub-unit?",
+                                                        icon: "warning",
+                                                        showCancelButton: true,
+                                                        confirmButtonColor: "#d33",
+                                                        confirmButtonText: "Delete"
+                                                    }).then(result => {
+                                                        if (result.isConfirmed && curriculum) {
+                                                            saveCurr({ ...curriculum, units: curriculum.units.map(u => u.id === unit.id ? { ...u, subUnits: u.subUnits.filter(s => s.id !== sub.id) } : u) });
+                                                        }
+                                                    });
                                                 }} className="text-gray-200 hover:text-red-400 transition-colors">
                                                     <X size={16} />
                                                 </button>

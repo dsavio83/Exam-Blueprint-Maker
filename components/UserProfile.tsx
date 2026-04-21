@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import Swal from 'sweetalert2';
 import {
     User as UserIcon, Mail, Phone, MapPin, Building,
     School, CreditCard, Landmark, Save, ArrowLeft,
@@ -217,16 +218,18 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setError(null);
-        setSuccess(false);
 
         try {
             const updatedUser = await updateUserProfile(formData as User);
             onUpdate(updatedUser);
-            setSuccess(true);
-            setTimeout(() => setSuccess(false), 3000);
+            Swal.fire({
+                title: "Success!",
+                text: "Profile updated successfully!",
+                icon: "success",
+                confirmButtonColor: "#4f46e5"
+            });
         } catch (err: any) {
-            setError(err.message || 'Failed to update profile');
+            Swal.fire("Error", err.message || 'Failed to update profile', "error");
         } finally {
             setLoading(false);
         }

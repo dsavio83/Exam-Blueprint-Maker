@@ -10,13 +10,14 @@ interface MassViewExportPayload {
     includeAnswers: boolean;
 }
 
-const TAMIL_FONT = 'TAU-Pallai';
+const TAMIL_FONT = 'TAU-Paalai';
 const ENGLISH_FONT = 'Times New Roman';
+const HEADING_FONT = 'TAU-Urai';
 
 const getBaseFileName = (blueprint: Blueprint) =>
     `MassView_${blueprint.classLevel}_${blueprint.subject.replace(/\s+/g, '_')}_${(blueprint.setId || 'SetA').replace(/\s+/g, '_')}`;
 
-const isTamil = (text: string) => /[அ-ஹ]/.test(text);
+const isTamil = (text: string) => /[அ-ஹ\u0B80-\u0BFF]/.test(text);
 
 const splitTextByLanguage = (text: string) => {
     const segments: Array<{ text: string, isTamil: boolean }> = [];
@@ -45,7 +46,23 @@ const splitTextByLanguage = (text: string) => {
 };
 
 const createLanguageRuns = (text: string, options: any = {}) => {
-    const segments = splitTextByLanguage(text);
+    // Global replacement for fractions
+    const processedText = text.toString()
+        .replace(/(\d+)\.5/g, '$1½')
+        .replace(/(^|[^0-9])0\.5/g, '$1½');
+
+    // Special handling for the main header
+    if (processedText === "சமக்ர சிக்ஷா கேரளம்") {
+        return [new TextRun({
+            ...options,
+            text: processedText,
+            font: HEADING_FONT,
+            bold: true,
+            size: 36 // 18pt
+        })];
+    }
+
+    const segments = splitTextByLanguage(processedText);
     return segments.map(seg => new TextRun({
         ...options,
         text: seg.text,
@@ -192,14 +209,14 @@ const createHeader = (bp: Blueprint) => {
             children: [
                 ...createLanguageRuns(`நேரம்: 90 நிமிடம்`, { size: 22 }),
                 new TextRun({ text: "\t\t\t\t\t\t\t\t", font: ENGLISH_FONT }),
-                ...createLanguageRuns(`வகுப்பு ${bp.classLevel}`, { size: 22 })
+                ...createLanguageRuns(`வகுப்பு: ${bp.classLevel}`, { size: 22 })
             ]
         }),
         new Paragraph({
             children: [
                 ...createLanguageRuns(`சிந்தனை நேரம் : 15 நிமிடம்`, { size: 22 }),
                 new TextRun({ text: "\t\t\t\t\t\t\t", font: ENGLISH_FONT }),
-                ...createLanguageRuns(`மதிப்பெண் : 40`, { size: 22 })
+                ...createLanguageRuns(`மதிப்பெண் : ${bp.totalMarks}`, { size: 22 })
             ]
         }),
         createHorizontalLine()

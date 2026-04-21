@@ -35,7 +35,14 @@ export const QuestionRow = ({ item, index, onUpdateItem, availableDiscourses, sy
     const isLimitReached = !item.hasInternalChoice && currentSectionOptionUsage >= sectionOptionCount;
     const canToggleOption = !isMarkRestricted && (item.hasInternalChoice || !isLimitReached);
 
-    const formatMarks = (marks: number) => marks === 0.5 ? '½' : `${marks}`;
+    const formatMarks = (marks: number) => {
+        const s = marks.toString();
+        if (s.endsWith('.5')) {
+            const whole = s.split('.')[0];
+            return whole === '0' ? '½' : `${whole}½`;
+        }
+        return s;
+    };
 
     const generateAIAnswer = (targetField: 'answerText' | 'answerTextB', sourceField: 'questionText' | 'questionTextB') => {
         setIsGenerating(true);

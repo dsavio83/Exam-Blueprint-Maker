@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Swal from 'sweetalert2';
 import {
     Users, Search, CheckCircle, AlertCircle, FileText,
     Settings, PlusCircle, ArrowRight, UserPlus,
@@ -30,7 +31,6 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [editingBlueprintIds, setEditingBlueprintIds] = useState<string[]>([]);
     const [isAssigning, setIsAssigning] = useState(false);
-    const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
     const [assignedPapers, setAssignedPapers] = useState<Blueprint[]>([]);
 
@@ -161,19 +161,31 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
     const handleDeleteAssignment = async (ids: string | string[]) => {
         const idArray = Array.isArray(ids) ? ids : [ids];
         const msg = idArray.length > 1
-            ? `Are you sure you want to delete these ${idArray.length} assignments? (இந்த ${idArray.length} ஒதுக்கீடுகளை நீக்க விரும்புகிறீர்களா?)`
-            : 'Are you sure you want to delete this assignment? (இந்த ஒதுக்கீட்டை நீக்க விரும்புகிறீர்களா?)';
+            ? `Are you sure you want to delete these ${idArray.length} assignments?`
+            : 'Are you sure you want to delete this assignment?';
 
-        if (!window.confirm(msg)) return;
-
-        try {
-            for (const id of idArray) {
-                await deleteBlueprint(id);
+        Swal.fire({
+            title: "Are you sure?",
+            text: msg,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, delete it!"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    for (const id of idArray) {
+                        await deleteBlueprint(id);
+                    }
+                    loadAssignments();
+                    Swal.fire("Deleted", "Assignment(s) removed successfully.", "success");
+                } catch (error) {
+                    console.error('Delete failed:', error);
+                    Swal.fire("Error", "Failed to delete assignment.", "error");
+                }
             }
-            loadAssignments();
-        } catch (error) {
-            console.error('Delete failed:', error);
-        }
+        });
     };
 
     const handlePrint = () => {
@@ -191,7 +203,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
         printWindow.document.write(`
             <html>
                 <head>
-                    <title>Assignment List - வினாத்தாள் ஒதுக்கீடு பட்டியல்</title>
+                    <title>Teachers Assignment List</title>
                     <style>
                         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 10px; color: #333; }
                         h1 { text-align: center; color: #1e40af; font-size: 18px; margin-bottom: 2px; }
@@ -270,17 +282,16 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
 
     const handleAssign = async () => {
         if (selectedUserIds.length === 0) {
-            setStatus({ type: 'error', message: 'Please select at least one teacher. (குறைந்தது ஒரு ஆசிரியரைத் தேர்ந்தெடுக்கவும்)' });
+            Swal.fire("Error", "Please select at least one teacher. (குறைந்தது ஒரு ஆசிரியரைத் தேர்ந்தெடுக்கவும்)", "error");
             return;
         }
 
         if (!config.paperType) {
-            setStatus({ type: 'error', message: 'Please select a paper type. (வினாத்தாள் வகையைத் தேர்ந்தெடுக்கவும்)' });
+            Swal.fire("Error", "Please select a paper type. (வினாத்தாள் வகையைத் தேர்ந்தெடுக்கவும்)", "error");
             return;
         }
 
         setIsAssigning(true);
-        setStatus({ type: null, message: '' });
 
         try {
             const db = getDB();
@@ -292,7 +303,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
             // 1. Get base curriculum
             const curriculum = await getCurriculum(config.classLevel, config.subject);
             if (!curriculum) {
-                setStatus({ type: 'error', message: `No curriculum found for Class ${config.classLevel} ${config.subject}.` });
+                Swal.fire("Error", `No curriculum found for Class ${config.classLevel} ${config.subject}.`, "error");
                 setIsAssigning(false);
                 return;
             }
@@ -300,7 +311,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
             // 2. Filter curriculum by term if needed
             const filteredCurriculum = filterCurriculumByTerm(db, curriculum, config.examTerm);
             if (!filteredCurriculum) {
-                setStatus({ type: 'error', message: `No active units found for ${config.examTerm}.` });
+                Swal.fire("Error", `No active units found for ${config.examTerm}.`, "error");
                 setIsAssigning(false);
                 return;
             }
@@ -314,7 +325,6 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
 
             // Create new blueprints for all selected users
             for (const userId of selectedUserIds) {
-                // 3. Generate items based on template
                 const items = generateBlueprintTemplate(
                     db,
                     filteredCurriculum,
@@ -343,7 +353,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                     createdAt: timestamp,
                     isAdminAssigned: true,
                     reportSettings: {
-                        fontFamily: "TAU-Pallai",
+                        fontFamily: "TAU-Paalai",
                         fontSizeBody: 12,
                         fontSizeTitle: 14,
                         fontSizeTamil: 14,
@@ -358,27 +368,23 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
             }
 
             const successMsg = editingBlueprintIds.length > 0
-                ? 'Successfully updated assignments. '
+                ? 'Successfully updated assignments.'
                 : `Successfully assigned blueprints to ${selectedUserIds.length} teachers.`;
 
-            setStatus({
-                type: 'success',
-                message: successMsg
-            });
+            Swal.fire("Success", successMsg, "success");
 
             setEditingBlueprintIds([]);
             setSelectedUserIds([]);
 
             if (onAssign) {
-                setTimeout(() => onAssign(), 2000);
+                onAssign();
             }
 
-            // If in view tab, reload
             if (activeTab === 'view') loadAssignments();
 
         } catch (error: any) {
             console.error('Process failed:', error);
-            setStatus({ type: 'error', message: `Process failed: ${error.message}` });
+            Swal.fire("Error", `Process failed: ${error.message}`, "error");
         } finally {
             setIsAssigning(false);
         }
@@ -429,19 +435,6 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                     </button>
                 </div>
             </div>
-
-            {status.type && (
-                <div className={`p-4 rounded-xl flex items-start gap-3 animate-in zoom-in-95 duration-300 shadow-sm border ${status.type === 'success'
-                    ? 'bg-green-50 text-green-700 border-green-100'
-                    : 'bg-red-50 text-red-700 border-red-100'
-                    }`}>
-                    {status.type === 'success' ? <CheckCircle className="mt-0.5 flex-shrink-0" size={20} /> : <AlertCircle className="mt-0.5 flex-shrink-0" size={20} />}
-                    <div>
-                        <div className="font-black text-xs uppercase tracking-tight">{status.type === 'success' ? 'Operation Successful' : 'Assignment Failed'}</div>
-                        <div className="font-bold text-xs mt-0.5 opacity-80">{status.message}</div>
-                    </div>
-                </div>
-            )}
 
             {activeTab === 'assign' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

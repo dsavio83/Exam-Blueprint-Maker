@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Swal from 'sweetalert2';
 import {
     Role, ClassLevel, SubjectType, ExamTerm,
     BlueprintItem, Blueprint, ItemFormat, KnowledgeLevel, CognitiveProcess, Unit, SubUnit, Curriculum, User, QuestionPaperType, Discourse
@@ -73,10 +74,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                 getUsers(),
                 getDiscourses()
             ]);
-            setBlueprints(bps);
+
+            // Sort by createdAt descending (latest first)
+            const sortedBps = bps.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            setBlueprints(sortedBps);
             setPaperTypes(pts);
             setAllUsers(usersList);
             setDiscourses(discList);
+
+            // Set default filter if not already set
+            if (!listCombinedFilter && sortedBps.length > 0) {
+                const latest = sortedBps[0];
+                const filterVal = `${latest.examTerm}|${latest.academicYear || '2025-26'}`;
+                setListCombinedFilter(filterVal);
+            }
         };
         load();
     }, [user.id, view]);
@@ -114,7 +126,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
 
     const handleEdit = (bp: Blueprint) => {
         if (bp.isLocked) {
-            alert("This question paper is locked by the admin and cannot be edited.");
+            Swal.fire("Locked", "This question paper is locked by the admin and cannot be edited.", "info");
             return;
         }
         setCurrentBlueprint(bp);
@@ -129,19 +141,30 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     const handleDelete = async (id: string) => {
         const bp = blueprints.find(b => b.id === id);
         if (bp?.isLocked) {
-            alert("This question paper is locked by the admin and cannot be deleted.");
+            Swal.fire("Locked", "This question paper is locked by the admin and cannot be deleted.", "info");
             return;
         }
-        if (window.confirm("Are you sure you want to delete this blueprint?")) {
-            await deleteBlueprint(id);
-            const updated = await getAllAccessibleBlueprints(user.id);
-            setBlueprints(updated);
-        }
+        Swal.fire({
+            title: "Are you sure?",
+            text: "You won't be able to revert this!",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, delete it!"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                await deleteBlueprint(id);
+                const updated = await getAllAccessibleBlueprints(user.id);
+                setBlueprints(updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+                Swal.fire("Deleted", "Your blueprint has been deleted.", "success");
+            }
+        });
     };
 
     const handleGenerate = async () => {
-        if (!curriculum) return alert("Curriculum not found for selected Class/Subject!");
-        if (!selectedPaperType) return alert("Please select a Question Paper Type.");
+        if (!curriculum) return Swal.fire("Error", "Curriculum not found for selected Class/Subject!", "error");
+        if (!selectedPaperType) return Swal.fire("Required", "Please select a Question Paper Type.", "warning");
         const db = getDB();
         if (!db) await initDB();
         const items = generateBlueprintTemplate(getDB()!, curriculum, selectedTerm, selectedPaperType);
@@ -167,19 +190,37 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
 
     const handleRegeneratePattern = async () => {
         if (!currentBlueprint || !curriculum) return;
-        if (!window.confirm("This will replace all current questions with a new random pattern. Continue?")) return;
-        const db = getDB();
-        if (!db) await initDB();
-        const newItems = generateBlueprintTemplate(getDB()!, curriculum, currentBlueprint.examTerm, currentBlueprint.questionPaperTypeId);
-        setCurrentBlueprint({ ...currentBlueprint, items: newItems, isConfirmed: false });
+        Swal.fire({
+            title: "Regenerate Pattern?",
+            text: "This will replace all current questions with a new random pattern. Continue?",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#2563eb",
+            cancelButtonColor: "#64748b",
+            confirmButtonText: "Yes, regenerate"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                const db = getDB();
+                if (!db) await initDB();
+                const newItems = generateBlueprintTemplate(getDB()!, curriculum, currentBlueprint.examTerm, currentBlueprint.questionPaperTypeId);
+                setCurrentBlueprint({ ...currentBlueprint, items: newItems, isConfirmed: false });
+                Swal.fire("Regenerated", "A new pattern has been generated.", "success");
+            }
+        });
     };
 
     const handleConfirmPattern = async () => {
         if (!currentBlueprint) return;
-        const confirmedBlueprint = { ...currentBlueprint, isConfirmed: true };
-        setCurrentBlueprint(confirmedBlueprint);
-        await saveBlueprint(confirmedBlueprint);
-        alert("Blueprint pattern confirmed!");
+        const confirmed = { ...currentBlueprint, isConfirmed: true };
+        setCurrentBlueprint(confirmed);
+        await saveBlueprint(confirmed);
+        Swal.fire("Confirmed", "Blueprint pattern confirmed successfully!", "success");
+    };
+
+    const handleSaveReportSettings = async () => {
+        if (!currentBlueprint) return;
+        await saveBlueprint(currentBlueprint);
+        Swal.fire("Saved", "Report settings saved successfully!", "success");
     };
 
     const handleSaveToDB = async () => {
@@ -188,11 +229,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
         try {
             await saveBlueprint(currentBlueprint);
             const updated = await getAllAccessibleBlueprints(user.id);
-            setBlueprints(updated);
-            alert("Blueprint saved successfully!");
+            setBlueprints(updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+            Swal.fire("Saved", "Blueprint saved successfully!", "success");
         } catch (error) {
             console.error("Save failed:", error);
-            alert("Failed to save blueprint.");
+            Swal.fire("Error", "Failed to save blueprint.", "error");
         } finally {
             setIsSaving(false);
         }
@@ -277,7 +318,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
             if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(currentBlueprint, curriculum);
         } catch (error) {
             console.error("Word export failed:", error);
-            alert("Failed to export Word document.");
+            Swal.fire("Error", "Failed to export Word document.", "error");
         }
     };
 
@@ -1231,9 +1272,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                     onConfirm={handleConfirmPattern}
                                     onDownloadPDF={(type) => handleDownloadPDF(type as any)}
                                     onDownloadWord={handleDownloadWord}
+                                    onUpdateReportSettings={(s, p) => setCurrentBlueprint(prev => prev ? { ...prev, reportSettings: s, perReportSettings: p } : null)}
+                                    onSaveSettings={handleSaveReportSettings}
                                     isSaving={isSaving}
-                                />
-                            )}
+                                    />                            )}
                         </div>
                     )}
 
@@ -1256,7 +1298,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     onClose={() => setSharingBlueprintId(null)}
                     onShareComplete={async () => {
                         const updated = await getAllAccessibleBlueprints(user.id);
-                        setBlueprints(updated);
+                        setBlueprints(updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
                     }}
                 />
             )}

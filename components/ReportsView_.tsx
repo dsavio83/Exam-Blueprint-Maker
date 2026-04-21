@@ -12,8 +12,7 @@ interface ReportsViewProps {
     onDownloadPDF: (tab: string) => void;
     onDownloadWord: (tab: string) => void;
     isAdmin?: boolean;
-    onUpdateReportSettings?: (settings: Blueprint['reportSettings'], perReport?: Blueprint['perReportSettings']) => void;
-    onSaveSettings?: () => Promise<void>;
+    onUpdateReportSettings?: (settings: Blueprint['reportSettings']) => void;
     onMoveItem?: (itemId: string, newUnitId: string, newSectionId: string, newSubUnitId?: string) => void;
     onUpdateItemField?: (id: string, field: keyof BlueprintItem, val: any) => void;
 }
@@ -27,7 +26,6 @@ export const ReportsView = ({
     onDownloadWord,
     isAdmin = false,
     onUpdateReportSettings,
-    onSaveSettings,
     onMoveItem,
     onUpdateItemField
 }: ReportsViewProps) => {
@@ -36,47 +34,19 @@ export const ReportsView = ({
     const [isEditingTime, setIsEditingTime] = useState(false);
     const [tempMinutes, setTempMinutes] = useState<string>("");
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-    const handleSave = async () => {
-        if (onSaveSettings) {
-            setIsSavingSettings(true);
-            try {
-                await onSaveSettings();
-                setIsSettingsOpen(false);
-            } catch (error) {
-                console.error("Failed to save settings:", error);
-                Swal.fire("Error", "Failed to save settings to database.", "error");
-            } finally {
-                setIsSavingSettings(false);
-            }
-        } else {
-            setIsSettingsOpen(false);
-        }
-    };
-
-    const defaultSettings: ReportSettings = {
+    // Default settings if missing
+    const settings: ReportSettings = blueprint.reportSettings || {
         fontFamily: 'TAU-Paalai',
-        fontFamilyEnglish: 'Georgia',
-        headerFontStyle: 'Syne',
         fontSizeBody: 12,
         fontSizeTitle: 14,
         fontSizeTamil: 14,
-        lineHeight: 1.2,
         rowHeight: 35,
         columnWidths: {},
         showLogo: true,
         compactMode: false,
         orientation: 'p'
     };
-
-    const getSettingsForTab = (tab: string): ReportSettings => {
-        const perReport = blueprint.perReportSettings?.[tab];
-        if (perReport) return { ...defaultSettings, ...perReport };
-        return { ...defaultSettings, ...blueprint.reportSettings };
-    };
-
-    const settings = getSettingsForTab(activeTab);
 
     const getDisplayTime = (item: BlueprintItem) => {
         if (item.time !== undefined && item.time !== null && item.time !== 0) return item.time;
@@ -218,31 +188,6 @@ export const ReportsView = ({
         return <span className="english-font" style={{ fontFamily: "'Times New Roman', serif" }}>{result}</span>;
     };
 
-    const renderMixedText = (text: string | undefined | null) => {
-        if (!text) return '-';
-        
-        // Split by Tamil characters vs others (English/Numbers/Symbols)
-        const segments = text.toString().split(/([அ-ஹ\u0B80-\u0BFF]+)/);
-        
-        return segments.map((seg, i) => {
-            if (!seg) return null;
-            const isTamil = /[அ-ஹ\u0B80-\u0BFF]/.test(seg);
-            return (
-                <span 
-                    key={i} 
-                    className={isTamil ? "tamil-font" : "english-font"}
-                    style={{ 
-                        fontFamily: isTamil ? `'TAU-Paalai', 'Latha', serif` : `'Times New Roman', serif`,
-                        fontSize: isTamil ? `${settings.fontSizeTamil}pt` : `${settings.fontSizeBody}pt`,
-                        lineHeight: isTamil ? `1.4` : '1.2'
-                    }}
-                >
-                    {seg}
-                </span>
-            );
-        });
-    };
-
     const termTamil = blueprint.examTerm === ExamTerm.FIRST ? 'முதல்' : blueprint.examTerm === ExamTerm.SECOND ? 'இரண்டாம்' : 'மூன்றாம்';
     const termEnglish = blueprint.examTerm;
     const academicYear = blueprint.academicYear || '2025-26';
@@ -277,11 +222,7 @@ export const ReportsView = ({
     // PRINT HANDLER — Dynamically inject @page size before printing
     // ============================================================
     const handlePrint = () => {
-        const currentSettings = getSettingsForTab(activeTab);
-        const isLandscape = currentSettings.orientation 
-            ? currentSettings.orientation === 'l'
-            : (activeTab === 'report2' || activeTab === 'report3');
-
+        const isLandscape = activeTab === 'report2' || activeTab === 'report3';
         const existing = document.getElementById('qp-dynamic-print-page');
         if (existing) existing.remove();
         const style = document.createElement('style');
@@ -327,18 +268,13 @@ export const ReportsView = ({
     // PDF DOWNLOAD — Opens print dialog in a new window with header/footer
     // ============================================================
     const handleDownloadPDF = (tab: string) => {
-        const currentSettings = getSettingsForTab(tab);
-        // Use user preference if set, otherwise fallback to defaults
-        const isLandscape = currentSettings.orientation 
-            ? currentSettings.orientation === 'l'
-            : (tab === 'report2' || tab === 'report3');
+        const isLandscape = tab === 'report2' || tab === 'report3';
 
         // Pick the capture element id
         let captureId = '';
         if (tab === 'report1') captureId = 'pdf-report1-pages';
         else if (tab === 'report2') captureId = 'pdf-report2-page';
         else if (tab === 'report3') captureId = 'pdf-report3-page';
-        else if (tab === 'answerkey') captureId = 'pdf-answerkey-page';
         else captureId = 'pdf-report1-pages';
 
         const el = document.getElementById(captureId);
@@ -351,32 +287,6 @@ export const ReportsView = ({
 <meta charset="utf-8">
 <title>QP Design - ${blueprint.classLevel} - ${academicYear}</title>
 <style>
-/* ===== Font Setup ===== */
-@font-face {
-    font-family: 'TAU-Urai';
-    src: url('/fonts/TAU-Urai.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-}
-@font-face {
-    font-family: 'TAU-Urai';
-    src: url('/fonts/TAU-Urai Bold.ttf') format('truetype');
-    font-weight: bold;
-    font-style: normal;
-}
-@font-face {
-    font-family: 'TAU-Paalai';
-    src: url('/fonts/TAU-Paalai.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-}
-@font-face {
-    font-family: 'TAU-Paalai';
-    src: url('/fonts/TAU-Paalai Bold.ttf') format('truetype');
-    font-weight: bold;
-    font-style: normal;
-}
-
 /* ===== Page Setup ===== */
 @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
@@ -389,11 +299,45 @@ export const ReportsView = ({
 }
 html, body {
     margin: 0; padding: 0;
-    font-family: '${settings.fontFamilyEnglish || 'Georgia'}', '${settings.fontFamily}', serif;
+    font-family: Georgia, 'Times New Roman', serif;
     font-size: ${settings.fontSizeBody}pt;
-    line-height: ${settings.lineHeight};
     background: white;
     color: black;
+}
+
+/* ===== Fixed Header (repeats on every printed page) ===== */
+.pdf-page-header {
+    position: fixed;
+    top: -14mm;
+    left: 0; right: 0;
+    height: 12mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 2mm;
+    font-size: 7.5pt;
+    font-weight: bold;
+    border-bottom: 1px solid #555;
+    font-family: Arial, sans-serif;
+}
+
+/* ===== Fixed Footer (repeats on every printed page) ===== */
+.pdf-page-footer {
+    position: fixed;
+    bottom: -12mm;
+    left: 0; right: 0;
+    height: 10mm;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 7.5pt;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #555;
+    counter-increment: page;
+}
+
+.pdf-page-footer::after {
+    content: counter(page);
 }
 
 /* ===== Content wrapper ===== */
@@ -401,28 +345,11 @@ html, body {
     width: 100%;
 }
 
-/* ===== Sync with screen styles exactly ===== */
-table { 
-    border-collapse: collapse; 
-    width: 100%; 
-    font-family: '${settings.fontFamilyEnglish || 'Georgia'}', '${settings.fontFamily}', serif;
-}
-th, td { 
-    border: 1px solid black !important; 
-    padding: 6px 8px;
-    line-height: ${settings.lineHeight} !important;
-    height: ${settings.rowHeight}px;
-}
-th {
-    background-color: #f3f4f6 !important;
-    font-family: '${settings.headerFontStyle || 'Syne'}', sans-serif !important;
-    font-weight: bold;
-}
-.tamil-font, .report-topic-cell, .report-lo-cell { 
-    font-family: '${settings.fontFamily}', 'Latha', Arial Unicode MS, serif !important; 
-    font-size: ${settings.fontSizeTamil}pt !important; 
-    line-height: ${settings.lineHeight} !important; 
-}
+/* ===== Preserve all original table styles ===== */
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid black; }
+.tamil-font { font-family: '${settings.fontFamily}', 'Latha', Arial Unicode MS, serif !important; font-size: ${settings.fontSizeTamil}pt !important; }
+.report-topic-cell, .report-lo-cell { font-family: '${settings.fontFamily}', 'Latha', serif !important; font-size: ${settings.fontSizeTamil}pt !important; line-height: 1.4 !important; }
 .report-analysis-table { table-layout: fixed; width: 100% !important; border-collapse: collapse; }
 .report-analysis-table th, .report-analysis-table td { word-break: break-word; vertical-align: middle; border: 1px solid black !important; height: ${settings.rowHeight}px !important; }
 .break-after-page { break-after: page; page-break-after: always; }
@@ -485,16 +412,12 @@ window.onafterprint = function() {
     // WORD DOWNLOAD — Office HTML format (.doc)
     // ============================================================
     const handleDownloadWord = (tab: string) => {
-        const currentSettings = getSettingsForTab(tab);
-        const isLandscape = currentSettings.orientation 
-            ? currentSettings.orientation === 'l'
-            : (tab === 'report2' || tab === 'report3');
+        const isLandscape = tab === 'report2' || tab === 'report3';
 
         let captureId = '';
         if (tab === 'report1') captureId = 'pdf-report1-pages';
         else if (tab === 'report2') captureId = 'pdf-report2-page';
         else if (tab === 'report3') captureId = 'pdf-report3-page';
-        else if (tab === 'answerkey') captureId = 'pdf-answerkey-page';
         else captureId = 'pdf-report1-pages';
 
         const el = document.getElementById(captureId);
@@ -548,11 +471,9 @@ th, td {
     word-wrap: break-word;
 }
 .tamil-font, .report-topic-cell, .report-lo-cell {
+    font-family: "TAU-Paalai", "Latha", "Arial Unicode MS", serif;
     font-size: 14pt;
-    line-height: ${settings.lineHeight};
-}
-.english-font {
-    font-family: 'Times New Roman', serif;
+    line-height: 1.4;
 }
 .bg-gray-50 { background: #f9fafb; }
 .bg-gray-100 { background: #f3f4f6; }
@@ -642,7 +563,7 @@ ${bodyHTML}
             });
 
             return (
-                <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner reports-visible-content">
+                <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner">
                     <div className="flex justify-between items-start mb-4 relative">
                         <div className="flex-1 text-center">
                             <h1 className="text-2xl font-bold text-black border-b-2 border-black inline-block px-4 pb-0.5 uppercase tracking-tight">Question Paper Design - HS</h1>
@@ -650,14 +571,14 @@ ${bodyHTML}
                     </div>
 
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-4 text-[11pt] font-bold border-b border-black pb-3">
-                        <div className="flex"><span className="w-24 text-gray-700">Class</span><span className="mx-2">:</span><span className="english-font">{blueprint.classLevel}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2">:</span><span className="leading-none !text-[11pt] !font-normal !not-italic">{renderMixedText(subjectInfo.tamil)}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Set</span><span className="mx-2">:</span><span className="english-font">{setId}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Type</span><span className="mx-2">:</span><span className="english-font">{displayQpType}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Score</span><span className="mx-2">:</span><span className="english-font">{totalScore} Marks</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span className="english-font">{totalExamMinutes} Minutes</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic english-font">{termEnglish}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Year</span><span className="mx-2">:</span><span className="english-font">{academicYear}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Class</span><span className="mx-2">:</span><span>{blueprint.classLevel}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2">:</span><span className="tamil-font leading-none !text-[11pt] !font-normal !not-italic">{subjectInfo.tamil}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Set</span><span className="mx-2">:</span><span>{setId}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Type</span><span className="mx-2">:</span><span>{displayQpType}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Score</span><span className="mx-2">:</span><span>{totalScore} Marks</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span>{totalExamMinutes} Minutes</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic">{termEnglish}</span></div>
+                        <div className="flex"><span className="w-24 text-gray-700">Year</span><span className="mx-2">:</span><span>{academicYear}</span></div>
                     </div>
 
                     <div className="mb-4">
@@ -677,9 +598,9 @@ ${bodyHTML}
                                 {contentAreaStats.map((row, idx) => (
                                     <tr key={row.unit.id}>
                                         <td className="border border-black px-1 py-2 text-center align-middle">{idx + 1}</td>
-                                        <td className="border border-black px-1.5 py-2 tamil-font text-[9pt] text-left whitespace-pre-line">{row.unit.learningOutcomes || '-'}</td>
-                                        <td className="border border-black px-1.5 py-2 tamil-font text-left">{row.unit.name}</td>
-                                        <td className="border border-black px-1.5 py-2 tamil-font italic text-[9pt] text-left whitespace-pre-line">{row.unit.subUnits.map(s => s.name).join(', ')}</td>
+                                        <td className="border border-black px-1.5 py-2 tamil-font !leading-[1] text-left whitespace-pre-line">{row.unit.learningOutcomes || '-'}</td>
+                                        <td className="border border-black px-1.5 py-2 tamil-font !leading-[1] text-left">{row.unit.name}</td>
+                                        <td className="border border-black px-1.5 py-2 tamil-font !leading-[1] text-left whitespace-pre-line">{row.unit.subUnits.map(s => s.name).join(', ')}</td>
                                         <td className="border border-black px-1 py-2 text-center font-bold align-middle">{formatMark(row.score)}</td>
                                         <td className="border border-black px-1 py-2 text-center align-middle">{Math.round((row.score / totalScore) * 100)}%</td>
                                     </tr>
@@ -759,7 +680,7 @@ ${bodyHTML}
             const hasInternalChoice = totalInternalChoiceScore > 0;
 
             return (
-                <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner reports-visible-content">
+                <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner">
                     <div className="mb-4">
                         <h3 className="text-[12pt] font-bold text-black border-b border-black mb-1.5 pb-0.5 uppercase tracking-tight">III. Weightage to Knowledge Level</h3>
                         <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
@@ -1040,9 +961,9 @@ ${bodyHTML}
                     <th className="border border-black p-[2px] font-bold" style={{ fontSize: '7.5px' }}>Topic / Unit</th>
                     <th className="border border-black p-[2px] font-bold" style={{ fontSize: '7.5px' }}>Learning Objective</th>
                     <th className="border border-black p-[2px] font-bold" style={{ fontSize: '7.5px' }}>Sub Topic / Sub Unit</th>
-                    {cpDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
-                    {levelDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
-                    {formatDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    {cpDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    {levelDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    {formatDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
                 </tr>
             </thead>
         );
@@ -1074,48 +995,48 @@ ${bodyHTML}
                                     <tr key={su.subUnit.id} className="bg-white">
                                         {suIdx === 0 && (
                                             <>
-                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] report-topic-cell font-semibold align-top">{renderMixedText(`${row.unit.unitNumber}. ${row.unit.name}`)}</td>
-                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] report-lo-cell align-top">{renderMixedText(row.unit.learningOutcomes || '-')}</td>
+                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] tamil-font report-topic-cell font-semibold align-top">{`${row.unit.unitNumber}. ${row.unit.name}`}</td>
+                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] tamil-font report-lo-cell align-top">{row.unit.learningOutcomes || '-'}</td>
                                             </>
                                         )}
-                                        <td className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] report-topic-cell">{renderMixedText(su.subUnit.name)}</td>
-                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.stats.cp[def.key].count ? <>{su.stats.cp[def.key].count}({formatMark(su.stats.cp[def.key].score)})</> : ''}</td>)}
-                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.stats.levels[def.key].count ? <>{su.stats.levels[def.key].count}({formatMark(su.stats.levels[def.key].score)})</> : ''}</td>)}
-                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.stats.formats[def.key].count ? <>{su.stats.formats[def.key].count}({formatMark(su.stats.formats[def.key].score)})</> : ''}</td>)}
-                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.totalItems || ''}</td>
-                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] font-bold english-font">{su.totalScore ? formatMark(su.totalScore) : ''}</td>
-                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.totalTime || ''}</td>
+                                        <td className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] tamil-font report-topic-cell">{su.subUnit.name}</td>
+                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px]">{su.stats.cp[def.key].count ? `${su.stats.cp[def.key].count}(${formatMark(su.stats.cp[def.key].score)})` : ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px]">{su.stats.levels[def.key].count ? `${su.stats.levels[def.key].count}(${formatMark(su.stats.levels[def.key].score)})` : ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px]">{su.stats.formats[def.key].count ? `${su.stats.formats[def.key].count}(${formatMark(su.stats.formats[def.key].score)})` : ''}</td>)}
+                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px]">{su.totalItems || ''}</td>
+                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] font-bold">{su.totalScore ? formatMark(su.totalScore) : ''}</td>
+                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px]">{su.totalTime || ''}</td>
                                     </tr>
                                 ))}
                                 <tr className="bg-gray-100">
                                     <td colSpan={3} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] text-black font-normal">
                                         {row.hasOptions ? `Options / Choice Questions (${row.optionCount})` : 'Options / Choice Questions'}
                                     </td>
-                                    {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100 english-font">{row.optionStats.cp[def.key].count ? <>{row.optionStats.cp[def.key].count}({formatMark(row.optionStats.cp[def.key].score)})</> : ''}</td>)}
-                                    {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100 english-font">{row.optionStats.levels[def.key].count ? <>{row.optionStats.levels[def.key].count}({formatMark(row.optionStats.levels[def.key].score)})</> : ''}</td>)}
-                                    {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100 english-font">{row.optionStats.formats[def.key].count ? <>{row.optionStats.formats[def.key].count}({formatMark(row.optionStats.formats[def.key].score)})</> : ''}</td>)}
-                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-semibold bg-gray-100 english-font">{row.hasOptions ? row.optionCount : ''}</td>
-                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-bold bg-gray-100 english-font">{row.hasOptions ? formatMark(row.optionScore) : ''}</td>
+                                    {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100">{row.optionStats.cp[def.key].count ? `${row.optionStats.cp[def.key].count}(${formatMark(row.optionStats.cp[def.key].score)})` : ''}</td>)}
+                                    {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100">{row.optionStats.levels[def.key].count ? `${row.optionStats.levels[def.key].count}(${formatMark(row.optionStats.levels[def.key].score)})` : ''}</td>)}
+                                    {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100">{row.optionStats.formats[def.key].count ? `${row.optionStats.formats[def.key].count}(${formatMark(row.optionStats.formats[def.key].score)})` : ''}</td>)}
+                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-semibold bg-gray-100">{row.hasOptions ? row.optionCount : ''}</td>
+                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-bold bg-gray-100">{row.hasOptions ? formatMark(row.optionScore) : ''}</td>
                                     <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 bg-gray-100"></td>
                                 </tr>
                             </React.Fragment>
                         ))}
                         <tr className="bg-gray-200 font-bold">
                             <td colSpan={3} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Item</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.cp[def.key].count || ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.levels[def.key].count || ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.formats[def.key].count || ''}</td>)}
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[9px] font-bold english-font">{totalItemsInTable}</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px]">{grandTotals.cp[def.key].count || ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px]">{grandTotals.levels[def.key].count || ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px]">{grandTotals.formats[def.key].count || ''}</td>)}
+                            <td className="border border-black px-[1px] py-[4px] text-center text-[9px] font-bold">{totalItemsInTable}</td>
                             <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[9px] font-bold english-font" rowSpan={2}>{orderedItems.reduce((s, i) => s + getDisplayTime(i), 0)}</td>
+                            <td className="border border-black px-[1px] py-[4px] text-center text-[9px] font-bold" rowSpan={2}>{orderedItems.reduce((s, i) => s + getDisplayTime(i), 0)}</td>
                         </tr>
                         <tr className="bg-gray-200 font-bold">
                             <td colSpan={3} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Score</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px]">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px]">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px]">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
                             <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font">{formatMark(totalScoreInTable)}</td>
+                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold">{formatMark(totalScoreInTable)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1150,35 +1071,35 @@ ${bodyHTML}
                             const rowQuestionCount = getItemQuestionCount(row.item);
                             return (
                                 <tr key={row.id} className={isOptionRow ? "bg-gray-50/50" : "bg-white"}>
-                                    <td className="border border-black px-[2px] py-[2px] text-center text-[7.5px] font-bold english-font">{row.qNo}</td>
-                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] report-topic-cell font-semibold">{renderMixedText(row.unit ? `${row.unit.unitNumber}. ${row.unit.name}` : '-')}</td>
-                                    <td className="border border-black px-[3px] py-[2px] text-[7px] leading-[1.02] report-lo-cell">{renderMixedText(row.unit?.learningOutcomes || '-')}</td>
-                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] report-topic-cell">{renderMixedText(row.subUnit?.name || '-')}</td>
-                                    {cpDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] english-font ${row.cognitiveProcess === def.value ? "font-bold" : ""}`}>{row.cognitiveProcess === def.value ? <>{rowQuestionCount} ({formatMark(rowMarks)})</> : ''}</td>)}
-                                    {levelDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] english-font ${row.knowledgeLevel === def.value ? "font-bold" : ""}`}>{row.knowledgeLevel === def.value ? <>{rowQuestionCount} ({formatMark(rowMarks)})</> : ''}</td>)}
-                                    {formatDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] english-font ${row.itemFormat === def.value ? "font-bold" : ""}`}>{row.itemFormat === def.value ? <>{rowQuestionCount} ({formatMark(rowMarks)})</> : ''}</td>)}
-                                    <td className="border border-black px-[1px] py-[2px] text-center text-[7px] english-font">{rowQuestionCount}</td>
-                                    <td className="border border-black px-[1px] py-[2px] text-center text-[7px] font-bold english-font">{formatMark(rowMarks)}</td>
-                                    <td className="border border-black px-[1px] py-[2px] text-center text-[7px] english-font">{getDisplayTime(row.item)}</td>
+                                    <td className="border border-black px-[2px] py-[2px] text-center text-[7.5px] font-bold">{row.qNo}</td>
+                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] tamil-font report-topic-cell font-semibold">{row.unit ? `${row.unit.unitNumber}. ${row.unit.name}` : '-'}</td>
+                                    <td className="border border-black px-[3px] py-[2px] text-[7px] leading-[1.02] tamil-font report-lo-cell">{row.unit?.learningOutcomes || '-'}</td>
+                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] tamil-font report-topic-cell">{row.subUnit?.name || '-'}</td>
+                                    {cpDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] ${row.cognitiveProcess === def.value ? "bg-gray-100 font-bold" : ""}`}>{row.cognitiveProcess === def.value ? `${rowQuestionCount} (${formatMark(rowMarks)})` : ''}</td>)}
+                                    {levelDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] ${row.knowledgeLevel === def.value ? "bg-gray-100 font-bold" : ""}`}>{row.knowledgeLevel === def.value ? `${rowQuestionCount} (${formatMark(rowMarks)})` : ''}</td>)}
+                                    {formatDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] ${row.itemFormat === def.value ? "bg-gray-100 font-bold" : ""}`}>{row.itemFormat === def.value ? `${rowQuestionCount} (${formatMark(rowMarks)})` : ''}</td>)}
+                                    <td className="border border-black px-[1px] py-[2px] text-center text-[7px]">{rowQuestionCount}</td>
+                                    <td className="border border-black px-[1px] py-[2px] text-center text-[7px] font-bold">{formatMark(rowMarks)}</td>
+                                    <td className="border border-black px-[1px] py-[2px] text-center text-[7px]">{getDisplayTime(row.item)}</td>
                                 </tr>
                             );
                         })}
                         <tr className="bg-gray-200 font-bold">
                             <td colSpan={4} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Item</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.cp[def.key].count || ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.levels[def.key].count || ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.formats[def.key].count || ''}</td>)}
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font">{tableTotalItems}</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px]">{totals.stats.cp[def.key].count || ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px]">{totals.stats.levels[def.key].count || ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px]">{totals.stats.formats[def.key].count || ''}</td>)}
+                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold">{tableTotalItems}</td>
                             <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font" rowSpan={2}>{orderedItems.reduce((s, i) => s + getDisplayTime(i), 0)}</td>
+                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold" rowSpan={2}>{orderedItems.reduce((s, i) => s + getDisplayTime(i), 0)}</td>
                         </tr>
                         <tr className="bg-gray-200 font-bold">
                             <td colSpan={4} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Score</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.cp[def.key].score ? formatMark(totals.stats.cp[def.key].score) : ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.levels[def.key].score ? formatMark(totals.stats.levels[def.key].score) : ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.formats[def.key].score ? formatMark(totals.stats.formats[def.key].score) : ''}</td>)}
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px]">{totals.stats.cp[def.key].score ? formatMark(totals.stats.cp[def.key].score) : ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px]">{totals.stats.levels[def.key].score ? formatMark(totals.stats.levels[def.key].score) : ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px]">{totals.stats.formats[def.key].score ? formatMark(totals.stats.formats[def.key].score) : ''}</td>)}
                             <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font">{formatMark(tableTotalMarks)}</td>
+                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold">{formatMark(tableTotalMarks)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1189,10 +1110,6 @@ ${bodyHTML}
     // ============================================================
     // MAIN RENDER
     // ============================================================
-    const isLandscape = settings.orientation 
-        ? settings.orientation === 'l' 
-        : (activeTab === 'report2' || activeTab === 'report3');
-
     return (
         <div className="mt-10 w-full text-black reports-container relative overflow-x-auto">
 
@@ -1207,49 +1124,62 @@ ${bodyHTML}
             {/* ─── Sticky Tab Bar ─── */}
             <div className="sticky top-[72px] z-30 bg-white py-4 mb-4 no-print border-b flex justify-center items-center gap-4 flex-wrap px-4">
                 <div className="flex bg-gray-100 p-1 border border-black/20 overflow-x-auto scrollbar-hide">
-                    {['report1', 'report2', 'report3', 'answerkey'].map(tab => (
+                    {['report1', 'report2', 'report3'].map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === tab ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'}`}>
-                            {tab === 'report1' ? 'Report 1' : tab === 'report2' ? 'Report 2' : tab === 'report3' ? 'Report 3' : 'Answer Key'}
+                            {tab === 'report1' ? 'Report 1' : tab === 'report2' ? 'Report 2' : 'Report 3'}
                         </button>
                     ))}
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={() => handleDownloadPDF(activeTab)}
-                        className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
-                        <Download size={18} /> PDF
-                    </button>
-                    {isAdmin && (
-                        <button onClick={() => handleDownloadWord(activeTab)}
-                            className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
-                            <FileText size={18} /> Word
-                        </button>
+                    {isAdmin ? (
+                        <>
+                            <button onClick={() => handleDownloadPDF(activeTab)}
+                                className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
+                                <Download size={18} /> PDF
+                            </button>
+                            <button onClick={() => handleDownloadWord(activeTab)}
+                                className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
+                                <FileText size={18} /> Word
+                            </button>
+                            <button onClick={handlePrint}
+                                className="bg-black text-white border-2 border-black px-5 py-2 font-bold hover:bg-gray-800 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
+                                <Printer size={18} /> Print
+                            </button>
+                            <button onClick={() => setIsSettingsOpen(true)}
+                                className="bg-gray-100 text-black border-2 border-gray-300 px-5 py-2 font-bold hover:bg-gray-200 flex items-center gap-2 transition-all text-sm md:text-base outline-none rounded-lg"
+                                title="Report Settings">
+                                <Settings size={18} />
+                            </button>
+                        </>
+                    ) : (
+                        <div className="text-gray-400 font-bold px-4 py-2 border-2 border-gray-100 rounded bg-gray-50 flex items-center gap-2">
+                             Preview Mode
+                        </div>
                     )}
-                    <button onClick={handlePrint}
-                        className="bg-black text-white border-2 border-black px-5 py-2 font-bold hover:bg-gray-800 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
-                        <Printer size={18} /> Print
-                    </button>
-                    <button onClick={() => setIsSettingsOpen(true)}
-                        className="bg-gray-100 text-black border-2 border-gray-300 px-5 py-2 font-bold hover:bg-gray-200 flex items-center gap-2 transition-all text-sm md:text-base outline-none rounded-lg"
-                        title="Report Settings">
-                        <Settings size={18} />
-                    </button>
                 </div>
             </div>
 
             {/* ─── Visible Report Content ─── */}
-            <div className="reports-visible-content" style={{ fontFamily: `${settings.fontFamilyEnglish || 'Georgia'}, ${settings.fontFamily}, serif`, fontSize: `${settings.fontSizeBody}pt` }}>
+            <div className="reports-visible-content relative overflow-hidden">
+                {!isAdmin && (
+                    <div className="absolute inset-0 pointer-events-none z-[100] flex items-center justify-center">
+                        <div className="text-[120pt] font-black text-gray-400/10 rotate-[-45deg] select-none uppercase tracking-widest whitespace-nowrap">
+                            Draft
+                        </div>
+                    </div>
+                )}
 
                 {/* REPORT 1 — A4 Portrait */}
                 {activeTab === 'report1' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} mx-auto`}>
+                    <div className="report-1-screen-wrapper mx-auto">
                         {/* Page 1 */}
-                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow mb-4 border border-gray-200 p-[12mm]`}>
+                        <div className="report-1-screen-page bg-white shadow mb-4 border border-gray-200 p-[12mm]">
                             {renderReport1Content(1)}
                         </div>
                         {/* Page 2 */}
-                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow border border-gray-200 p-[12mm]`}>
+                        <div className="report-1-screen-page bg-white shadow border border-gray-200 p-[12mm]">
                             {renderReport1Content(2)}
                         </div>
                     </div>
@@ -1257,29 +1187,15 @@ ${bodyHTML}
 
                 {/* REPORT 2 — Landscape */}
                 {activeTab === 'report2' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>
+                    <div className="report-landscape-screen-wrapper bg-white shadow border border-gray-200 p-4 overflow-x-auto">
                         {renderReport2Content()}
                     </div>
                 )}
 
                 {/* REPORT 3 — Landscape */}
                 {activeTab === 'report3' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>
+                    <div className="report-landscape-screen-wrapper bg-white shadow border border-gray-200 p-4 overflow-x-auto">
                         {renderReport3Content()}
-                    </div>
-                )}
-
-                {/* ANSWER KEY — Portrait */}
-                {activeTab === 'answerkey' && (
-                    <div className="report-1-screen-wrapper mx-auto">
-                        <div className="report-1-screen-page bg-white shadow border border-gray-200 p-[12mm]">
-                            <AnswerKeyView
-                                blueprint={blueprint}
-                                curriculum={curriculum}
-                                discourses={discourses}
-                                isPdf={false}
-                            />
-                        </div>
                     </div>
                 )}
             </div>
@@ -1309,18 +1225,6 @@ ${bodyHTML}
                         {renderReport3Content()}
                     </div>
                 </div>
-
-                {/* Answer Key capture */}
-                <div id="pdf-answerkey-page" style={{ position: 'absolute', left: '-99999px', top: 0, width: '190mm', background: 'white', pointerEvents: 'none' }}>
-                    <div style={{ padding: '10mm 10mm 8mm' }}>
-                        <AnswerKeyView
-                            blueprint={blueprint}
-                            curriculum={curriculum}
-                            discourses={discourses}
-                            isPdf={true}
-                        />
-                    </div>
-                </div>
             </div>
 
             {/* ─── Settings Modal ─── */}
@@ -1336,76 +1240,23 @@ ${bodyHTML}
                             </button>
                         </div>
                         <div className="p-6 space-y-5">
-                            <div className="bg-blue-50 -mx-6 -mt-6 px-6 py-3 mb-2 border-b border-blue-100 flex items-center justify-between">
-                                <span className="text-xs font-black uppercase tracking-widest text-blue-700">Settings for: {activeTab === 'report1' ? 'Report 1' : activeTab === 'report2' ? 'Report 2' : activeTab === 'report3' ? 'Report 3' : 'Answer Key'}</span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Tamil Font Family</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontFamily}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontFamily: e.target.value } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="TAU-Paalai">TAU-Paalai (Recommended)</option>
-                                        <option value="Latha">Latha</option>
-                                        <option value="Arial Unicode MS">Arial Unicode MS</option>
-                                        <option value="serif">Serif</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">English Font Family</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontFamilyEnglish || 'Georgia'}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontFamilyEnglish: e.target.value } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="Georgia">Georgia</option>
-                                        <option value="Times New Roman">Times New Roman</option>
-                                        <option value="Arial">Arial</option>
-                                        <option value="Verdana">Verdana</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Header Font Style</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.headerFontStyle || 'Syne'}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, headerFontStyle: e.target.value } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="Syne">Syne</option>
-                                        <option value="DM Sans">DM Sans</option>
-                                        <option value="Arial">Arial</option>
-                                        <option value="Georgia">Georgia</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Page Orientation</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.orientation || 'p'}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, orientation: e.target.value as 'p' | 'l' } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="p">Portrait</option>
-                                        <option value="l">Landscape</option>
-                                    </select>
-                                </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">Tamil Font Family</label>
+                                <select
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-gray-50"
+                                    value={settings.fontFamily}
+                                    onChange={(e) => {
+                                        onUpdateReportSettings && onUpdateReportSettings({
+                                            ...settings,
+                                            fontFamily: e.target.value
+                                        });
+                                    }}
+                                >
+                                    <option value="TAU-Paalai">TAU-Paalai (Recommended)</option>
+                                    <option value="Latha">Latha</option>
+                                    <option value="Arial Unicode MS">Arial Unicode MS</option>
+                                    <option value="serif">Browser Default Serif</option>
+                                </select>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -1415,26 +1266,28 @@ ${bodyHTML}
                                         type="number"
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
                                         value={settings.fontSizeTamil}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontSizeTamil: parseInt(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, fontSizeTamil: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">Title Font Size</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
+                                        value={settings.fontSizeTitle}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, fontSizeTitle: parseInt(e.target.value) })}
                                     />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Line Spacing</label>
+                                    <label className="text-sm font-bold text-gray-700">Body Font Size</label>
                                     <input
                                         type="number"
-                                        step="0.1"
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.lineHeight}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, lineHeight: parseFloat(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
+                                        value={settings.fontSizeBody}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, fontSizeBody: parseInt(e.target.value) })}
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -1443,49 +1296,17 @@ ${bodyHTML}
                                         type="number"
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
                                         value={settings.rowHeight}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, rowHeight: parseInt(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">English Font Size</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontSizeBody}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontSizeBody: parseInt(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
+                                        onChange={(e) => onUpdateReportSettings?.({ ...settings, rowHeight: parseInt(e.target.value) })}
                                     />
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+                        <div className="bg-gray-50 px-6 py-4 flex justify-end">
                             <button
                                 onClick={() => setIsSettingsOpen(false)}
-                                className="px-6 py-3 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition-all"
-                                disabled={isSavingSettings}
+                                className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg shadow-blue-100"
                             >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSavingSettings}
-                                className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isSavingSettings ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        Saving...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Check size={20} /> Save Settings
-                                    </>
-                                )}
+                                <Check size={20} /> Done
                             </button>
                         </div>
                     </div>
@@ -1498,11 +1319,6 @@ ${bodyHTML}
 /* ======================================================
    SCREEN styles
 ====================================================== */
-.reports-visible-content {
-    font-family: '${settings.fontFamilyEnglish || 'Georgia'}', serif !important;
-    font-size: ${settings.fontSizeBody}pt !important;
-}
-
 .report-1-screen-wrapper {
     width: 210mm;
     max-width: 100%;
@@ -1512,53 +1328,37 @@ ${bodyHTML}
     min-height: 297mm;
 }
 .report-landscape-screen-wrapper {
-    width: 297mm;
-    max-width: 100%;
+    width: 100%;
+    max-width: 297mm;
     margin: 0 auto;
     min-height: 210mm;
 }
 
-/* Global Table Overrides for Report 1 */
-.reports-visible-content table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.reports-visible-content th, 
-.reports-visible-content td {
-    border: 1px solid black !important;
-    padding: 6px 8px;
-    line-height: ${settings.lineHeight} !important;
-}
-.reports-visible-content th {
-    background-color: #f3f4f6 !important;
-    font-weight: bold;
-    text-align: center;
-    font-family: '${settings.headerFontStyle || 'Syne'}', sans-serif !important;
-}
 /* Tamil font */
-.tamil-font {
-    line-height: ${settings.lineHeight} !important;
-}
+.tamil-font,
 .report-topic-cell,
 .report-lo-cell {
-    line-height: ${settings.lineHeight} !important;
+    font-family: '${settings.fontFamily}', 'Latha', Arial Unicode MS, serif !important;
 }
-.english-font {
-    font-family: 'Times New Roman', serif !important;
-}
+.report-lo-cell  { font-size: ${settings.fontSizeTamil - 5}pt !important; line-height: 1.5 !important; }
+.report-topic-cell { font-size: ${settings.fontSizeTamil - 5}pt !important; line-height: 1.5 !important; }
 
-/* Row Height */
-.reports-visible-content tr {
-    min-height: ${settings.rowHeight}px;
+/* Analysis table */
+.report-analysis-table {
+    table-layout: fixed;
+    width: 100% !important;
+    border-collapse: collapse;
 }
-.reports-visible-content td {
-    height: ${settings.rowHeight}px;
+.report-analysis-table th,
+.report-analysis-table td {
+    word-break: break-word;
+    vertical-align: middle;
+    border: 1px solid black !important;
 }
 
 .break-after-page {
     break-after: page;
     page-break-after: always;
-}
 }
 
 /* ======================================================
@@ -1578,65 +1378,83 @@ ${bodyHTML}
         padding: 0 !important;
         background: white !important;
         overflow: visible !important;
-        font-family: '${settings.fontFamilyEnglish || 'Georgia'}', serif !important;
-        font-size: ${settings.fontSizeBody}pt !important;
     }
 
     /* ─── Hide all UI chrome ─── */
     .no-print,
-    .sticky,
-    .reports-view-container > div:first-child {
+    .sticky {
         display: none !important;
+    }
+
+    /* ─── Remove overflow/scroll from all elements ─── */
+    * {
+        overflow: visible !important;
+        max-height: none !important;
     }
 
     /* ─── Report 1: Portrait ─── */
     .report-1-screen-wrapper {
         width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
     }
     .report-1-screen-page {
         width: 100% !important;
-        min-height: 297mm !important;
-        padding: 10mm !important;
-        margin: 0 !important;
-        border: none !important;
+        min-height: 0 !important;
         box-shadow: none !important;
+        border: none !important;
+        padding: 8mm 8mm 6mm !important;
+        margin: 0 !important;
         break-after: page;
         page-break-after: always;
     }
-
-    /* Table styles matching screen exactly */
-    table {
+    .report-1-screen-page:last-child {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+    }
+    .r1-page-inner {
         width: 100% !important;
-        border-collapse: collapse !important;
-    }
-    th, td {
-        border: 1px solid black !important;
-        padding: 6px 8px !important;
-        line-height: ${settings.lineHeight} !important;
-        height: ${settings.rowHeight}px !important;
-    }
-    th {
-        background-color: #f3f4f6 !important;
-        font-family: '${settings.headerFontStyle || 'Syne'}', sans-serif !important;
+        min-height: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
     }
 
-    .tamil-font, .report-topic-cell, .report-lo-cell {
-        font-size: ${settings.fontSizeTamil}pt !important;
-        line-height: ${settings.lineHeight} !important;
-    }
-    .english-font {
-        font-family: 'Times New Roman', serif !important;
+    /* ─── Reports 2 & 3: Landscape ─── */
+    .report-landscape-screen-wrapper {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 4mm !important;
+        box-shadow: none !important;
+        border: none !important;
+        min-height: 0 !important;
+        overflow: visible !important;
     }
 
+    /* ─── Analysis table in print ─── */
+    .report-analysis-table {
+        font-size: 7px !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+    }
+    .report-analysis-table th,
+    .report-analysis-table td {
+        padding: 0.5mm 0.8mm !important;
+        line-height: 1.1 !important;
+        font-size: 7px !important;
+        border-width: 0.5pt !important;
+    }
+
+    /* ─── Hide hidden capture divs in print ─── */
     #pdf-report1-pages,
     #pdf-report2-page,
-    #pdf-report3-page,
-    #pdf-answerkey-page {
+    #pdf-report3-page {
         display: none !important;
     }
 
+    /* ─── Prevent table row from splitting across pages ─── */
     tr { break-inside: avoid; page-break-inside: avoid; }
 }
 `}} />

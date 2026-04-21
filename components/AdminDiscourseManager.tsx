@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import { Discourse, SubjectType, CognitiveProcess, DiscourseScores } from '@/types';
 import { getDiscourses, saveDiscourses } from '@/services/db';
-import { Plus, Trash2, Edit2, X, Search } from 'lucide-react';
+import { Plus, Trash2, Edit2, X, Search, Printer } from 'lucide-react';
 
 const AdminDiscourseManager: React.FC = () => {
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
@@ -10,6 +11,100 @@ const AdminDiscourseManager: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterSubject, setFilterSubject] = useState<string>('All');
+
+    const formatMarkString = (m: number) => {
+        const s = m.toString();
+        if (s.endsWith('.5')) {
+            const whole = s.split('.')[0];
+            return whole === '0' ? '½' : `${whole}½`;
+        }
+        return s;
+    };
+
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const subjectTitle = filterSubject === 'All' ? 'All Subjects' : filterSubject;
+        
+        let tableRows = '';
+        filteredDiscourses.forEach((d, idx) => {
+            let rubricsHtml = '';
+            if (d.rubrics && d.rubrics.length > 0) {
+                rubricsHtml = `<div style="margin-top: 8px; margin-left: 20px; font-size: 11pt;">
+                    ${d.rubrics.map(r => `
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #eee; padding: 2px 0;">
+                            <span>${r.point}</span>
+                            <span style="font-family: 'Times New Roman', serif; font-weight: bold; margin-left: 20px;">${formatMarkString(r.marks)}</span>
+                        </div>
+                    `).join('')}
+                </div>`;
+            }
+
+            tableRows += `
+                <tr>
+                    <td style="text-align: center; font-family: 'Times New Roman', serif;">${idx + 1}</td>
+                    <td>
+                        <div style="font-weight: bold; font-size: 13pt;">${d.name}</div>
+                        ${rubricsHtml}
+                    </td>
+                    <td style="text-align: center; font-family: 'Times New Roman', serif; font-weight: bold;">${formatMarkString(d.marks)}</td>
+                    <td style="text-align: center; font-size: 10pt;">${d.cognitiveProcess || '-'}</td>
+                </tr>
+            `;
+        });
+
+        const html = `
+            <html>
+                <head>
+                    <title>Discourses - ${subjectTitle}</title>
+                    <style>
+                        @font-face {
+                            font-family: 'TAU-Paalai';
+                            src: url('/fonts/TAU-Paalai.ttf') format('truetype');
+                        }
+                        body { font-family: 'TAU-Paalai', 'Times New Roman', serif; padding: 20px; }
+                        h2 { text-align: center; color: #333; margin-bottom: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th, td { border: 1px solid #333; padding: 10px; text-align: left; vertical-align: top; }
+                        th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+                        .tamil-font { font-family: 'TAU-Paalai', serif; }
+                        @media print {
+                            button { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h2>Discourses & Rubrics Analysis - ${subjectTitle}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">Sl No</th>
+                                <th>Discourse</th>
+                                <th style="width: 80px;">Total Marks</th>
+                                <th style="width: 150px;">Cognitive Process</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                    <script>
+                        window.onload = () => { 
+                            // Give fonts a moment to load if needed
+                            setTimeout(() => {
+                                window.print();
+                                // window.close(); 
+                            }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `;
+
+        printWindow.document.write(html);
+        printWindow.document.close();
+    };
 
     const [formData, setFormData] = useState<Partial<Discourse>>({
         name: '',
@@ -36,7 +131,7 @@ const AdminDiscourseManager: React.FC = () => {
     };
 
     const handleSave = async () => {
-        if (!formData.name) return;
+        if (!formData.name) return Swal.fire("Required", "Discourse name is required", "warning");
 
         try {
             const all = await getDiscourses();
@@ -50,13 +145,14 @@ const AdminDiscourseManager: React.FC = () => {
                 } as Discourse;
                 await saveDiscourses([...all, newDiscourse]);
             }
+            Swal.fire("Saved", "Discourse saved successfully", "success");
             setIsFormOpen(false);
             setEditingDiscourse(null);
             resetForm();
             loadData();
         } catch (error) {
             console.error('Error saving discourse:', error);
-            alert("Error saving discourse. Please check your connection and login session.");
+            Swal.fire("Error", "Error saving discourse. Please check your connection.", "error");
         }
     };
 
@@ -67,11 +163,26 @@ const AdminDiscourseManager: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Are you sure you want to delete this discourse?')) {
-            const all = await getDiscourses();
-            await saveDiscourses(all.filter(d => d.id !== id));
-            loadData();
-        }
+        Swal.fire({
+            title: "Are you sure?",
+            text: "You won't be able to revert this!",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, delete it!"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    const all = await getDiscourses();
+                    await saveDiscourses(all.filter(d => d.id !== id));
+                    Swal.fire("Deleted", "Discourse has been removed", "success");
+                    loadData();
+                } catch (error) {
+                    Swal.fire("Error", "Failed to delete discourse", "error");
+                }
+            }
+        });
     };
 
     const resetForm = () => {
@@ -110,7 +221,39 @@ const AdminDiscourseManager: React.FC = () => {
         return matchesSearch && matchesSubject;
     });
 
-    const formatMark = (m: number) => (m % 1 === 0 ? m.toString() : m.toFixed(1));
+    const formatMark = (m: number) => {
+        const s = m.toString();
+        let result = s;
+        if (s.endsWith('.5')) {
+            const whole = s.split('.')[0];
+            result = whole === '0' ? '½' : `${whole}½`;
+        }
+        return <span className="english-font" style={{ fontFamily: "'Times New Roman', serif" }}>{result}</span>;
+    };
+
+    const renderMixedText = (text: string | undefined | null) => {
+        if (!text) return '-';
+        // Split by Tamil characters vs others (English/Numbers/Symbols)
+        const segments = text.toString().split(/([அ-ஹ\u0B80-\u0BFF]+)/);
+        
+        return segments.map((seg, i) => {
+            if (!seg) return null;
+            const isTamil = /[அ-ஹ\u0B80-\u0BFF]/.test(seg);
+            return (
+                <span 
+                    key={i} 
+                    className={isTamil ? "tamil-font" : "english-font"}
+                    style={{ 
+                        fontFamily: isTamil ? `'TAU-Paalai', 'Latha', serif` : `'Times New Roman', serif`,
+                        fontSize: isTamil ? 'inherit' : 'inherit',
+                        lineHeight: isTamil ? '1.4' : '1.2'
+                    }}
+                >
+                    {seg}
+                </span>
+            );
+        });
+    };
 
     if (loading) return <div className="p-8 text-center text-gray-500">Loading discourses...</div>;
 
@@ -137,6 +280,13 @@ const AdminDiscourseManager: React.FC = () => {
                         <option value="All">All Subjects</option>
                         {Object.values(SubjectType).map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <button
+                        onClick={handlePrint}
+                        className="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded flex items-center shadow hover:border-blue-300 hover:text-blue-600 transition-all"
+                        title="Print Discourses"
+                    >
+                        <Printer size={18} className="mr-2" /> Print
+                    </button>
                     <button
                         onClick={() => {
                             resetForm();
@@ -296,10 +446,10 @@ const AdminDiscourseManager: React.FC = () => {
                             <div>
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <h3 className="font-bold text-gray-800">{d.name}</h3>
+                                        <h3 className="font-bold text-gray-800">{renderMixedText(d.name)}</h3>
                                         <div className="flex gap-2 mt-1">
                                             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{d.subject}</span>
-                                            <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">{d.marks} Marks</span>
+                                            <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded english-font">{formatMark(d.marks)} Marks</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-1">
@@ -309,10 +459,10 @@ const AdminDiscourseManager: React.FC = () => {
                                 </div>
                                 {d.rubrics && d.rubrics.length > 0 && (
                                     <div className="mt-3 pt-3 border-t text-sm text-gray-600">
-                                        <p className="text-xs font-semibold text-gray-400 mb-1">RUBRICS</p>
+                                        <p className="text-xs font-semibold text-gray-400 mb-1 uppercase">Rubrics</p>
                                         <ul className="list-disc pl-4 space-y-1 mb-2">
                                             {d.rubrics.slice(0, 5).map((r, i) => (
-                                                <li key={i}>{r.point} - <b>{formatMark(r.marks)}</b></li>
+                                                <li key={i}>{renderMixedText(r.point)} - <b>{formatMark(r.marks)}</b></li>
                                             ))}
                                             {d.rubrics.length > 5 && <li className="text-xs italic text-blue-500 font-semibold">+{d.rubrics.length - 5} More...</li>}
                                         </ul>

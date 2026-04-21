@@ -90,14 +90,6 @@ const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
                         Login
                     </button>
                 </form>
-
-                <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-                    <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mb-2">Demo Credentials</p>
-                    <div className="flex justify-center gap-4 text-sm">
-                        <div className="text-gray-500"><span className="font-bold">Admin:</span> admin / admin</div>
-                        <div className="text-gray-500"><span className="font-bold">User:</span> user / user</div>
-                    </div>
-                </div>
             </div>
         </div>
     );

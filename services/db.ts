@@ -23,24 +23,9 @@ const isLoopbackUrl = (value: string) => {
 
 const resolveApiUrl = () => {
   const envUrl = (import.meta as any)?.env?.VITE_API_URL;
-  const browserHostname = typeof window !== 'undefined' ? window.location.hostname : '';
-  const runningLocally = isLocalHostname(browserHostname);
-
   if (envUrl && typeof envUrl === 'string') {
-    const normalized = envUrl.trim().replace(/\/$/, '');
-
-    // Prevent production deployments from calling a developer's localhost API.
-    if (!(isLoopbackUrl(normalized) && !runningLocally)) {
-      return normalized;
-    }
-
-    console.warn('Ignoring VITE_API_URL because it points to localhost in a non-local environment.');
+    return envUrl.trim().replace(/\/$/, '');
   }
-
-  if (runningLocally) {
-    return 'http://localhost:5001/api';
-  }
-
   return '/api';
 };
 
@@ -177,6 +162,13 @@ export const saveUsers = async (users: User[]): Promise<void> => {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ users })
+  }).then(handleResponse);
+};
+
+export const deleteUser = async (id: string): Promise<void> => {
+  await fetch(`${API_URL}/users?id=${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
   }).then(handleResponse);
 };
 

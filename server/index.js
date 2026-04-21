@@ -116,7 +116,7 @@ const ensureDbReady = async () => {
 };
 
 if (MONGO_URI) {
-  connectToMongo().catch(() => {});
+  connectToMongo().catch(() => { });
   mongoose.connection.on('error', (err) => {
     console.error('MongoDB runtime error:', err.message);
     dbConnectionState = 'error';
@@ -191,7 +191,7 @@ app.get('/init', async (req, res) => {
     if (!(await ensureDbReady())) return serviceUnavailable(res);
 
     const [users, curriculums, examConfigs, paperTypes, discourses, settings] = await Promise.all([
-      User.find(), Curriculum.find(), ExamConfig.find(), 
+      User.find(), Curriculum.find(), ExamConfig.find(),
       PaperType.find(), Discourse.find(), SystemSettings.findOne()
     ]);
 
@@ -218,7 +218,7 @@ app.post('/login', async (req, res) => {
 
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
-    
+
     if (!username || !password) {
       console.log('Login attempt failed: Username or password missing');
       return res.status(400).json({ error: 'Username and password are required' });
@@ -237,7 +237,7 @@ app.post('/login', async (req, res) => {
       console.log(`Login attempt failed: Incorrect password for "${username}"`);
       return res.status(400).json({ error: 'Incorrect password' });
     }
-    
+
     console.log(`Login successful for user: ${username}`);
     const normalizedUserId = getEntityId(user);
     const token = jwt.sign({ id: normalizedUserId, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
@@ -265,7 +265,7 @@ app.put('/profile', auth, async (req, res) => {
     if (!(await ensureDbReady())) return serviceUnavailable(res);
     const userId = req.user.id;
     const updates = req.body;
-    
+
     // Security: Prevent sensitive field changes
     delete updates.role;
     delete updates.username;
@@ -287,9 +287,9 @@ app.put('/profile', auth, async (req, res) => {
 
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(normalizeUser(user));
-  } catch (err) { 
+  } catch (err) {
     console.error('Profile update error:', err);
-    res.status(500).json({ error: err.message }); 
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -310,10 +310,29 @@ app.route('/users')
     if (!isDbReady()) return serviceUnavailable(res);
     const users = Array.isArray(req.body) ? req.body : req.body.users;
     for (const u of users) {
-      if (u.password && !u.password.startsWith('$2a$')) u.password = await bcrypt.hash(u.password, 10);
+      if (u.password && !u.password.match(/^\$2[ayb]\$.{56}$/)) {
+        u.password = await bcrypt.hash(u.password, 10);
+      }
       await User.findOneAndUpdate({ id: u.id }, u, { upsert: true });
     }
     res.json({ success: true });
+  })
+  .delete(auth, async (req, res) => {
+    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
+    if (!isDbReady()) return serviceUnavailable(res);
+    try {
+      const { id } = req.query;
+      if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+      // Support both custom id and MongoDB _id
+      const query = { $or: [{ id }] };
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        query.$or.push({ _id: id });
+      }
+
+      await User.deleteOne(query);
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
 // 4. /curriculums - Curriculum Management
@@ -449,7 +468,7 @@ app.put('/profile', auth, async (req, res) => {
     if (!(await ensureDbReady())) return serviceUnavailable(res);
     const userId = req.user.id;
     const updateData = req.body;
-    
+
     // Safety: Don't allow changing critical fields via simple profile update
     delete updateData.role;
     delete updateData.username;
@@ -462,7 +481,7 @@ app.put('/profile', auth, async (req, res) => {
       { $set: updateData },
       { new: true }
     );
-    
+
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(normalizeUser(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -478,6 +497,20 @@ app.get('/health', (req, res) => {
     error: healthy ? null : dbUnavailableMessage(),
     time: new Date()
   });
+});
+
+// EMERGENCY: Admin password reset route (visit /api/reset-admin to use)
+app.get('/reset-admin', async (req, res) => {
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const hashedPassword = await bcrypt.hash('admin', 10);
+    await User.findOneAndUpdate(
+      { username: 'admin' },
+      { password: hashedPassword, role: 'ADMIN', name: 'System Administrator' },
+      { upsert: true }
+    );
+    res.send('Admin password has been reset to "admin". Please delete this route after use for security.');
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 module.exports = app;
@@ -504,5 +537,5 @@ if (require.main === module) {
   });
 
   // Keep-alive just in case
-  setInterval(() => {}, 60000);
+  setInterval(() => { }, 60000);
 }

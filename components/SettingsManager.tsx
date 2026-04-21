@@ -1,5 +1,5 @@
-
 import React, { useState } from 'react';
+import Swal from 'sweetalert2';
 import { ClassGrade, CognitiveLevel, DifficultyLevel, PaperType, QuestionType, ItemFormat } from '../types';
 import { ITEM_FORMATS, COGNITIVE_PROCESSES, KNOWLEDGE_LEVELS } from '../constants';
 
@@ -40,10 +40,23 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
     if (!newClassName.trim()) return;
     updateClasses([...classes, { id: `c_${Date.now()}`, name: newClassName.trim(), subjects: [] }]);
     setNewClassName('');
+    Swal.fire("Added", "Grade added successfully", "success");
   };
 
   const handleDeleteClass = (id: string) => {
-    if (confirm("Delete this grade? All associated data will be lost.")) updateClasses(classes.filter(c => c.id !== id));
+    Swal.fire({
+        title: "Are you sure?",
+        text: "Delete this grade? All associated data will be lost.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Yes, delete it!"
+    }).then(result => {
+        if (result.isConfirmed) {
+            updateClasses(classes.filter(c => c.id !== id));
+            Swal.fire("Deleted", "Grade has been removed", "success");
+        }
+    });
   };
 
   const handleAddSubject = () => {
@@ -52,14 +65,24 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
       ...c, subjects: [...c.subjects, { id: `s_${Date.now()}`, name: newSubjectName.trim(), units: [] }]
     } : c));
     setNewSubjectName('');
+    Swal.fire("Added", "Subject added successfully", "success");
   };
 
   const handleDeleteSubject = (sId: string) => {
-    if (confirm("Delete this subject?")) {
-      updateClasses(classes.map(c => c.id === selectedClassId ? {
-        ...c, subjects: c.subjects.filter(s => s.id !== sId)
-      } : c));
-    }
+    Swal.fire({
+        title: "Delete this subject?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Delete"
+    }).then(result => {
+        if (result.isConfirmed) {
+            updateClasses(classes.map(c => c.id === selectedClassId ? {
+              ...c, subjects: c.subjects.filter(s => s.id !== sId)
+            } : c));
+            Swal.fire("Deleted", "Subject has been removed", "success");
+        }
+    });
   };
 
   const handleAddUnit = () => {
@@ -70,15 +93,26 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
       } : s)
     } : c));
     setNewUnitName('');
+    Swal.fire("Added", "Unit added successfully", "success");
   };
 
   const handleDeleteUnit = (uId: string) => {
-    if (!confirm("Delete this unit?")) return;
-    updateClasses(classes.map(c => c.id === selectedClassId ? {
-      ...c, subjects: c.subjects.map(s => s.id === selectedSubjectId ? {
-        ...s, units: s.units.filter(u => u.id !== uId)
-      } : s)
-    } : c));
+    Swal.fire({
+        title: "Delete this unit?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Delete"
+    }).then(result => {
+        if (result.isConfirmed) {
+            updateClasses(classes.map(c => c.id === selectedClassId ? {
+              ...c, subjects: c.subjects.map(s => s.id === selectedSubjectId ? {
+                ...s, units: s.units.filter(u => u.id !== uId)
+              } : s)
+            } : c));
+            Swal.fire("Deleted", "Unit has been removed", "success");
+        }
+    });
   };
 
   const handleAddSubUnit = (unitId: string) => {
@@ -92,6 +126,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
     } : c));
     setNewSubUnitName('');
     setNewObjective('');
+    Swal.fire("Added", "Topic added successfully", "success");
   };
 
   const handleDeleteSubUnit = (unitId: string, subId: string) => {
@@ -108,10 +143,22 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
     if (!newPaperTypeName.trim()) return;
     updatePaperTypes([...paperTypes, { id: `pt_${Date.now()}`, name: newPaperTypeName, questionTypes: [] }]);
     setNewPaperTypeName('');
+    Swal.fire("Created", "Pattern created successfully", "success");
   };
 
   const handleDeletePaperType = (id: string) => {
-    if (confirm("Delete this template?")) updatePaperTypes(paperTypes.filter(p => p.id !== id));
+    Swal.fire({
+        title: "Delete this template?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Delete"
+    }).then(result => {
+        if (result.isConfirmed) {
+            updatePaperTypes(paperTypes.filter(p => p.id !== id));
+            Swal.fire("Deleted", "Template removed", "success");
+        }
+    });
   };
 
   const handleAddQuestionType = (ptId: string) => {

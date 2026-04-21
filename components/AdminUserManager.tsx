@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import {
     Trash2, Plus, Edit2, Eye, EyeOff
 } from 'lucide-react';
@@ -7,7 +8,7 @@ import {
     User, Role
 } from '../types';
 import {
-    getUsers, saveUsers
+    getUsers, saveUsers, deleteUser
 } from '../services/db';
 
 const AdminUserManager = () => {
@@ -29,49 +30,73 @@ const AdminUserManager = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.username || !formData.name || !formData.role) return alert("Please fill required fields");
+        if (!formData.username || !formData.name || !formData.role) return Swal.fire("Required", "Please fill required fields", "warning");
 
         let newUsers = [...userList];
         if (editingUser) {
-            newUsers = newUsers.map(u => u.id === editingUser.id ? { ...u, ...formData } as User : u);
+            const updateData = { ...formData };
+            if (!updateData.password) delete updateData.password;
+            newUsers = newUsers.map(u => u.id === editingUser.id ? { ...u, ...updateData } as User : u);
         } else {
-            if (userList.find(u => u.username === formData.username)) return alert("Username already exists");
+            if (userList.find(u => u.username === formData.username)) return Swal.fire("Error", "Username already exists", "error");
             newUsers.push({
                 ...formData as User,
                 id: Math.random().toString(36).substr(2, 9)
             });
         }
 
-        setUserList(newUsers);
         saveUsers(newUsers).then(() => {
+            Swal.fire({
+                title: "Success!",
+                text: editingUser 
+                    ? "User updated successfully!" 
+                    : "User created successfully!",
+                icon: "success",
+                confirmButtonColor: "#2563eb"
+            });
             getUsers().then(setUserList);
             setIsFormOpen(false);
             setEditingUser(null);
             setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
         }).catch(err => {
             console.error("Save users error:", err);
-            alert("Failed to save users. Session may have expired.");
-            // Refresh to restore state
+            Swal.fire("Error", "Failed to save users.", "error");
             getUsers().then(setUserList);
         });
-    };
+        };
 
     const handleEdit = (user: User) => {
         setEditingUser(user);
-        setFormData(user);
+        setFormData({ ...user, password: '' });
         setIsFormOpen(true);
     };
 
     const handleDelete = (id: string) => {
-        if (!window.confirm("Are you sure you want to delete this user?")) return;
-        const newUsers = userList.filter(u => u.id !== id);
-        setUserList(newUsers);
-        saveUsers(newUsers).then(() => {
-            getUsers().then(setUserList);
-        }).catch(err => {
-            console.error("Delete user error:", err);
-            alert("Failed to delete user. Session may have expired.");
-            getUsers().then(setUserList);
+        Swal.fire({
+            title: "Are you sure?",
+            text: "You won't be able to revert this!",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, delete it!",
+            cancelButtonText: "Cancel"
+        }).then((result) => {
+            if (result.isConfirmed) {
+                deleteUser(id).then(() => {
+                    Swal.fire({
+                        title: "Deleted!",
+                        text: "User has been removed.",
+                        icon: "success",
+                        confirmButtonColor: "#2563eb"
+                    });
+                    getUsers().then(setUserList);
+                }).catch(err => {
+                    console.error("Delete user error:", err);
+                    Swal.fire("Error", "Failed to delete user.", "error");
+                    getUsers().then(setUserList);
+                });
+            }
         });
     };
 
@@ -259,7 +284,7 @@ const AdminUserManager = () => {
                                     {u.role}
                                 </span>
                             </div>
-                            
+
                             <div className="flex justify-between items-center pt-2">
                                 <div className="text-gray-600">
                                     <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-0.5">Username</span>
@@ -280,7 +305,7 @@ const AdminUserManager = () => {
                     ))}
                 </div>
             </div>
-            
+
             {userList.length === 0 && !isFormOpen && (
                 <div className="py-20 text-center ap-card border-dashed border-2 flex flex-col items-center gap-4">
                     <p className="text-gray-400 font-medium italic">No users registered in the system.</p>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import {
     FileText, Lock, Unlock, Eye, EyeOff, Search, Trash2, User as UserIcon, Calendar, BookOpen, Clock, Share2, X, Plus, UserPlus, Edit2, CheckCircle, RotateCcw, Loader2
 } from 'lucide-react';
@@ -62,10 +63,21 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this question paper?')) {
-            await deleteBlueprint(id);
-            await loadData();
-        }
+        Swal.fire({
+            title: "Are you sure?",
+            text: "This question paper will be permanently deleted!",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, delete it!"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                await deleteBlueprint(id);
+                await loadData();
+                Swal.fire("Deleted", "Question paper removed successfully.", "success");
+            }
+        });
     };
 
     const handleToggleLock = async (id: string) => {
@@ -79,23 +91,45 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
     };
 
     const handleResetConfirmation = async (id: string) => {
-        if (window.confirm('Are you sure you want to reset the confirmation for this paper? This will allow users to edit the pattern again.')) {
-            await resetBlueprintConfirmation(id);
-            await loadData();
-        }
+        Swal.fire({
+            title: "Reset Confirmation?",
+            text: "This will allow users to edit the pattern again. Continue?",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#f59e0b",
+            cancelButtonColor: "#64748b",
+            confirmButtonText: "Yes, reset it"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                await resetBlueprintConfirmation(id);
+                await loadData();
+                Swal.fire("Reset", "Confirmation has been reset.", "success");
+            }
+        });
     };
 
     const handleRemoveShare = async (bpId: string, userId: string) => {
-        if (window.confirm('Remove sharing access for this user?')) {
-            await removeShare(bpId, userId);
-            await loadData();
-            setLoadingShared(true);
-            try {
-                setSharedUsers(await getSharedWithUsers(bpId));
-            } finally {
-                setLoadingShared(false);
+        Swal.fire({
+            title: "Remove Sharing?",
+            text: "This user will lose access to this paper.",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#3085d6",
+            confirmButtonText: "Yes, remove"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                await removeShare(bpId, userId);
+                await loadData();
+                setLoadingShared(true);
+                try {
+                    setSharedUsers(await getSharedWithUsers(bpId));
+                    Swal.fire("Removed", "User access removed.", "success");
+                } finally {
+                    setLoadingShared(false);
+                }
             }
-        }
+        });
     };
 
     const handleAddShare = async (bpId: string, toUserId: string) => {
@@ -114,8 +148,9 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                 setLoadingShared(false);
             }
             setUserSearchTerm('');
+            Swal.fire("Shared", "Paper shared successfully!", "success");
         } else {
-            alert('Could not share. User might already have access.');
+            Swal.fire("Error", "Could not share. User might already have access.", "error");
         }
     };
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import Swal from 'sweetalert2';
 import { Check, Copy, FileText, RefreshCw, WandSparkles, X, Save, AlertTriangle, Loader2 } from 'lucide-react';
 import { getBlueprints, getQuestionPaperTypes, saveBlueprint } from '../services/db';
 import { Blueprint, BlueprintItem, QuestionPaperType } from '../types';
@@ -255,9 +256,9 @@ const AdminQuestionConsolidator = () => {
         try {
             const updated = { ...selectedBlueprint, massViewHeader: workingText };
             await saveBlueprint(updated);
-            alert("Changes saved to database!");
+            Swal.fire("Saved", "Changes saved to database!", "success");
         } catch (e) {
-            alert("Save failed");
+            Swal.fire("Error", "Save failed", "error");
         } finally {
             setIsSaving(false);
         }
@@ -279,6 +280,49 @@ const AdminQuestionConsolidator = () => {
         });
     };
 
+    const renderMixedTextInternal = (text: string) => {
+        if (!text) return null;
+        
+        const heading = "சமக்ர சிக்ஷா கேரளம்";
+        const parts = text.split(new RegExp(`(${heading})`, 'g'));
+
+        return parts.flatMap((part, i) => {
+            if (part === heading) {
+                return (
+                    <span 
+                        key={`heading-${i}`} 
+                        className="tamil-heading-font"
+                        style={{ 
+                            fontFamily: "'TAU-Urai', serif",
+                            fontWeight: 'bold',
+                            fontSize: '18px',
+                            color: '#1e293b'
+                        }}
+                    >
+                        {part}
+                    </span>
+                );
+            }
+
+            const segments = part.split(/([அ-ஹ\u0B80-\u0BFF]+)/);
+            return segments.map((seg, j) => {
+                if (!seg) return null;
+                const isTamil = /[அ-ஹ\u0B80-\u0BFF]/.test(seg);
+                return (
+                    <span 
+                        key={`${i}-${j}`} 
+                        className={isTamil ? "tamil-font" : "english-font"}
+                        style={{ 
+                            fontFamily: isTamil ? "'TAU-Paalai', serif" : "'Times New Roman', serif"
+                        }}
+                    >
+                        {seg}
+                    </span>
+                );
+            });
+        });
+    };
+
     const renderHighlights = () => {
         if (!workingText) return null;
         let elements: React.ReactNode[] = [];
@@ -294,7 +338,7 @@ const AdminQuestionConsolidator = () => {
             const index = workingText.indexOf(issue.source, lastIndex);
             if (index === -1) return;
             
-            elements.push(workingText.substring(lastIndex, index));
+            elements.push(renderMixedTextInternal(workingText.substring(lastIndex, index)));
             
             const color = issue.type === 'grammar' ? 'bg-green-100 border-b-2 border-green-500' : 'bg-red-100 border-b-2 border-red-500';
             
@@ -308,19 +352,19 @@ const AdminQuestionConsolidator = () => {
                         setActiveIssueId(issue.id);
                     }}
                 >
-                    {issue.source}
+                    {renderMixedTextInternal(issue.source)}
                 </span>
             );
             lastIndex = index + issue.source.length;
         });
         
-        elements.push(workingText.substring(lastIndex));
+        elements.push(renderMixedTextInternal(workingText.substring(lastIndex)));
         
         return (
             <div 
                 ref={highlightRef}
-                className="absolute inset-0 z-0 p-8 font-mono text-base leading-relaxed whitespace-pre-wrap break-words overflow-auto tamil-font pointer-events-none"
-                style={{ color: 'transparent', backgroundColor: 'white' }}
+                className="absolute inset-0 z-0 p-8 text-base leading-relaxed whitespace-pre-wrap break-words overflow-auto pointer-events-none"
+                style={{ backgroundColor: 'white' }}
             >
                 <div style={{ color: '#334155' }}>{elements}</div>
             </div>
@@ -399,9 +443,10 @@ const AdminQuestionConsolidator = () => {
                             value={workingText}
                             onChange={(e) => setWorkingText(e.target.value)}
                             onScroll={handleScroll}
-                            className="absolute inset-0 z-10 w-full h-full p-8 font-mono text-base bg-transparent text-slate-800 caret-black focus:outline-none resize-none leading-relaxed shadow-inner tamil-font overflow-auto"
+                            className="absolute inset-0 z-10 w-full h-full p-8 text-base bg-transparent caret-black focus:outline-none resize-none leading-relaxed shadow-inner overflow-auto"
                             spellCheck={false}
                             style={{ 
+                                color: 'transparent',
                                 WebkitTextFillColor: 'transparent',
                                 border: 'none'
                             }}
