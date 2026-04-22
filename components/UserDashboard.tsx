@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import {
     Role, ClassLevel, SubjectType, ExamTerm,
@@ -11,7 +11,7 @@ import {
 } from '@/services/db';
 import {
     Trash2, Plus, Download, LogOut, FileText,
-    Settings, Edit2, Save, Printer, UserCircle, LayoutDashboard, ChevronLeft, List, CheckCircle, RefreshCw, Clock,
+    Settings, Edit2, Edit3, Save, Printer, UserCircle, LayoutDashboard, ChevronLeft, List, CheckCircle, RefreshCw, Clock,
     Share2, Lock, ChevronDown, ChevronUp, Sparkles, BookOpen, GraduationCap, Filter
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -31,15 +31,31 @@ interface UserDashboardProps {
     onUpdateUser: (user: User) => void;
 }
 
-// ─── Gradient palette per index ───────────────────────────────────────────────
+// ─── Expanded Gradient palette ───────────────────────────────────────────────
 const CARD_GRADIENTS = [
     { from: '#6366f1', to: '#8b5cf6', accent: '#c4b5fd' },
     { from: '#ec4899', to: '#f43f5e', accent: '#fda4af' },
     { from: '#10b981', to: '#059669', accent: '#6ee7b7' },
-    { from: '#f59e0b', to: '#ef4444', accent: '#fde68a' },
-    { from: '#06b6d4', to: '#3b82f6', accent: '#93c5fd' },
-    { from: '#8b5cf6', to: '#ec4899', accent: '#e9d5ff' },
+    { from: '#f59e0b', to: '#d97706', accent: '#fde68a' },
+    { from: '#06b6d4', to: '#0891b2', accent: '#93c5fd' },
+    { from: '#8b5cf6', to: '#7c3aed', accent: '#e9d5ff' },
+    { from: '#f43f5e', to: '#e11d48', accent: '#fecdd3' },
+    { from: '#3b82f6', to: '#2563eb', accent: '#bfdbfe' },
+    { from: '#84cc16', to: '#65a30d', accent: '#d9f99d' },
+    { from: '#0ea5e9', to: '#0284c7', accent: '#bae6fd' },
+    { from: '#d946ef', to: '#c026d3', accent: '#f5d0fe' },
+    { from: '#64748b', to: '#475569', accent: '#e2e8f0' },
 ];
+
+const calculateAcademicYear = () => {
+    const now = new Date();
+    const month = now.getMonth(); // 0 = Jan, 5 = June
+    const year = now.getFullYear();
+    const startYear = month >= 5 ? year : year - 1;
+    const endYear = (startYear + 1) % 100;
+    const endYearStr = endYear.toString().padStart(2, '0');
+    return `${startYear}-${endYearStr}`;
+};
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateUser }) => {
     const [view, setView] = useState<'list' | 'create' | 'edit' | 'profile'>('list');
@@ -49,13 +65,37 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     const [selectedTerm, setSelectedTerm] = useState<ExamTerm>(ExamTerm.FIRST);
     const [selectedSet, setSelectedSet] = useState('Set A');
     const [selectedPaperType, setSelectedPaperType] = useState<string>('');
-    const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
+    const [selectedAcademicYear, setSelectedAcademicYear] = useState(calculateAcademicYear());
     const [isConfigExpanded, setIsConfigExpanded] = useState(true);
     const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
     const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
     const [listCombinedFilter, setListCombinedFilter] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [animateHeader, setAnimateHeader] = useState(false);
+
+    // ─── Profile Completeness Validation ──────────────────────────────────────
+    const isProfileIncomplete = useMemo(() => {
+        const requiredFields: (keyof User)[] = [
+            'name', 'email', 'phoneNumber', 'dob', 'pen', 'designation',
+            'joinDate', 'schoolName', 'district', 'bankAccountNumber', 'bankIfsc'
+        ];
+        return requiredFields.some(field => {
+            const val = user[field];
+            return !val || String(val).trim() === '';
+        });
+    }, [user]);
+
+    useEffect(() => {
+        if (isProfileIncomplete && view !== 'profile') {
+            setView('profile');
+            Swal.fire({
+                title: "Complete Your Profile",
+                text: "Please fill in all details before accessing the dashboard.",
+                icon: "info",
+                confirmButtonColor: "#4f46e5"
+            });
+        }
+    }, [isProfileIncomplete, view]);
 
     const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
@@ -118,7 +158,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
         setSelectedSubject(SubjectType.TAMIL_AT);
         setSelectedTerm(ExamTerm.FIRST);
         setSelectedSet('Set A');
-        setSelectedAcademicYear('2025-2026');
+        setSelectedAcademicYear(calculateAcademicYear());
         setSelectedPaperType('');
         setIsConfigExpanded(true);
         setView('create');
@@ -511,85 +551,92 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     display: grid;
                     grid-template-columns: repeat(3, 1fr);
                     gap: 0.75rem;
-                    margin-bottom: 1.75rem;
-                    animation: fadeUp 0.5s ease both;
-                }
-                @keyframes fadeUp {
-                    from { opacity: 0; transform: translateY(16px); }
-                    to { opacity: 1; transform: translateY(0); }
+                    margin-bottom: 1.5rem;
                 }
 
                 .ud-stat-card {
                     background: var(--ap-surface);
                     border: 1px solid var(--ap-border);
                     border-radius: var(--ap-radius);
-                    padding: 1.5rem;
-                    display: flex; flex-direction: column; gap: 0.5rem;
+                    padding: 1rem;
+                    display: flex; flex-direction: column; 
+                    align-items: center; text-align: center;
+                    gap: 0.3rem;
                     position: relative; overflow: hidden;
-                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
+                    border-bottom: 3px solid transparent;
+                    transition: all 0.3s ease;
                 }
-                .ud-stat-card:hover { 
-                    transform: translateY(-4px); 
-                    border-color: var(--ap-accent); 
-                    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); 
-                }
-                .ud-stat-label { font-size: 0.75rem; font-weight: 700; color: var(--ap-muted); text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 0.5rem; }
-                .ud-stat-value { font-family: var(--ap-display); font-size: 2.25rem; font-weight: 800; color: var(--ap-text); line-height: 1; }
-                .text-violet { color: #2563eb; }
-                .text-rose { color: #db2777; }
-                .text-emerald { color: #059669; }
+                .ud-stat-card.purple { border-bottom-color: #6366f1; }
+                .ud-stat-card.pink { border-bottom-color: #ec4899; }
+                .ud-stat-card.green { border-bottom-color: #10b981; }
+
+                .ud-stat-label { font-size: 0.65rem; font-weight: 700; color: var(--ap-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+                .ud-stat-value { font-family: var(--ap-display); font-size: 1.5rem; font-weight: 800; color: var(--ap-text); line-height: 1; }
 
                 /* ── Section Header ─────────────────────────────── */
                 .ud-section-hdr {
                     display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                }
+                @media (min-width: 768px) {
+                    .ud-section-hdr {
+                        flex-direction: row;
+                        align-items: center;
+                        justify-content: space-between;
+                    }
+                }
+
+                .ud-header-top {
+                    display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    flex-wrap: wrap;
-                    gap: 0.75rem;
-                    margin-bottom: 1.25rem;
-                    animation: fadeUp 0.5s 0.1s ease both;
+                    width: 100%;
                 }
+                @media (min-width: 768px) {
+                    .ud-header-top { width: auto; order: 0; }
+                }
+
+                .ud-header-controls {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+                @media (min-width: 768px) {
+                    .ud-header-controls { order: 2; margin-left: auto; }
+                }
+
                 .ud-section-title {
                     font-family: var(--ap-display);
-                    font-size: 1.75rem;
+                    font-size: 1.25rem;
                     font-weight: 800;
-                    letter-spacing: -0.03em;
+                    letter-spacing: -0.02em;
                     color: var(--ap-text);
+                    margin: 0;
+                }
+                @media (min-width: 768px) {
+                    .ud-section-title { font-size: 1.75rem; }
                 }
 
-                /* ── New Blueprint Button ───────────────────────── */
-                .ud-new-btn {
-                    display: flex; align-items: center; gap: 0.6rem;
-                    background: var(--ap-accent);
-                    color: #fff;
-                    border: none;
-                    border-radius: 14px;
-                    padding: 0.75rem 1.5rem;
-                    font-family: var(--ap-display);
-                    font-size: 0.9rem;
-                    font-weight: 700;
-                    cursor: pointer;
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                    box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2);
-                    white-space: nowrap;
-                }
-                .ud-new-btn:hover { background: #1d4ed8; transform: translateY(-2px); box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.3); }
-                .ud-new-btn:active { transform: translateY(0) scale(0.98); }
-
-                /* ── Filter Tabs ─────────────────────────────────── */
+                /* ── Tabs (Full Width) ───────────────────────────── */
                 .ud-tabs {
-                    display: flex; gap: 0.4rem;
+                    display: flex; 
                     background: var(--ap-surface2);
-                    border-radius: 14px;
-                    padding: 0.35rem;
-                    width: fit-content;
+                    border-radius: 10px;
+                    padding: 0.2rem;
+                    width: 100%;
                 }
+                @media (min-width: 768px) {
+                    .ud-tabs { width: auto; min-width: 320px; order: 1; }
+                }
+
                 .ud-tab {
-                    padding: 0.5rem 1.25rem;
-                    border-radius: 11px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
+                    flex: 1;
+                    padding: 0.4rem;
+                    border-radius: 8px;
+                    font-size: 0.65rem;
+                    font-weight: 800;
                     letter-spacing: 0.04em;
                     text-transform: uppercase;
                     cursor: pointer;
@@ -597,106 +644,174 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     background: transparent;
                     color: var(--ap-muted);
                     transition: all 0.2s;
+                    text-align: center;
                 }
+                @media (min-width: 768px) {
+                    .ud-tab { padding: 0.6rem 1.5rem; font-size: 0.75rem; }
+                }
+
                 .ud-tab.active {
                     background: #fff;
                     color: var(--ap-accent);
-                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                 }
 
-                /* ── Desktop Table ───────────────────────────────── */
+                /* ── Small New Blueprint Button ─────────────────── */
+                .ud-new-btn-sm {
+                    display: flex; align-items: center; gap: 0.3rem;
+                    background: linear-gradient(135deg, #2563eb, #7c3aed);
+                    color: #fff;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 0.4rem 0.6rem;
+                    font-family: var(--ap-display);
+                    font-size: 0.65rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                    white-space: nowrap;
+                    transition: all 0.2s;
+                }
+                @media (min-width: 768px) {
+                    .ud-new-btn-sm { padding: 0.6rem 1.25rem; font-size: 0.85rem; border-radius: 10px; }
+                }
+                .ud-new-btn-sm:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 8px 15px rgba(37,99,235,0.2); }
+
+                .ud-select-sm {
+                    padding: 0.35rem 0.5rem;
+                    border: 1px solid var(--ap-border);
+                    border-radius: 6px;
+                    font-size: 0.65rem;
+                    font-weight: 700;
+                    background: #fff;
+                    color: var(--ap-text);
+                    outline: none;
+                }
+                @media (min-width: 768px) {
+                    .ud-select-sm { padding: 0.55rem 1rem; font-size: 0.85rem; border-radius: 10px; max-width: 220px; }
+                }
+
+                /* ── Desktop Table (Ultra Premium Design) ────────── */
                 .ud-table-wrap {
                     display: none;
-                    background: var(--ap-surface);
-                    border: 1px solid var(--ap-border);
-                    border-radius: var(--ap-radius);
-                    overflow-x: auto;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-
-                    animation: fadeUp 0.6s 0.15s ease both;
+                    margin-top: 1rem;
+                    animation: fadeUp 0.6s 0.2s ease both;
                 }
                 @media (min-width: 1024px) { .ud-table-wrap { display: block; } }
 
-                .ud-table { width: 100%; border-collapse: collapse; }
+                .ud-table { 
+                    width: 100%; 
+                    border-collapse: separate; 
+                    border-spacing: 0 0.75rem; /* Gap between rows */
+                }
 
-                .ud-thead { background: var(--ap-surface2); border-bottom: 1px solid var(--ap-border); }
                 .ud-th {
-                    padding: 1.25rem 1rem;
-                    text-align: left;
-                    font-size: 0.75rem;
+                    padding: 0.75rem 1.25rem;
+                    text-align: center;
+                    font-size: 0.65rem;
                     font-weight: 800;
                     text-transform: uppercase;
-                    letter-spacing: 0.1em;
-                    color: var(--ap-muted);
+                    letter-spacing: 0.15em;
+                    color: #94a3b8;
                     white-space: nowrap;
                 }
-                .ud-th:last-child { text-align: right; }
 
                 .ud-tr {
-                    border-bottom: 1px solid var(--dash-border);
-                    transition: background 0.15s;
-                    animation: rowIn 0.4s ease both;
+                    background: #fff;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 }
-                @keyframes rowIn {
-                    from { opacity: 0; transform: translateX(-8px); }
-                    to { opacity: 1; transform: translateX(0); }
+                
+                .ud-tr:hover { 
+                    transform: translateY(-2px) scale(1.002);
+                    box-shadow: 0 12px 25px -8px rgba(0,0,0,0.08);
+                    z-index: 10;
+                    position: relative;
                 }
-                .ud-tr:hover { background: rgba(99,102,241,0.04); }
-                .ud-tr:last-child { border-bottom: none; }
-
+                
                 .ud-td {
-                    padding: 1rem;
-                    font-size: 0.9rem;
-                    color: var(--ap-text);
+                    padding: 1.25rem 1rem;
                     vertical-align: middle;
-                    font-weight: 500;
+                    text-align: center;
+                    border-top: 1px solid rgba(0,0,0,0.03);
+                    border-bottom: 1px solid rgba(0,0,0,0.03);
                 }
 
-                /* ── Badges ──────────────────────────────────────── */
-                .ud-badge {
+                /* Rounded corners for the row card */
+                .ud-td:first-child { 
+                    border-left: 1px solid rgba(0,0,0,0.03);
+                    border-top-left-radius: 16px; 
+                    border-bottom-left-radius: 16px; 
+                }
+                .ud-td:last-child { 
+                    border-right: 1px solid rgba(0,0,0,0.03);
+                    border-top-right-radius: 16px; 
+                    border-bottom-right-radius: 16px; 
+                }
+
+                .ud-td-primary {
+                    font-weight: 800;
+                    color: #1e293b;
+                    font-family: var(--ap-display);
+                    font-size: 0.95rem;
+                    line-height: 1.2;
+                }
+
+                .ud-td-secondary {
+                    font-size: 0.7rem;
+                    color: #94a3b8;
+                    font-weight: 600;
+                    margin-top: 0.2rem;
+                }
+
+                /* Marks Indicator in Table */
+                .ud-table-marks {
+                    display: inline-flex;
+                    align-items: center; justify-content: center;
+                    min-width: 45px;
+                    height: 32px;
+                    background: #f8fafc;
+                    border: 1.5px solid #e2e8f0;
+                    border-radius: 10px;
+                    font-weight: 800;
+                    color: #1e293b;
+                    font-size: 0.9rem;
+                    box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+                }
+                .ud-tr:hover .ud-table-marks {
+                    background: var(--ap-accent);
+                    border-color: var(--ap-accent);
+                    color: #fff;
+                    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+                }
+
+                /* Table Badges Premium */
+                .ud-table-badge {
                     display: inline-flex; align-items: center; gap: 0.35rem;
-                    font-size: 0.65rem; font-weight: 800;
-                    text-transform: uppercase; letter-spacing: 0.08em;
-                    padding: 0.35rem 0.75rem;
+                    padding: 0.35rem 0.65rem;
                     border-radius: 10px;
-                    white-space: nowrap;
-                    border: 1px solid transparent;
+                    font-size: 0.6rem;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
                 }
-                .ud-badge.owner { background: var(--ap-accent-light); color: var(--ap-accent); border-color: rgba(37, 99, 235, 0.2); }
-                .ud-badge.shared { background: #fdf2f8; color: #db2777; border-color: rgba(219, 39, 119, 0.2); }
-                .ud-badge.confirmed { background: #f0fdf4; color: #16a34a; border-color: rgba(22, 163, 74, 0.2); }
-                .ud-badge.locked { background: #f8fafc; color: #64748b; border-color: var(--ap-border); }
+                .ud-table-badge.owner { background: #f0f9ff; color: #0ea5e9; }
+                .ud-table-badge.shared { background: #fff1f2; color: #f43f5e; }
+                .ud-table-badge.confirmed { background: #f0fdf4; color: #10b981; }
+                .ud-table-badge.locked { background: #f8fafc; color: #64748b; }
 
-                .ud-marks-pill {
-                    display: inline-block;
-                    background: var(--dash-surface2);
-                    border: 1px solid var(--dash-border);
-                    border-radius: 8px;
-                    padding: 0.2rem 0.6rem;
-                    font-weight: 700;
-                    font-size: 0.85rem;
-                    color: var(--dash-text);
-                }
-
-                /* ── Table Action Buttons ────────────────────────── */
-                .ud-action-btn {
-                    display: inline-flex; align-items: center; gap: 0.4rem;
-                    padding: 0.5rem 0.85rem;
+                /* Action Buttons (Table Only) */
+                .ud-t-actions { display: flex; align-items: center; justify-content: center; gap: 0.25rem; }
+                .ud-t-btn {
+                    width: 34px; height: 34px;
                     border-radius: 10px;
-                    font-size: 0.8rem;
-                    font-weight: 700;
+                    display: flex; align-items: center; justify-content: center;
                     cursor: pointer;
-                    border: 1px solid transparent;
                     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    color: #94a3b8;
                 }
-                .ud-action-btn.edit { background: var(--ap-surface2); color: var(--ap-text); border-color: var(--ap-border); }
-                .ud-action-btn.edit:hover { background: var(--ap-accent); color: #fff; border-color: var(--ap-accent); transform: scale(1.05); }
-                .ud-action-btn.edit:disabled { opacity: 0.35; cursor: not-allowed; }
-                .ud-action-btn.share { background: #f0fdf4; color: #16a34a; border-color: rgba(22, 163, 74, 0.1); }
-                .ud-action-btn.share:hover { background: #16a34a; color: #fff; transform: scale(1.05); }
-                .ud-action-btn.del { background: #fef2f2; color: #dc2626; border-color: rgba(220, 38, 38, 0.1); }
-                .ud-action-btn.del:hover { background: #dc2626; color: #fff; transform: scale(1.05); }
-                .ud-action-btn.del:disabled { opacity: 0.25; cursor: not-allowed; }
+                .ud-t-btn:hover { background: #f8fafc; color: var(--ap-accent); transform: translateY(-1px); }
+                .ud-t-btn.del:hover { color: #ef4444; background: #fef2f2; }
+                .ud-t-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
                 /* ── Empty State ─────────────────────────────────── */
                 .ud-empty {
@@ -721,7 +836,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                 .ud-cards {
                     display: grid;
                     grid-template-columns: 1fr;
-                    gap: 1rem;
+                    gap: 1.5rem;
                     animation: fadeUp 0.5s 0.15s ease both;
                 }
                 @media (min-width: 560px) { .ud-cards { grid-template-columns: repeat(2, 1fr); } }
@@ -730,52 +845,62 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                 .ud-card {
                     background: var(--ap-surface);
                     border: 1px solid var(--ap-border);
-                    border-radius: var(--ap-radius);
+                    border-radius: 24px;
                     overflow: hidden;
-                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                     animation: cardIn 0.5s ease both;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03);
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+                    position: relative;
                 }
-                .ud-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); border-color: var(--ap-accent); }
+                .ud-card:hover { transform: translateY(-8px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.1); border-color: var(--ap-accent); }
                 .ud-card:active { transform: scale(0.98); }
 
                 .ud-card-header {
-                    height: 100px;
+                    height: 120px;
                     position: relative;
                     overflow: hidden;
                     display: flex; align-items: flex-start;
-                    padding: 1.25rem;
-                    background: var(--ap-surface2);
+                    padding: 1.5rem;
+                }
+                .ud-card-header-bg {
+                    position: absolute;
+                    inset: 0;
+                    z-index: 0;
+                }
+                .ud-card-pattern {
+                    position: absolute;
+                    inset: 0;
+                    z-index: 1;
                 }
                 .ud-card-marks {
                     position: absolute;
-                    top: 1rem; right: 1rem;
-                    background: rgba(255, 255, 255, 0.9);
-                    backdrop-filter: blur(8px);
+                    top: 1.25rem; right: 1.25rem;
+                    background: rgba(255, 255, 255, 0.95);
+                    backdrop-filter: blur(10px);
                     border: 1px solid var(--ap-border);
-                    border-radius: 12px;
-                    padding: 0.4rem 0.75rem;
+                    border-radius: 16px;
+                    padding: 0.5rem 0.85rem;
                     text-align: center;
-                    z-index: 1;
-                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+                    z-index: 10;
+                    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
                 }
-                .ud-card-marks-label { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ap-muted); }
-                .ud-card-marks-val { font-family: var(--ap-display); font-size: 1.25rem; font-weight: 800; color: var(--ap-accent); line-height: 1; }
+                .ud-card-marks-label { font-size: 0.55rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ap-muted); }
+                .ud-card-marks-val { font-family: var(--ap-display); font-size: 1.4rem; font-weight: 800; color: var(--ap-accent); line-height: 1; }
 
                 .ud-card-badges {
-                    display: flex; flex-wrap: wrap; gap: 0.3rem;
-                    z-index: 1;
+                    display: flex; flex-wrap: wrap; gap: 0.5rem;
+                    z-index: 10;
                 }
 
-                .ud-card-body { padding: 0.25rem 1rem 1rem; }
+                .ud-card-body { padding: 1.5rem; }
 
                 .ud-card-title {
                     font-family: var(--ap-display);
-                    font-size: 1.15rem;
+                    font-size: 1.25rem;
                     font-weight: 800;
                     color: var(--ap-text);
-                    line-height: 1.25;
-                    margin-bottom: 0.35rem;
+                    line-height: 1.3;
+                    margin-bottom: 0.5rem;
                 }
                 .ud-card-by { font-size: 0.75rem; font-weight: 700; color: var(--ap-accent); margin-bottom: 0.15rem; }
                 .ud-card-date { font-size: 0.72rem; font-weight: 500; color: var(--ap-muted); margin-bottom: 1rem; }
@@ -911,7 +1036,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                 <header className="ud-header no-print">
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                         {view !== 'list' && (
-                            <button className="ud-back-btn" onClick={() => { setView('list'); setCurrentBlueprint(null); }} title="Back">
+                            <button className="ud-back-btn" onClick={() => {
+                                if (isProfileIncomplete) {
+                                    Swal.fire({
+                                        title: "Incomplete Profile",
+                                        text: "Please complete and save your profile before returning to the dashboard.",
+                                        icon: "warning",
+                                        confirmButtonColor: "#4f46e5"
+                                    });
+                                    return;
+                                }
+                                setView('list');
+                                setCurrentBlueprint(null);
+                            }} title="Back">
                                 <ChevronLeft size={18} />
                             </button>
                         )}
@@ -942,37 +1079,27 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                             {/* Stats Strip */}
                             <div className="ud-stats">
                                 <div className="ud-stat-card purple">
-                                    <span className="ud-stat-label"><span className="ud-stat-dot" style={{ background: '#a78bfa' }}></span>Total</span>
-                                    <span className="ud-stat-value text-violet">{blueprints.length}</span>
+                                    <span className="ud-stat-label">Total</span>
+                                    <span className="ud-stat-value" style={{ color: '#6366f1' }}>{blueprints.length}</span>
                                 </div>
                                 <div className="ud-stat-card pink">
-                                    <span className="ud-stat-label"><span className="ud-stat-dot" style={{ background: '#f472b6' }}></span>Owned</span>
-                                    <span className="ud-stat-value text-rose">{ownedCount}</span>
+                                    <span className="ud-stat-label">Owned</span>
+                                    <span className="ud-stat-value" style={{ color: '#ec4899' }}>{ownedCount}</span>
                                 </div>
                                 <div className="ud-stat-card green">
-                                    <span className="ud-stat-label"><span className="ud-stat-dot" style={{ background: '#34d399' }}></span>Confirmed</span>
-                                    <span className="ud-stat-value text-emerald">{confirmedCount}</span>
+                                    <span className="ud-stat-label">Confirmed</span>
+                                    <span className="ud-stat-value" style={{ color: '#10b981' }}>{confirmedCount}</span>
                                 </div>
                             </div>
 
                             {/* Section Header */}
                             <div className="ud-section-hdr">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
-                                    <h2 className="ud-section-title">Blueprints</h2>
-                                    <div className="ud-tabs">
-                                        {(['all', 'owned', 'shared'] as const).map(f => (
-                                            <button key={f} className={`ud-tab${filterView === f ? ' active' : ''}`} onClick={() => setFilterView(f)}>
-                                                {f}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Exam and Year Filters (Combined) */}
-                                    <div className="flex items-center gap-2 flex-wrap">
+                                <div className="ud-header-top">
+                                    <div className="ud-header-controls">
                                         <select
                                             value={listCombinedFilter}
                                             onChange={(e) => setListCombinedFilter(e.target.value)}
-                                            className="px-2 py-1.5 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-600 shadow-sm"
+                                            className="ud-select-sm"
                                         >
                                             <option value="">Select Exam</option>
                                             <option value="all">All Exams & Years</option>
@@ -985,12 +1112,20 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                                 );
                                             })}
                                         </select>
+                                        <button className="ud-new-btn-sm" onClick={handleCreateNew}>
+                                            <Plus size={14} />
+                                            New Blueprint
+                                        </button>
                                     </div>
                                 </div>
-                                <button className="ud-new-btn" onClick={handleCreateNew}>
-                                    <Plus size={16} />
-                                    New Blueprint
-                                </button>
+
+                                <div className="ud-tabs">
+                                    {(['all', 'owned', 'shared'] as const).map(f => (
+                                        <button key={f} className={`ud-tab${filterView === f ? ' active' : ''}`} onClick={() => setFilterView(f)}>
+                                            {f}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* ── Content ── */}
@@ -1014,10 +1149,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                             <BookOpen size={26} />
                                         </div>
                                         <p style={{ fontFamily: 'var(--dash-display)', fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.4rem' }}>No blueprints found</p>
-                                        <p style={{ fontSize: '0.82rem', color: 'var(--dash-muted)', marginBottom: '1.25rem' }}>Create your first blueprint to get started.</p>
-                                        <button className="ud-new-btn" style={{ margin: '0 auto' }} onClick={handleCreateNew}>
-                                            <Plus size={15} /> New Blueprint
-                                        </button>
+                                        <p style={{ fontSize: '0.82rem', color: 'var(--dash-muted)' }}>Create your first blueprint to get started using the button above.</p>
                                     </div>
                                 );
 
@@ -1028,8 +1160,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                             <table className="ud-table">
                                                 <thead className="ud-thead">
                                                     <tr>
-                                                        {['Status', 'Date', 'Paper Type', 'Class', 'Subject', 'Term', 'Set', 'Marks', 'Actions'].map((h, i) => (
-                                                            <th key={h} className="ud-th" style={{ textAlign: i >= 7 ? 'right' : i === 7 ? 'center' : 'left' }}>{h}</th>
+                                                        {['Status', 'Date', 'Paper Type', 'Class', 'Subject', 'Term', 'Set', 'Marks', 'Actions'].map((h) => (
+                                                            <th key={h} className="ud-th">{h}</th>
                                                         ))}
                                                     </tr>
                                                 </thead>
@@ -1038,46 +1170,55 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                                         const isOwner = bp.ownerId === user.id;
                                                         const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
                                                         return (
-                                                            <tr key={bp.id} className="ud-tr" style={{ animationDelay: `${idx * 40}ms` }}>
+                                                            <tr key={bp.id} className="ud-tr">
                                                                 <td className="ud-td">
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'center' }}>
                                                                         {isOwner
-                                                                            ? <span className="ud-badge owner"><UserCircle size={10} />Owner</span>
-                                                                            : <span className="ud-badge shared"><Share2 size={10} />Shared</span>
+                                                                            ? <span className="ud-table-badge owner"><UserCircle size={12} />Owner</span>
+                                                                            : <span className="ud-table-badge shared"><Share2 size={12} />Shared</span>
                                                                         }
-                                                                        {bp.isConfirmed && <span className="ud-badge confirmed"><CheckCircle size={10} />Confirmed</span>}
-                                                                        {bp.isLocked && <span className="ud-badge locked"><Lock size={10} />Locked</span>}
+                                                                        {bp.isConfirmed && <span className="ud-table-badge confirmed"><CheckCircle size={12} />Confirmed</span>}
+                                                                        {bp.isLocked && <span className="ud-table-badge locked"><Lock size={12} />Locked</span>}
                                                                     </div>
                                                                 </td>
-                                                                <td className="ud-td" style={{ color: 'var(--dash-muted)', fontSize: '0.8rem' }}>
-                                                                    {new Date(bp.createdAt).toLocaleDateString()}
-                                                                </td>
                                                                 <td className="ud-td">
-                                                                    <div style={{ fontWeight: 700, color: 'var(--dash-accent)', fontSize: '0.85rem' }}>{bp.questionPaperTypeName || 'N/A'}</div>
+                                                                    <div className="ud-td-primary">{new Date(bp.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
+                                                                    <div className="ud-td-secondary">{new Date(bp.createdAt).getFullYear()}</div>
+                                                                </td>
+                                                                <td className="ud-td" style={{ textAlign: 'left' }}>
+                                                                    <div className="ud-td-primary" style={{ color: 'var(--ap-text)' }}>{bp.questionPaperTypeName || 'N/A'}</div>
                                                                     {!isOwner && ownerUser && (
-                                                                        <div style={{ fontSize: '0.72rem', color: 'var(--dash-muted)', marginTop: '0.15rem' }}>by {ownerUser.name}</div>
+                                                                        <div className="ud-td-secondary">by {ownerUser.name}</div>
                                                                     )}
                                                                 </td>
-                                                                <td className="ud-td">Class {bp.classLevel === 'SSLC' ? '11 (SSLC)' : bp.classLevel}</td>
-                                                                <td className="ud-td" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bp.subject}</td>
-                                                                <td className="ud-td" style={{ color: 'var(--dash-muted)', fontSize: '0.82rem' }}>{bp.examTerm}</td>
-                                                                <td className="ud-td" style={{ textAlign: 'center', fontWeight: 700 }}>{bp.setId || 'Set A'}</td>
-                                                                <td className="ud-td" style={{ textAlign: 'center' }}>
-                                                                    <span className="ud-marks-pill">{bp.totalMarks}</span>
+                                                                <td className="ud-td">
+                                                                    <div className="ud-td-primary">Class {bp.classLevel === 'SSLC' ? '11' : bp.classLevel}</div>
+                                                                    {bp.classLevel === 'SSLC' && <div className="ud-td-secondary">SSLC</div>}
                                                                 </td>
                                                                 <td className="ud-td">
-                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.4rem' }}>
-                                                                        <button className="ud-action-btn edit" onClick={() => handleEdit(bp)} disabled={!!bp.isLocked}>
-                                                                            {bp.isLocked ? <Lock size={13} /> : <Edit2 size={13} />}
-                                                                            Edit
+                                                                    <div className="ud-td-primary" style={{ fontSize: '0.75rem', maxWidth: '140px', margin: '0 auto', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bp.subject}</div>
+                                                                </td>
+                                                                <td className="ud-td">
+                                                                    <div className="ud-table-badge" style={{ background: '#f1f5f9', color: '#475569' }}>{bp.examTerm}</div>
+                                                                </td>
+                                                                <td className="ud-td">
+                                                                    <div className="ud-td-primary">{bp.setId || 'Set A'}</div>
+                                                                </td>
+                                                                <td className="ud-td">
+                                                                    <div className="ud-table-marks">{bp.totalMarks}</div>
+                                                                </td>
+                                                                <td className="ud-td">
+                                                                    <div className="ud-t-actions">
+                                                                        <button className="ud-t-btn edit" title="Edit" onClick={() => handleEdit(bp)} disabled={!!bp.isLocked}>
+                                                                            {bp.isLocked ? <Lock size={16} /> : <Edit3 size={16} />}
                                                                         </button>
                                                                         {isOwner && (
                                                                             <>
-                                                                                <button className="ud-action-btn share" onClick={() => setSharingBlueprintId(bp.id)}>
-                                                                                    <Share2 size={13} /> Share
+                                                                                <button className="ud-t-btn share" title="Share" onClick={() => setSharingBlueprintId(bp.id)}>
+                                                                                    <Share2 size={16} />
                                                                                 </button>
-                                                                                <button className="ud-action-btn del" onClick={() => handleDelete(bp.id)} disabled={!!bp.isLocked}>
-                                                                                    <Trash2 size={14} />
+                                                                                <button className="ud-t-btn del" title="Delete" onClick={() => handleDelete(bp.id)} disabled={!!bp.isLocked}>
+                                                                                    <Trash2 size={16} />
                                                                                 </button>
                                                                             </>
                                                                         )}
@@ -1100,25 +1241,40 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                                 return (
                                                     <div key={bp.id} className="ud-card" style={{ animationDelay: `${index * 80}ms` }}>
                                                         {/* Card Header */}
-                                                        <div className="ud-card-header">
+                                                        <div className="ud-card-header" style={{ height: 'auto', minHeight: '100px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                             <div className="ud-card-header-bg" style={{ background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` }} />
-                                                            <div className="ud-card-header-dots" />
-                                                            <div className="ud-card-header-glow1" />
-                                                            <div className="ud-card-header-glow2" />
-                                                            <div className="ud-card-wave" />
+                                                            <div className="ud-card-pattern" style={{ 
+                                                                position: 'absolute', inset: 0, opacity: 0.3,
+                                                                backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
+                                                                backgroundSize: '12px 12px'
+                                                            }} />
 
                                                             {/* Badges */}
-                                                            <div className="ud-card-badges" style={{ zIndex: 1 }}>
+                                                            <div className="ud-card-badges" style={{ position: 'relative', zIndex: 10 }}>
                                                                 {isOwner
-                                                                    ? <span style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(8px)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '100px', fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Owner</span>
-                                                                    : <span style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(8px)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '100px', fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Shared</span>
+                                                                    ? <span style={{ background: '#06b6d4', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', fontSize: '0.6rem', fontWeight: 800, padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>Owner</span>
+                                                                    : <span style={{ background: '#0891b2', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', fontSize: '0.6rem', fontWeight: 800, padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>Shared</span>
                                                                 }
                                                                 {bp.isConfirmed && (
-                                                                    <span style={{ background: 'rgba(52,211,153,0.3)', backdropFilter: 'blur(8px)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '100px', fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>✓ Confirmed</span>
+                                                                    <span style={{ background: '#16a34a', color: '#fff', borderRadius: '10px', fontSize: '0.6rem', fontWeight: 800, padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>✓ Confirmed</span>
                                                                 )}
                                                                 {bp.isLocked && (
-                                                                    <span style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(8px)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '100px', fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>🔒 Locked</span>
+                                                                    <span style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(8px)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', fontSize: '0.6rem', fontWeight: 800, padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🔒 Locked</span>
                                                                 )}
+                                                            </div>
+
+                                                            {/* Title & Date in Header */}
+                                                            <div style={{ position: 'relative', zIndex: 10 }}>
+                                                                <div style={{ 
+                                                                    fontFamily: 'var(--ap-display)', fontSize: '1rem', fontWeight: 800, color: '#fff', 
+                                                                    lineHeight: 1.2, textShadow: '0 2px 4px rgba(0,0,0,0.2)', marginBottom: '0.2rem' 
+                                                                }}>
+                                                                    {bp.questionPaperTypeName || 'N/A'}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
+                                                                    {new Date(bp.createdAt).toLocaleDateString()}
+                                                                    {!isOwner && ownerUser && ` • by ${ownerUser.name}`}
+                                                                </div>
                                                             </div>
 
                                                             {/* Marks bubble */}
@@ -1129,11 +1285,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                                         </div>
 
                                                         {/* Card Body */}
-                                                        <div className="ud-card-body">
-                                                            <div className="ud-card-title">{bp.questionPaperTypeName || 'N/A'}</div>
-                                                            {!isOwner && ownerUser && <div className="ud-card-by">by {ownerUser.name}</div>}
-                                                            <div className="ud-card-date">{new Date(bp.createdAt).toLocaleDateString()}</div>
-
+                                                        <div className="ud-card-body" style={{ padding: '0.75rem' }}>
                                                             <div className="ud-card-grid">
                                                                 <div className="ud-card-meta">
                                                                     <div className="ud-card-meta-label">Class</div>
@@ -1275,7 +1427,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                     onUpdateReportSettings={(s, p) => setCurrentBlueprint(prev => prev ? { ...prev, reportSettings: s, perReportSettings: p } : null)}
                                     onSaveSettings={handleSaveReportSettings}
                                     isSaving={isSaving}
-                                    />                            )}
+                                />)}
                         </div>
                     )}
 
@@ -1284,7 +1436,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                         <UserProfile
                             user={user}
                             onUpdate={onUpdateUser}
-                            onBack={() => setView('list')}
+                            onBack={() => {
+                                if (isProfileIncomplete) {
+                                    Swal.fire({
+                                        title: "Incomplete Profile",
+                                        text: "Please complete and save your profile before returning to the dashboard.",
+                                        icon: "warning",
+                                        confirmButtonColor: "#4f46e5"
+                                    });
+                                    return;
+                                }
+                                setView('list');
+                            }}
                         />
                     )}
                 </div>

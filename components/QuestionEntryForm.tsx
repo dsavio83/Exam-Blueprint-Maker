@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Edit2, Layers, Save, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Edit2, Layers, Save, RefreshCw, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { Blueprint, BlueprintItem, QuestionPaperType, SystemSettings, Discourse, Curriculum } from '../types';
 import { getSettings, getDiscourses, getCurriculum, getDB, initDB, filterCurriculumByTerm } from '../services/db';
 import QuestionRow from './QuestionRow';
 
 export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, isSaving }: {
     blueprint: Blueprint,
-    onUpdateItem: (id: string, field: keyof BlueprintItem, val: string) => void,
+    onUpdateItem: (id: string, field: keyof BlueprintItem, val: any) => void,
     paperType?: QuestionPaperType,
     onSave?: () => void,
     isSaving?: boolean
@@ -17,11 +17,17 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, 
     const [hasChanges, setHasChanges] = useState(false);
     const [localSaving, setLocalSaving] = useState(false);
 
-    const handleLocalUpdate = (id: string, field: keyof BlueprintItem, val: string) => {
+    // ─── Real-time Time Validation ──────────────────────────────────────────
+    const totalTime = useMemo(() => {
+        return blueprint.items.reduce((sum, item) => sum + (item.time || 0), 0);
+    }, [blueprint.items]);
+
+    const isTimeInvalid = totalTime !== 90;
+
+    const handleLocalUpdate = (id: string, field: keyof BlueprintItem, val: any) => {
         setHasChanges(true);
         onUpdateItem(id, field, val);
     };
-
     const handleSave = async () => {
         if (!onSave) return;
         setLocalSaving(true);
@@ -89,8 +95,52 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, 
         return a.marksPerQuestion - b.marksPerQuestion;
     });
 
+    // Helper to format mixed language text (Tamil in TAU-Paalai, English/Numbers in Times New Roman)
+    const formatInstruction = (text: string) => {
+        if (!text) return null;
+        
+        // Regex to identify English alphanumeric parts and punctuation commonly used with them
+        const parts = text.split(/([a-zA-Z0-9.,()\-\/:#]+)/g);
+        
+        return parts.map((part, i) => {
+            if (/^[a-zA-Z0-9.,()\-\/:#]+$/.test(part)) {
+                return <span key={i} className="english-font" style={{ fontFamily: 'Times New Roman, serif' }}>{part}</span>;
+            }
+            return <span key={i} className="tamil-font">{part}</span>;
+        });
+    };
+
     return (
         <div className="bg-white p-6 rounded shadow mt-6 relative">
+            {/* ── Time Validation Alert (Floating Top-Right) ── */}
+            <div className={`fixed top-20 right-6 z-[60] transition-all duration-500 transform ${isTimeInvalid ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'}`}>
+                <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-xl border-2 backdrop-blur-md ${totalTime > 90 ? 'bg-rose-50/90 border-rose-200 text-rose-700' : 'bg-amber-50/90 border-amber-200 text-amber-700'}`}>
+                    <div className={`p-1.5 rounded-full ${totalTime > 90 ? 'bg-rose-100' : 'bg-amber-100'}`}>
+                        <Clock size={16} className="animate-pulse" />
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[11px] font-black uppercase tracking-wider leading-none">Time Limit: 90 Min</span>
+                        <span className="text-sm font-bold">
+                            Current: {totalTime} Min 
+                            ({totalTime > 90 ? `+${totalTime - 90}` : `-${90 - totalTime}`})
+                        </span>
+                    </div>
+                    <AlertTriangle size={18} className="ml-1 opacity-80" />
+                </div>
+            </div>
+
+            {/* ── Time Success Alert (Briefly show when perfect) ── */}
+            {!isTimeInvalid && totalTime === 90 && (
+                 <div className="fixed top-20 right-6 z-[60] animate-bounce-in">
+                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-xl border-2 border-emerald-200 bg-emerald-50/90 text-emerald-700 backdrop-blur-md">
+                        <div className="p-1.5 rounded-full bg-emerald-100 text-emerald-600">
+                            <CheckCircle2 size={16} />
+                        </div>
+                        <span className="text-sm font-bold uppercase tracking-wide">Perfect 90 Minutes</span>
+                    </div>
+                 </div>
+            )}
+
             <div className="flex justify-between items-center mb-6 border-b pb-2">
                 <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                     <Edit2 size={24} className="text-blue-600" />
@@ -160,8 +210,8 @@ export const QuestionEntryForm = ({ blueprint, onUpdateItem, paperType, onSave, 
                                                 <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">SECTION INSTRUCTION</div>
                                             </div>
                                         </div>
-                                        <p className="text-[14px] font-bold text-amber-900 leading-relaxed tamil-font">
-                                            {section?.instruction}
+                                        <p className="text-[14px] font-bold text-amber-900 leading-relaxed">
+                                            {formatInstruction(section?.instruction || '')}
                                         </p>
                                     </div>
                                 )}

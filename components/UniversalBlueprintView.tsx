@@ -162,12 +162,6 @@ const UniversalBlueprintView: React.FC<UniversalBlueprintViewProps> = ({
                         onSaveSettings={onSaveSettings}
                     />
                 )}
-
-                {activeMode === 'Questions' && blueprint && (
-                    <div className="mt-8 pt-8 border-t">
-                        <SummaryTable items={blueprint.items} />
-                    </div>
-                )}
             </div>
         </div>
     );

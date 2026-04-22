@@ -655,6 +655,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                 .profile-container {
                     background-color: #f8fafc;
                     min-height: 100vh;
+                    overflow-x: hidden;
                 }
                 .profile-back-btn {
                     color: #64748b;
@@ -669,155 +670,142 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                     color: #4f46e5;
                     transform: translateX(-4px);
                 }
-                .profile-title-area {
-                    border-bottom: 1px solid #e2e8f0;
-                    padding-bottom: 1.5rem;
-                }
                 .profile-title {
                     font-family: 'Syne', sans-serif;
-                    font-size: 2.25rem;
+                    font-size: 2rem;
                     font-weight: 800;
                     color: #1e293b;
                     margin-bottom: 0.5rem;
                     background: linear-gradient(135deg, #1e293b 0%, #4f46e5 100%);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
+                    line-height: 1.2;
+                    padding-bottom: 0.2rem;
+                }
+                @media (max-width: 640px) {
+                    .profile-title { font-size: 1.5rem; }
+                    .profile-container { padding-left: 1rem; padding-right: 1rem; }
                 }
                 .profile-subtitle {
                     color: #64748b;
-                    font-size: 1rem;
+                    font-size: 0.875rem;
                 }
                 .profile-form {
                     display: flex;
                     flex-direction: column;
-                    gap: 2rem;
+                    gap: 1.5rem;
+                    width: 100%;
                 }
                 .profile-section {
                     background: white;
                     border: 1px solid #e2e8f0;
-                    border-radius: 1.25rem;
-                    padding: 2rem;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+                    border-radius: 1rem;
+                    padding: 1.5rem;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+                    width: 100%;
+                    box-sizing: border-box;
+                }
+                @media (max-width: 480px) {
+                    .profile-section { padding: 1.25rem 0.85rem; }
                 }
                 .section-header {
                     display: flex;
                     align-items: center;
                     gap: 0.75rem;
-                    margin-bottom: 1.5rem;
-                    padding-bottom: 1rem;
+                    margin-bottom: 1.25rem;
+                    padding-bottom: 0.75rem;
                     border-bottom: 1px dashed #f1f5f9;
                 }
                 .section-icon {
                     color: #4f46e5;
+                    flex-shrink: 0;
                 }
                 .section-header h2 {
                     font-family: 'Syne', sans-serif;
-                    font-size: 1.25rem;
+                    font-size: 1.1rem;
                     font-weight: 700;
                     color: #334155;
                 }
                 .profile-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                    gap: 1.5rem;
+                    grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+                    gap: 1rem;
+                    width: 100%;
                 }
                 .form-group {
                     display: flex;
                     flex-direction: column;
-                    gap: 0.5rem;
+                    gap: 0.4rem;
+                    min-width: 0;
+                    width: 100%;
                 }
                 .form-group label {
-                    font-size: 0.875rem;
+                    font-size: 0.75rem;
                     font-weight: 600;
                     color: #64748b;
-                    margin-left: 0.25rem;
+                    display: block;
+                    width: 100%;
+                    white-space: normal; /* Allow wrapping for long labels */
+                    line-height: 1.2;
                 }
                 .form-group input, 
                 .form-group select {
                     background: #f8fafc;
                     border: 1px solid #e2e8f0;
                     border-radius: 0.75rem;
-                    padding: 0.75rem 1rem;
-                    font-size: 1rem;
+                    padding: 0.65rem 0.85rem;
+                    font-size: 0.9rem;
                     color: #1e293b;
                     font-family: 'DM Sans', sans-serif;
                     transition: all 0.2s;
-                }
-                .form-group input:focus, 
-                .form-group select:focus {
-                    outline: none;
-                    border-color: #4f46e5;
-                    background: white;
-                    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+                    width: 100%;
+                    min-width: 0;
+                    box-sizing: border-box;
                 }
                 .input-with-icon {
                     position: relative;
+                    width: 100%;
                 }
                 .input-with-icon svg {
                     position: absolute;
-                    left: 1rem;
+                    left: 0.85rem;
                     top: 50%;
                     transform: translateY(-50%);
                     color: #94a3b8;
                     pointer-events: none;
                 }
-                .input-with-icon input {
-                    padding-left: 2.75rem;
-                    width: 100%;
-                }
+                .input-with-icon input,
                 .input-with-icon select {
-                    padding-left: 2.75rem;
-                    width: 100%;
-                    appearance: none;
-                }
-                .readonly-input {
-                    background: #f1f5f9 !important;
-                    cursor: not-allowed;
-                    color: #475569 !important;
-                    font-weight: 600;
-                }
-                .field-hint {
-                    font-size: 0.75rem;
-                    color: #4f46e5;
-                    margin-top: 0.25rem;
-                    font-weight: 500;
-                    font-style: italic;
-                }
-                .uppercase-input {
-                    text-transform: uppercase;
+                    padding-left: 2.5rem;
                 }
                 .profile-actions {
                     display: flex;
+                    flex-wrap: wrap;
                     align-items: center;
                     justify-content: flex-end;
-                    gap: 1.5rem;
-                    margin-top: 1rem;
-                    padding: 1.5rem;
+                    gap: 1rem;
+                    margin-top: 0.5rem;
+                    padding: 1.25rem;
                     background: #f8fafc;
-                    border-radius: 1.25rem;
+                    border-radius: 1rem;
                     border: 1px solid #e2e8f0;
+                }
+                @media (max-width: 480px) {
+                    .profile-actions { justify-content: center; }
+                    .profile-save-btn { width: 100%; justify-content: center; }
+                    .profile-actions button:first-child { width: 100%; order: 2; }
                 }
                 .profile-save-btn {
                     display: flex;
                     align-items: center;
-                    gap: 0.75rem;
+                    gap: 0.6rem;
                     background: #4f46e5;
                     color: white;
                     font-weight: 700;
-                    font-size: 1rem;
-                    padding: 0.75rem 2rem;
+                    font-size: 0.95rem;
+                    padding: 0.75rem 1.75rem;
                     border-radius: 0.75rem;
                     transition: all 0.2s;
-                    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
-                }
-                .profile-save-btn:hover:not(:disabled) {
-                    background: #4338ca;
-                    transform: translateY(-2px);
-                    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
-                }
-                .profile-save-btn:disabled {
-                    opacity: 0.7;
-                    cursor: not-allowed;
                 }
             `}</style>
         </div>
