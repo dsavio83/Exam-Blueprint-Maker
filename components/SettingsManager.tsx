@@ -311,14 +311,13 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[9px] font-black uppercase text-slate-400 px-4 tracking-widest">Weightage (Marks)</label>
-                      <input type="number" className="w-full p-4 rounded-2xl bg-white border border-slate-100 font-black text-xl text-center shadow-sm" value={newMarkValue} onChange={e => setNewMarkValue(Number(e.target.value))} />
+                      <input type="number" className="w-full p-4 rounded-2xl bg-white border border-slate-100 font-black text-xl text-center shadow-sm" value={isNaN(newMarkValue) ? '' : newMarkValue} onChange={e => setNewMarkValue(Number(e.target.value) || 0)} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[9px] font-black uppercase text-slate-400 px-4 tracking-widest">Slot Count (Items)</label>
-                      <input type="number" className="w-full p-4 rounded-2xl bg-white border border-slate-100 font-black text-xl text-center shadow-sm" value={newMaxQuestions} onChange={e => setNewMaxQuestions(Number(e.target.value))} />
+                      <input type="number" className="w-full p-4 rounded-2xl bg-white border border-slate-100 font-black text-xl text-center shadow-sm" value={isNaN(newMaxQuestions) ? '' : newMaxQuestions} onChange={e => setNewMaxQuestions(Number(e.target.value) || 0)} />
                     </div>
-                  </div>
-                  <button onClick={() => handleAddQuestionType(pt.id)} className="w-full bg-slate-900 text-white py-5 rounded-[2rem] text-xs font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-900/10">Register Marks Category</button>
+                  </div>                  <button onClick={() => handleAddQuestionType(pt.id)} className="w-full bg-slate-900 text-white py-5 rounded-[2rem] text-xs font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-900/10">Register Marks Category</button>
                 </div>
 
                 <div className="space-y-3">

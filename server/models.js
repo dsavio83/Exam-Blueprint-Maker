@@ -6,7 +6,28 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: String,
   name: String,
-  email: String
+  email: String,
+  phoneNumber: String,
+  pen: String,
+  designation: String,
+  dob: String,
+  joinDate: String,
+  retirementDate: String,
+  experience: String,
+  schoolName: String,
+  schoolCode: String,
+  district: String,
+  educationalDistrict: String,
+  subdistrict: String,
+  bankAccountNumber: String,
+  bankIfsc: String,
+  bankName: String,
+  bankBranch: String,
+  pensionScheme: String,
+  basicPay: Number,
+  staffId: String,
+  brcName: String,
+  schoolType: String
 }, { strict: false });
 
 const curriculumSchema = new mongoose.Schema({

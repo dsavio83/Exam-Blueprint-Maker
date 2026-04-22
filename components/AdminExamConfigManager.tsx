@@ -104,7 +104,7 @@ const AdminExamConfigManager = () => {
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-1">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Exam Weightage</h2>
                     <p className="text-gray-500 mt-1 font-medium italic">Define how marks are distributed across units for each term.</p>
@@ -126,7 +126,7 @@ const AdminExamConfigManager = () => {
                         onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} 
                         className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['Times_New_Roman']"
                     >
-                        {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Grade {v}</option>)}
+                        {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
                     </select>
                 </div>
                 <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
@@ -194,8 +194,8 @@ const AdminExamConfigManager = () => {
                                                     <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">Unit</span>
                                                     <input
                                                         type="number"
-                                                        value={w.unitNumber}
-                                                        onChange={(e) => updateWeightage(idx, 'unitNumber', parseInt(e.target.value))}
+                                                        value={isNaN(w.unitNumber) ? '' : w.unitNumber}
+                                                        onChange={(e) => updateWeightage(idx, 'unitNumber', parseInt(e.target.value) || 0)}
                                                         className="bg-transparent w-full text-center outline-none font-bold text-lg font-['Times_New_Roman'] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                     />
                                                 </div>
@@ -216,8 +216,8 @@ const AdminExamConfigManager = () => {
                                                         min="0"
                                                         max="100"
                                                         className="bg-gray-50 border border-gray-100 rounded-xl p-4 w-28 text-center font-black text-xl text-gray-800 focus:bg-white focus:border-blue-500 focus:shadow-xl focus:shadow-blue-50 outline-none transition-all font-['Times_New_Roman'] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                        value={w.percentage}
-                                                        onChange={(e) => updateWeightage(idx, 'percentage', parseInt(e.target.value))}
+                                                        value={isNaN(w.percentage) ? '' : w.percentage}
+                                                        onChange={(e) => updateWeightage(idx, 'percentage', parseInt(e.target.value) || 0)}
                                                     />
                                                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-gray-300 text-sm group-focus-within/input:text-blue-500">%</span>
                                                 </div>

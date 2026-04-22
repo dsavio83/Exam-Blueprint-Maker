@@ -824,8 +824,8 @@ const ItemCard: React.FC<ItemCardProps> = ({
             <label className="block text-[10px] text-gray-500 font-semibold uppercase mb-1">Question Count</label>
             <input
               type="number" min="0" max="10"
-              value={item.questionCount}
-              onChange={e => onUpdate(item.id, 'questionCount', Number(e.target.value))}
+              value={isNaN(item.questionCount) ? '' : item.questionCount}
+              onChange={e => onUpdate(item.id, 'questionCount', Number(e.target.value) || 0)}
               className="w-full text-sm border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>

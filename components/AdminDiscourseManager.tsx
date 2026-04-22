@@ -221,6 +221,26 @@ const AdminDiscourseManager: React.FC = () => {
         return matchesSearch && matchesSubject;
     });
 
+    // Grouping and Sorting Logic
+    const groupedDiscourses = filteredDiscourses.reduce((groups, d) => {
+        const markKey = d.marks;
+        if (!groups[markKey]) {
+            groups[markKey] = [];
+        }
+        groups[markKey].push(d);
+        return groups;
+    }, {} as Record<number, Discourse[]>);
+
+    // Sort marks keys numerically
+    const sortedMarkKeys = Object.keys(groupedDiscourses)
+        .map(Number)
+        .sort((a, b) => a - b);
+
+    // Sort discourses within each group alphabetically by name
+    sortedMarkKeys.forEach(key => {
+        groupedDiscourses[key].sort((a, b) => a.name.localeCompare(b.name, 'ta'));
+    });
+
     const formatMark = (m: number) => {
         const s = m.toString();
         let result = s;
@@ -329,8 +349,8 @@ const AdminDiscourseManager: React.FC = () => {
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Marks Category</label>
                                     <select
                                         className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                        value={formData.marks}
-                                        onChange={e => setFormData({ ...formData, marks: parseInt(e.target.value) })}
+                                        value={isNaN(formData.marks) ? '' : formData.marks}
+                                        onChange={e => setFormData({ ...formData, marks: parseInt(e.target.value) || 0 })}
                                     >
                                         <option value="3">3 Marks</option>
                                         <option value="5">5 Marks</option>
@@ -386,8 +406,8 @@ const AdminDiscourseManager: React.FC = () => {
                                                     className="border w-full p-2 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                                     placeholder="Marks"
                                                     step="0.5"
-                                                    value={r.marks}
-                                                    onChange={e => updateRubric(idx, 'marks', parseFloat(e.target.value))}
+                                                    value={isNaN(r.marks) ? '' : r.marks}
+                                                    onChange={e => updateRubric(idx, 'marks', parseFloat(e.target.value) || 0)}
                                                 />
                                             </div>
                                             <button 
@@ -438,50 +458,96 @@ const AdminDiscourseManager: React.FC = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredDiscourses.map(d => {
-                    const totalRubricMarks = d.rubrics?.reduce((sum, r) => sum + r.marks, 0) || 0;
-                    return (
-                        <div key={d.id} className="bg-white p-4 rounded shadow border hover:shadow-md transition flex flex-col justify-between">
-                            <div>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="font-bold text-gray-800">{renderMixedText(d.name)}</h3>
-                                        <div className="flex gap-2 mt-1">
-                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{d.subject}</span>
-                                            <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded english-font">{formatMark(d.marks)} Marks</span>
+            <div className="space-y-8">
+                {sortedMarkKeys.map(markKey => (
+                    <div key={markKey} className="space-y-4">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xl font-black text-blue-800 bg-blue-50 px-6 py-2 rounded-2xl border border-blue-100 shadow-sm flex items-center gap-2">
+                                <span className="english-font" style={{ fontFamily: "'Times New Roman', serif" }}>{markKey}</span>
+                                <span>Marks Category</span>
+                            </h3>
+                            <div className="h-px flex-1 bg-gradient-to-r from-blue-100 to-transparent"></div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {groupedDiscourses[markKey].map(d => {
+                                const totalRubricMarks = d.rubrics?.reduce((sum, r) => sum + r.marks, 0) || 0;
+                                return (
+                                    <div key={d.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-xl hover:border-blue-200 transition-all flex flex-col justify-between group">
+                                        <div>
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex-1">
+                                                    <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-blue-700 transition-colors">{renderMixedText(d.name)}</h3>
+                                                    <div className="flex items-center flex-nowrap gap-2 mt-2">
+                                                        <span className="shrink-0 text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-1 rounded-lg border border-blue-100">{d.subject}</span>
+                                                        {d.cognitiveProcess && (
+                                                            <span className="shrink-0 text-[10px] font-black uppercase tracking-widest bg-purple-50 text-purple-600 px-2 py-1 rounded-lg border border-purple-100">{d.cognitiveProcess}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1 -mr-2 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => handleEdit(d)} className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit Discourse">
+                                                        <Edit2 size={18} />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(d.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete Discourse">
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            {d.rubrics && d.rubrics.length > 0 && (
+                                                <div className="mt-3 pt-3 border-t border-gray-50 space-y-2">
+                                                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Evaluation Criteria (Rubrics)</p>
+                                                    <ul className="space-y-1">
+                                                        {d.rubrics.slice(0, 5).map((r, i) => (
+                                                            <li key={i} className="flex justify-between items-start text-sm text-gray-600 bg-gray-50/50 px-2 py-1 rounded-lg border border-transparent hover:border-gray-100 hover:bg-white transition-all">
+                                                                <span className="flex-1 leading-relaxed pr-2">{renderMixedText(r.point)}</span>
+                                                                <b className="text-gray-900 english-font bg-white px-2 py-0.5 rounded-md shadow-sm border border-gray-100">{formatMark(r.marks)}</b>
+                                                            </li>
+                                                        ))}
+                                                        {d.rubrics.length > 5 && (
+                                                            <li className="text-[11px] italic text-blue-500 font-bold pl-2 flex items-center gap-1">
+                                                                <Plus size={10} />
+                                                                <span>{d.rubrics.length - 5} More Criteria Defined</span>
+                                                            </li>
+                                                        )}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="mt-1 pt-0 border-t border-gray-50 flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Validation:</span>
+                                                <div className={`h-2 w-2 rounded-full ${totalRubricMarks === d.marks ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`}></div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-1">Total Marks</span>
+                                                <span className={`text-sm font-black px-4 py-1.5 rounded-xl border ${
+                                                    totalRubricMarks === d.marks 
+                                                    ? 'bg-green-50 text-green-700 border-green-100' 
+                                                    : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                }`}>
+                                                    {formatMark(d.marks)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => handleEdit(d)} className="p-1 text-blue-500 hover:bg-blue-50 rounded"><Edit2 size={16} /></button>
-                                        <button onClick={() => handleDelete(d.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
-                                    </div>
-                                </div>
-                                {d.rubrics && d.rubrics.length > 0 && (
-                                    <div className="mt-3 pt-3 border-t text-sm text-gray-600">
-                                        <p className="text-xs font-semibold text-gray-400 mb-1 uppercase">Rubrics</p>
-                                        <ul className="list-disc pl-4 space-y-1 mb-2">
-                                            {d.rubrics.slice(0, 5).map((r, i) => (
-                                                <li key={i}>{renderMixedText(r.point)} - <b>{formatMark(r.marks)}</b></li>
-                                            ))}
-                                            {d.rubrics.length > 5 && <li className="text-xs italic text-blue-500 font-semibold">+{d.rubrics.length - 5} More...</li>}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                            {d.rubrics && d.rubrics.length > 0 && (
-                                <div className="mt-2 pt-2 border-t flex justify-end">
-                                    <span className="text-xs font-bold text-gray-700 bg-gray-200 px-2 py-1 rounded">
-                                        Total: {formatMark(totalRubricMarks)}
-                                    </span>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
-                    );
-                })}
+                    </div>
+                ))}
+
                 {filteredDiscourses.length === 0 && (
-                    <div className="col-span-full py-8 text-center text-gray-500 bg-gray-50 rounded border border-dashed">
-                        No discourses found for this selection.
+                    <div className="py-32 text-center bg-gray-50/50 rounded-[2.5rem] border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-4">
+                        <div className="p-4 bg-white rounded-2xl shadow-xl shadow-gray-200/50 text-gray-300">
+                            <Search size={48} />
+                        </div>
+                        <div>
+                            <p className="text-xl font-bold text-gray-800">No Discourses Found</p>
+                            <p className="text-gray-400 mt-1 italic font-medium">Try adjusting your search or subject filter.</p>
+                        </div>
                     </div>
                 )}
             </div>

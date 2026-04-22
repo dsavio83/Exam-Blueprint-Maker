@@ -254,15 +254,15 @@ const BlueprintSetup: React.FC<BlueprintSetupProps> = ({
           {/* Max Score */}
           <FieldBlock label="Aggregated Score (Marks)" error={errors.maxScore}>
             <div className={`flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border-2 ${errors.maxScore ? 'border-red-400' : 'border-slate-100'}`}>
-              <StepButton onClick={() => field('maxScore', Math.max(0, formData.maxScore - 10))} label="−" />
+              <StepButton onClick={() => field('maxScore', Math.max(0, (formData.maxScore || 0) - 10))} label="−" />
               <input
                 type="number"
                 className="flex-1 bg-transparent text-center font-black text-2xl outline-none"
-                value={formData.maxScore}
-                onChange={e => field('maxScore', Number(e.target.value))}
+                value={isNaN(formData.maxScore) ? '' : formData.maxScore}
+                onChange={e => field('maxScore', Number(e.target.value) || 0)}
                 min={0}
               />
-              <StepButton onClick={() => field('maxScore', formData.maxScore + 10)} label="+" />
+              <StepButton onClick={() => field('maxScore', (formData.maxScore || 0) + 10)} label="+" />
             </div>
           </FieldBlock>
 
@@ -271,8 +271,8 @@ const BlueprintSetup: React.FC<BlueprintSetupProps> = ({
             <input
               type="number"
               className="w-full p-4 border-2 border-slate-100 rounded-2xl bg-slate-50 font-black text-2xl text-center outline-none focus:bg-white focus:border-indigo-600 transition-all"
-              value={formData.timeAllotted}
-              onChange={e => field('timeAllotted', Number(e.target.value))}
+              value={isNaN(formData.timeAllotted) ? '' : formData.timeAllotted}
+              onChange={e => field('timeAllotted', Number(e.target.value) || 0)}
               min={0}
             />
           </FieldBlock>

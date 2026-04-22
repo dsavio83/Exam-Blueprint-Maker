@@ -66,11 +66,11 @@ export interface CognitiveLevel {
 }
 
 export enum ItemFormat {
-  SR1 = 'MCI', 
-  SR2 = 'MI',  
-  CRS1 = 'VSA', 
-  CRS2 = 'SA', 
-  CRL = 'E'    
+  SR1 = 'SR1 (MCI)', 
+  SR2 = 'SR2 (MI)',  
+  CRS1 = 'CRS1 (VSA)', 
+  CRS2 = 'CRS2 (SA)', 
+  CRL = 'CRL (E)'    
 }
 
 export interface ItemFormatOption {

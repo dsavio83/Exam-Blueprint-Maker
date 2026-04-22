@@ -78,7 +78,7 @@ const AdminCurriculumManager = () => {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-0">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Curriculum & Units</h2>
                     <p className="text-gray-500 mt-1 font-medium italic">Manage syllabus structure and learning outcomes.</p>
@@ -151,7 +151,7 @@ const AdminCurriculumManager = () => {
                                         <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Learning Outcomes</label>
                                     </div>
                                     <textarea
-                                        className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none resize-none min-h-[120px] transition-all font-medium text-gray-700 leading-relaxed tamil-font"
+                                        className="w-full text-base border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none resize-none min-h-[120px] transition-all font-medium text-gray-700 leading-relaxed tamil-font"
                                         value={unit.learningOutcomes || ''}
                                         onChange={(e) => updateUnit(unit.id, 'learningOutcomes', e.target.value)}
                                         placeholder="What should students learn in this unit?"
@@ -169,7 +169,7 @@ const AdminCurriculumManager = () => {
                                             <div key={sub.id} className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all group/item">
                                                 <span className="text-[10px] font-bold text-gray-300 w-5">{(sIdx + 1).toString().padStart(2, '0')}</span>
                                                 <input
-                                                    className="text-sm font-semibold text-gray-700 bg-transparent outline-none w-full tamil-font"
+                                                    className="text-base font-semibold text-gray-700 bg-transparent outline-none w-full tamil-font"
                                                     value={sub.name}
                                                     onChange={(e) => updateSubUnit(unit.id, sub.id, e.target.value)}
                                                     placeholder="Chapter Name"

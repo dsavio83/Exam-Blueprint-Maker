@@ -110,7 +110,7 @@ const AdminPaperTypeManager = () => {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-0">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Paper Types</h2>
                     <p className="text-gray-500 mt-1 font-medium italic">Define exam patterns and marks distribution.</p>
@@ -185,15 +185,15 @@ const AdminPaperTypeManager = () => {
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 items-end">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Q. Count</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={s.count} onChange={e => updateSection(idx, 'count', parseInt(e.target.value) || 0)} />
+                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.count) ? '' : s.count} onChange={e => updateSection(idx, 'count', parseInt(e.target.value) || 0)} />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Marks/Q</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={s.marks} onChange={e => updateSection(idx, 'marks', parseInt(e.target.value) || 0)} />
+                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.marks) ? '' : s.marks} onChange={e => updateSection(idx, 'marks', parseInt(e.target.value) || 0)} />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Options</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={s.optionCount || 0} onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} />
+                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.optionCount) ? '' : s.optionCount} onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} />
                                             </div>
                                             <div className="col-span-2 space-y-1.5">
                                                 <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Section Instruction</label>

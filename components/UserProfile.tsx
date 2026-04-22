@@ -292,7 +292,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>Phone Number</label>
+                                <label>Phone Number *</label>
                                 <div className="input-with-icon">
                                     <Phone size={18} />
                                     <input
@@ -301,11 +301,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         value={formData.phoneNumber || ''}
                                         onChange={handleChange}
                                         placeholder="10-digit mobile number"
+                                        required
                                     />
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>Date of Birth</label>
+                                <label>Date of Birth *</label>
                                 <div className="input-with-icon">
                                     <Calendar size={18} />
                                     <input
@@ -341,7 +342,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>PEN (Permanent Employee Number)</label>
+                                <label>PEN (Permanent Employee Number) *</label>
                                 <div className="input-with-icon">
                                     <CreditCard size={18} />
                                     <input
@@ -351,11 +352,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         value={formData.pen || ''}
                                         onChange={handleChange}
                                         placeholder="e.g. 123456"
+                                        required
                                     />
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>Designation</label>
+                                <label>Designation *</label>
                                 <div className="input-with-icon">
                                     <LayoutDashboard size={18} />
                                     <input
@@ -364,6 +366,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         value={formData.designation || ''}
                                         onChange={handleChange}
                                         placeholder="e.g. HST Physical Science"
+                                        required
                                     />
                                 </div>
                             </div>
@@ -447,7 +450,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>School Name</label>
+                                <label>School Name *</label>
                                 <div className="input-with-icon">
                                     <Building size={18} />
                                     <input
@@ -456,6 +459,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         value={formData.schoolName || ''}
                                         onChange={handleChange}
                                         placeholder="Full school name"
+                                        required
                                     />
                                 </div>
                             </div>
@@ -467,6 +471,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         name="schoolType"
                                         value={formData.schoolType || 'Government'}
                                         onChange={handleChange}
+                                        required
                                     >
                                         <option value="Government">Government</option>
                                         <option value="Aided">Aided</option>
@@ -475,13 +480,14 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                 </div>
                             </div>
                              <div className="form-group">
-                                 <label>Revenue District</label>
+                                 <label>Revenue District *</label>
                                  <div className="input-with-icon">
                                      <MapPin size={18} />
                                      <select
                                          name="district"
                                          value={formData.district || ''}
                                          onChange={handleDistrictChange}
+                                         required
                                      >
                                          <option value="">Select Revenue District</option>
                                          {districts.map(d => (
@@ -491,7 +497,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                  </div>
                              </div>
                             <div className="form-group">
-                                <label>Educational District (DEO)</label>
+                                <label>Educational District (DEO) *</label>
                                 <div className="input-with-icon">
                                     <MapPin size={18} />
                                       <select
@@ -499,6 +505,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                           value={formData.educationalDistrict || ''}
                                           onChange={handleEducationalDistrictChange}
                                           disabled={!formData.district}
+                                          required
                                       >
                                           <option value="">Select DEO</option>
                                           {formData.district && KERALA_ADMIN_STRUCTURE[formData.district as District] && 
@@ -510,7 +517,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>Educational Sub-District (AEO)</label>
+                                <label>Educational Sub-District (AEO) *</label>
                                 <div className="input-with-icon">
                                     <MapPin size={18} />
                                       <select
@@ -518,6 +525,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                           value={formData.subdistrict || ''}
                                           onChange={handleChange}
                                           disabled={!formData.educationalDistrict}
+                                          required
                                       >
                                           <option value="">Select AEO</option>
                                           {formData.district && formData.educationalDistrict && 
@@ -577,7 +585,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>Account Number</label>
+                                <label>Account Number *</label>
                                 <div className="input-with-icon">
                                     <CreditCard size={18} />
                                     <input
@@ -586,11 +594,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         value={formData.bankAccountNumber || ''}
                                         onChange={handleChange}
                                         placeholder="Your bank account number"
+                                        required
                                     />
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>IFSC Code</label>
+                                <label>IFSC Code *</label>
                                 <div className="input-with-icon">
                                     <Landmark size={18} />
                                     <input
@@ -600,6 +609,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onBack, onUpdate }) => 
                                         value={formData.bankIfsc || ''}
                                         onChange={handleChange}
                                         placeholder="11-digit IFSC code"
+                                        required
                                     />
                                 </div>
                             </div>

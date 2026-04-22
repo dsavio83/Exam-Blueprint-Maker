@@ -30,22 +30,31 @@ const AdminUserManager = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.username || !formData.name || !formData.role) return Swal.fire("Required", "Please fill required fields", "warning");
-
-        let newUsers = [...userList];
-        if (editingUser) {
-            const updateData = { ...formData };
-            if (!updateData.password) delete updateData.password;
-            newUsers = newUsers.map(u => u.id === editingUser.id ? { ...u, ...updateData } as User : u);
-        } else {
-            if (userList.find(u => u.username === formData.username)) return Swal.fire("Error", "Username already exists", "error");
-            newUsers.push({
-                ...formData as User,
-                id: Math.random().toString(36).substr(2, 9)
-            });
+        if (!formData.username || !formData.name || !formData.role) {
+            return Swal.fire("Required", "Please fill required fields", "warning");
         }
 
-        saveUsers(newUsers).then(() => {
+        let userToSave: User;
+        if (editingUser) {
+            const updateData = { ...formData };
+            if (!updateData.password || updateData.password.trim() === '') {
+                delete updateData.password;
+            }
+            userToSave = { ...editingUser, ...updateData } as User;
+        } else {
+            if (userList.find(u => u.username === formData.username)) {
+                return Swal.fire("Error", "Username already exists", "error");
+            }
+            if (!formData.password) {
+                return Swal.fire("Required", "Password is required for new users", "warning");
+            }
+            userToSave = {
+                ...formData as User,
+                id: Math.random().toString(36).substr(2, 9)
+            };
+        }
+
+        saveUsers([userToSave]).then(() => {
             Swal.fire({
                 title: "Success!",
                 text: editingUser 
@@ -60,10 +69,10 @@ const AdminUserManager = () => {
             setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
         }).catch(err => {
             console.error("Save users error:", err);
-            Swal.fire("Error", "Failed to save users.", "error");
+            Swal.fire("Error", "Failed to save user.", "error");
             getUsers().then(setUserList);
         });
-        };
+    };
 
     const handleEdit = (user: User) => {
         setEditingUser(user);
@@ -102,7 +111,7 @@ const AdminUserManager = () => {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-0">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">User Management</h2>
                     <p className="text-gray-500 mt-1 font-medium italic">Control access and roles for the blueprint system.</p>

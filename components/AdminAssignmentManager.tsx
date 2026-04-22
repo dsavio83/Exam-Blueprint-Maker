@@ -532,7 +532,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                     <div className="grid grid-cols-2 gap-2">
                                         <input
                                             type="number"
-                                            value={config.totalMarks}
+                                            value={isNaN(config.totalMarks) ? '' : config.totalMarks}
                                             onChange={(e) => setConfig({ ...config, totalMarks: parseInt(e.target.value) || 0 })}
                                             placeholder="Marks"
                                             className="ap-input bg-gray-50/50 h-[38px] text-sm"

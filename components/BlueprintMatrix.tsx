@@ -8,6 +8,14 @@ export enum KnowledgeLevel {
   PROFOUND = 'Profound',
 }
 
+export enum ItemFormat {
+  SR1 = 'SR1 (MCI)',
+  SR2 = 'SR2 (MI)',
+  CRS1 = 'CRS1 (VSA)',
+  CRS2 = 'CRS2 (SA)',
+  CRL = 'CRL (E)',
+}
+
 export enum CognitiveProcess {
   CP1 = 'Conceptual Clarity',
   CP2 = 'Application Skill',
@@ -16,14 +24,6 @@ export enum CognitiveProcess {
   CP5 = 'Critical Thinking',
   CP6 = 'Creative Thinking',
   CP7 = 'Values/Attitudes'
-}
-
-export enum ItemFormat {
-  SR1 = 'MCI',
-  SR2 = 'MI',
-  CRS1 = 'VSA',
-  CRS2 = 'SA',
-  CRL = 'E',
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -972,8 +972,8 @@ const ItemCard: React.FC<ItemCardProps> = ({
             <label className="block text-[10px] text-gray-500 font-semibold uppercase mb-1">Question Count</label>
             <input
               type="number" min="0" max="10"
-              value={item.questionCount}
-              onChange={e => onUpdate(item.id, 'questionCount', Number(e.target.value))}
+              value={isNaN(item.questionCount) ? '' : item.questionCount}
+              onChange={e => onUpdate(item.id, 'questionCount', Number(e.target.value) || 0)}
               className="w-full text-sm border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
@@ -1112,24 +1112,39 @@ const BlueprintSummaryTable: React.FC<BlueprintSummaryTableProps> = ({ blueprint
   const items = blueprint.items;
   const [open, setOpen] = useState(true);
 
-  const klRows = (Object.values(KnowledgeLevel) as KnowledgeLevel[]).map(kl => ({
+  // Reorder and include all categories even if count is 0
+  const klRows = Object.values(KnowledgeLevel).map(kl => ({
     label: kl,
-    count: items.filter(i => i.knowledgeLevel === kl).length,
+    count: items.filter(i => i.knowledgeLevel === kl).reduce((acc, i) => acc + i.questionCount, 0),
     marks: validation.klSummary[kl]?.marks || 0,
   }));
 
-  const formatMap: Record<string, { count: number; marks: number }> = {};
-  items.forEach(i => {
-    if (!formatMap[i.itemFormat]) formatMap[i.itemFormat] = { count: 0, marks: 0 };
-    formatMap[i.itemFormat].count++;
-    formatMap[i.itemFormat].marks += i.totalMarks;
+  const formatRows = Object.values(ItemFormat).map(f => {
+    // Match by exact value or if the item format is the short code (SR1, etc)
+    const relevantItems = items.filter(i => 
+      i.itemFormat === f || 
+      i.itemFormat === (f as string).split(' ')[0] ||
+      (f as string).includes(`(${i.itemFormat})`)
+    );
+    return {
+      label: f,
+      count: relevantItems.reduce((acc, i) => acc + i.questionCount, 0),
+      marks: relevantItems.reduce((acc, i) => acc + i.totalMarks, 0),
+    };
   });
 
-  const cpMap: Record<string, { count: number; marks: number }> = {};
-  items.forEach(i => {
-    if (!cpMap[i.cognitiveProcess]) cpMap[i.cognitiveProcess] = { count: 0, marks: 0 };
-    cpMap[i.cognitiveProcess].count++;
-    cpMap[i.cognitiveProcess].marks += i.totalMarks;
+  const cpRows = Object.values(CognitiveProcess).map(cp => {
+    const code = cp.split(' ')[0]; // CP1, CP2...
+    const relevantItems = items.filter(i => 
+      i.cognitiveProcess === cp || 
+      i.cognitiveProcess === code ||
+      (i.cognitiveProcess as string)?.startsWith(code)
+    );
+    return {
+      label: cp,
+      count: relevantItems.reduce((acc, i) => acc + i.questionCount, 0),
+      marks: relevantItems.reduce((acc, i) => acc + i.totalMarks, 0),
+    };
   });
 
   // FIX: correct withOR/withoutOR counts
@@ -1156,19 +1171,18 @@ const BlueprintSummaryTable: React.FC<BlueprintSummaryTableProps> = ({ blueprint
       </button>
 
       {open && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y divide-x divide-gray-200 border-t border-gray-200">
           <SummaryColumn title="Knowledge Level"
-            rows={klRows.map(r => ({ label: r.label, count: r.count, marks: r.marks }))} />
+            rows={klRows} />
           <SummaryColumn title="Item Format"
-            rows={Object.entries(formatMap).map(([k, v]) => ({ label: k, count: v.count, marks: v.marks }))} />
-          <SummaryColumn title="Cognitive Process"
-            rows={Object.entries(cpMap).map(([k, v]) => ({ label: k.split(' ')[0], count: v.count, marks: v.marks }))} />
-          {/* FIX: corrected Choice column */}
+            rows={formatRows} />
           <SummaryColumn title="Option / Choice"
             rows={[
               { label: 'With Choice', count: withORCount, marks: withORMarks },
               { label: 'Without Choice', count: withoutORCount, marks: withoutORMarks },
             ]} />
+          <SummaryColumn title="Cognitive Process"
+            rows={cpRows.map(r => ({ label: r.label, count: r.count, marks: r.marks }))} />
         </div>
       )}
     </div>
@@ -1199,7 +1213,7 @@ const SummaryColumn: React.FC<SummaryColumnProps> = ({ title, rows }) => {
             const isTamil = /[\u0B80-\u0BFF]/.test(r.label);
             return (
               <tr key={i} className="border-t border-gray-100">
-                <td className={`py-1 text-gray-700 font-medium whitespace-nowrap ${isTamil ? 'tamil-font' : ''}`}
+                <td className={`py-1 text-gray-700 font-medium ${isTamil ? 'tamil-font' : 'text-[9px] leading-tight'}`}
                   lang={isTamil ? 'ta' : 'en'}>{r.label}</td>
                 <td className="py-1 text-center text-gray-600">{r.count}</td>
                 <td className="py-1 text-center font-bold text-gray-800">{r.marks}</td>

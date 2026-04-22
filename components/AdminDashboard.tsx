@@ -93,7 +93,7 @@ const AdminDashboard = () => {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-0">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Overview</h2>
                     <p className="text-gray-500 mt-1 font-medium italic">Welcome to the administrative control center.</p>
@@ -104,10 +104,10 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard title="Active Users" count={stats.users} icon={Users} color="#2563EB" />
                 <StatCard title="Total Papers" count={stats.blueprints} icon={FileText} color="#059669" />
-                <StatCard title="Paper Styles" count={stats.paperTypes} icon={FileType} color="#7C3AED" />
+                <StatCard title="Paper Types" count={stats.paperTypes} icon={FileType} color="#7C3AED" />
                 <StatCard title="System Config" count={stats.configs} icon={Settings} color="#ea580c" />
             </div>
 

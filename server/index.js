@@ -241,7 +241,7 @@ app.post('/login', async (req, res) => {
     console.log(`Login successful for user: ${username}`);
     const normalizedUserId = getEntityId(user);
     const token = jwt.sign({ id: normalizedUserId, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, user: { id: normalizedUserId, username: user.username, role: user.role, name: user.name } });
+    res.json({ token, user: normalizeUser(user) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -266,6 +266,8 @@ app.put('/profile', auth, async (req, res) => {
     const userId = req.user.id;
     const updates = req.body;
 
+    console.log(`Updating profile for user ID: ${userId}`);
+
     // Security: Prevent sensitive field changes
     delete updates.role;
     delete updates.username;
@@ -282,10 +284,15 @@ app.put('/profile', auth, async (req, res) => {
     const user = await User.findOneAndUpdate(
       query,
       { $set: updates },
-      { new: true }
+      { new: true, runValidators: true }
     );
 
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      console.warn(`User not found for update: ${userId}`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log(`Profile updated successfully for user: ${user.username}`);
     res.json(normalizeUser(user));
   } catch (err) {
     console.error('Profile update error:', err);
@@ -307,15 +314,45 @@ app.route('/users')
   })
   .post(auth, async (req, res) => {
     if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
-    const users = Array.isArray(req.body) ? req.body : req.body.users;
-    for (const u of users) {
-      if (u.password && !u.password.match(/^\$2[ayb]\$.{56}$/)) {
-        u.password = await bcrypt.hash(u.password, 10);
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    
+    try {
+      const users = Array.isArray(req.body) ? req.body : req.body.users;
+      if (!users || !Array.isArray(users)) {
+        return res.status(400).json({ error: 'Invalid user data provided' });
       }
-      await User.findOneAndUpdate({ id: u.id }, u, { upsert: true });
+
+      for (const u of users) {
+        const updateData = { ...u };
+        
+        // Handle password hashing if provided and not already hashed
+        if (updateData.password && updateData.password.trim() !== '') {
+          // Only hash if it doesn't look like a bcrypt hash
+          if (!updateData.password.match(/^\$2[ayb]\$.{56}$/)) {
+            updateData.password = await bcrypt.hash(updateData.password, 10);
+          }
+        } else {
+          // If password is empty/null, don't update it
+          delete updateData.password;
+        }
+
+        // Clean up fields that shouldn't be in the DB
+        delete updateData._id;
+
+        // Ensure we have an ID to match
+        if (!updateData.id) continue;
+
+        await User.findOneAndUpdate(
+          { id: updateData.id }, 
+          { $set: updateData }, 
+          { upsert: true, new: true, runValidators: true }
+        );
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Save users error:', err);
+      res.status(500).json({ error: err.message });
     }
-    res.json({ success: true });
   })
   .delete(auth, async (req, res) => {
     if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
@@ -461,31 +498,6 @@ app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
     if (!(await ensureDbReady())) return serviceUnavailable(res);
     res.json({ success: true });
   });
-
-// 13. PUT /profile - Update User Profile
-app.put('/profile', auth, async (req, res) => {
-  try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const userId = req.user.id;
-    const updateData = req.body;
-
-    // Safety: Don't allow changing critical fields via simple profile update
-    delete updateData.role;
-    delete updateData.username;
-    delete updateData.password;
-    delete updateData._id;
-    delete updateData.id;
-
-    const user = await User.findOneAndUpdate(
-      { $or: [{ id: userId }, { _id: mongoose.isValidObjectId(userId) ? userId : null }] },
-      { $set: updateData },
-      { new: true }
-    );
-
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(normalizeUser(user));
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // 12. /health - System Health
 app.get('/health', (req, res) => {
