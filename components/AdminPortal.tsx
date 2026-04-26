@@ -241,7 +241,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
             if (type === 'report1' || type === 'all') await DocExportService.exportReport1(viewingBlueprint, curriculum);
             if (type === 'report2' || type === 'all') await DocExportService.exportReport2(viewingBlueprint, curriculum);
             if (type === 'report3' || type === 'all') await DocExportService.exportReport3(viewingBlueprint, curriculum);
-            if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(viewingBlueprint, curriculum);
+            if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(viewingBlueprint, curriculum, discourses);
         } catch (error) {
             console.error("Word export failed:", error);
             Swal.fire("Error", "Failed to export Word document.", "error");
@@ -438,6 +438,14 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     background: #fef2f2;
                     border-color: #fca5a5;
                 }
+
+                .hide-scrollbar::-webkit-scrollbar {
+                    display: none;
+                }
+                .hide-scrollbar {
+                    -ms-overflow-style: none;
+                    scrollbar-width: none;
+                }
             `}</style>
 
             {/* Mobile Header */}
@@ -457,9 +465,9 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
             <aside className={`
                 ap-sidebar fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
                 md:relative md:translate-x-0 transition duration-300 ease-in-out
-                w-64 z-30 flex flex-col no-print
+                w-64 z-30 h-screen flex flex-col no-print
             `}>
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between shrink-0">
                     <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 font-display">
                         <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
                             <Settings size={20} />
@@ -471,7 +479,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     </button>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
+                <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto hide-scrollbar">
                     {menuItems.map(item => {
                         const Icon = item.icon;
                         const isActive = activeTab === item.id;
@@ -488,7 +496,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     })}
                 </nav>
 
-                <div className="p-4 border-t border-gray-50 bg-gray-50/50">
+                <div className="p-4 border-t border-gray-50 bg-gray-50/50 shrink-0">
                     <div className="flex items-center gap-3 mb-4 px-2">
                         <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center text-blue-600 font-bold text-lg">
                             {user.name.charAt(0)}
@@ -526,4 +534,3 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 };
 
 export default AdminPortal;
-

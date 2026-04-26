@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
-    Trash2, Plus, X, FileJson, Edit, Save, FileText
+    Trash2, Plus, X, Edit, Save, FileText
 } from 'lucide-react';
 import {
     QuestionPaperType, QuestionPatternSection
@@ -20,7 +20,7 @@ const AdminPaperTypeManager = () => {
         description: '',
         sections: []
     });
-    const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1, optionCount: 0, timePerQuestion: 0 };
+    const defaultSection: QuestionPatternSection = { id: '', marks: 1, count: 1, optionCount: 0, timePerQuestion: 0, instruction: '', massViewHeader: '' };
 
     useEffect(() => {
         const load = async () => {
@@ -78,12 +78,6 @@ const AdminPaperTypeManager = () => {
         });
     };
 
-    const handleCopyJSON = () => {
-        const json = JSON.stringify(types, null, 2);
-        navigator.clipboard.writeText(json).then(() => {
-            Swal.fire("Copied", "JSON copied to clipboard! You can use this to update INITIAL_PAPER_TYPES in db.ts.", "success");
-        });
-    };
 
     const handleAddNew = () => {
         setEditingId(null);
@@ -116,12 +110,6 @@ const AdminPaperTypeManager = () => {
                     <p className="text-gray-500 mt-1 font-medium italic">Define exam patterns and marks distribution.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                    <button
-                        onClick={handleCopyJSON}
-                        className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 text-gray-600 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
-                    >
-                        <FileJson size={18} className="text-blue-500" /> Export JSON
-                    </button>
                     {!isFormOpen && (
                         <button
                             onClick={handleAddNew}
@@ -182,26 +170,28 @@ const AdminPaperTypeManager = () => {
                             <div className="space-y-4">
                                 {(formData.sections || []).map((s, idx) => (
                                     <div key={idx} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group/sec relative">
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 items-end">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Q. Count</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.count) ? '' : s.count} onChange={e => updateSection(idx, 'count', parseInt(e.target.value) || 0)} />
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 items-end">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Q. Count</label>
+                                                    <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.count) ? '' : s.count} onChange={e => updateSection(idx, 'count', parseInt(e.target.value) || 0)} />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Marks/Q</label>
+                                                    <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.marks) ? '' : s.marks} onChange={e => updateSection(idx, 'marks', parseInt(e.target.value) || 0)} />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Options</label>
+                                                    <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.optionCount) ? '' : s.optionCount} onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} />
+                                                </div>
                                             </div>
                                             <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Marks/Q</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.marks) ? '' : s.marks} onChange={e => updateSection(idx, 'marks', parseInt(e.target.value) || 0)} />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Options</label>
-                                                <input type="number" className="w-full border-none bg-gray-50 rounded-xl p-2 text-center text-sm font-bold text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all font-mono" value={isNaN(s.optionCount) ? '' : s.optionCount} onChange={e => updateSection(idx, 'optionCount', parseInt(e.target.value) || 0)} />
-                                            </div>
-                                            <div className="col-span-2 space-y-1.5">
-                                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">Section Instruction</label>
-                                                <input
-                                                    placeholder="E.g. Answer all questions"
-                                                    className="w-full border-none bg-gray-50 rounded-xl p-2 text-sm italic font-medium text-gray-600 focus:ring-2 focus:ring-purple-100 transition-all"
-                                                    value={s.instruction || ''}
-                                                    onChange={e => updateSection(idx, 'instruction', e.target.value)}
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">SECTION INSTRUCTION</label>
+                                                <textarea
+                                                    placeholder="Enter instructions or notes for this section (e.g. Answer all questions)"
+                                                    className="w-full border-none bg-gray-50 rounded-xl p-3 text-sm font-medium text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all min-h-[80px]"
+                                                    value={s.massViewHeader || ''}
+                                                    onChange={e => updateSection(idx, 'massViewHeader', e.target.value)}
                                                 />
                                             </div>
                                         </div>

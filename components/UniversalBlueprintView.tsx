@@ -95,30 +95,34 @@ const UniversalBlueprintView: React.FC<UniversalBlueprintViewProps> = ({
             </div>
 
             {/* Navigation & Controls - Simplified */}
-            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md py-3 px-4 border-b flex flex-wrap justify-between items-center no-print shadow-sm gap-2 rounded-xl mb-6">
-                <div className="flex w-full md:w-auto bg-gray-100 p-1 rounded-xl border border-gray-200 order-1 md:order-none">
+            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md py-3 px-4 border-b flex flex-col md:flex-row justify-between items-center no-print shadow-md gap-4 rounded-2xl mb-6">
+                <div className="flex w-full md:w-auto bg-gray-100/80 p-1 rounded-xl border border-gray-200 shadow-inner">
                     <button
                         onClick={() => { setShowQuestions(false); setShowReports(false); }}
-                        className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Matrix' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Matrix' ? 'bg-white text-blue-700 shadow-md ring-1 ring-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
                     >
-                        <List size={14} className="flex-shrink-0" /> <span className="truncate">1. Matrix</span>
+                        <List size={14} className="flex-shrink-0" /> <span className="hidden sm:inline">1. </span>Matrix
                     </button>
                     {blueprint.isConfirmed && (
                         <>
                             <button
                                 onClick={() => { setShowQuestions(true); setShowReports(false); }}
-                                className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Questions' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Questions' ? 'bg-white text-blue-700 shadow-md ring-1 ring-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
                             >
-                                <Settings size={14} className="flex-shrink-0" /> <span className="truncate">2. Questions</span>
+                                <Settings size={14} className="flex-shrink-0" /> <span className="hidden sm:inline">2. </span>Questions
                             </button>
                             <button
                                 onClick={() => { setShowReports(true); setShowQuestions(false); }}
-                                className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Reports' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`flex flex-1 items-center justify-center gap-1 md:gap-2 px-2 md:px-6 py-2.5 rounded-lg font-black text-[10px] md:text-xs uppercase tracking-widest transition-all duration-300 ${activeMode === 'Reports' ? 'bg-white text-blue-700 shadow-md ring-1 ring-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
                             >
-                                <FileText size={14} className="flex-shrink-0" /> <span className="truncate">3. Reports</span>
+                                <FileText size={14} className="flex-shrink-0" /> <span className="hidden sm:inline">3. </span>Reports
                             </button>
                         </>
                     )}
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                    {/* Save button removed from here as per user request */}
                 </div>
             </div>
 
@@ -131,9 +135,12 @@ const UniversalBlueprintView: React.FC<UniversalBlueprintViewProps> = ({
                         onUpdateItem={onUpdateItemField}
                         onMoveItem={onMoveItem}
                         paperType={paperType}
-                        readOnly={blueprint.isConfirmed}
+                        readOnly={blueprint.isConfirmed && !isAdmin}
                         onRegenerate={onRegenerate}
                         onConfirm={onConfirm}
+                        onSave={onSave}
+                        isSaving={isSaving}
+                        isAdmin={isAdmin}
                     />
                 )}
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Swal from 'sweetalert2';
 import { Blueprint, Curriculum, BlueprintItem, CognitiveProcess, ItemFormat, QuestionPaperType, ExamTerm, KnowledgeLevel, Discourse, ReportSettings } from '@/types';
-import { Download, FileText, Printer, Settings, X, Check } from 'lucide-react';
+import { Download, FileText, Settings, X, Check } from 'lucide-react';
 import AnswerKeyView from './AnswerKeyView';
 
 interface ReportsViewProps {
@@ -96,14 +96,6 @@ export const ReportsView = ({
         return totalMinutes || 150;
     };
 
-    const getTotalExamTime = () => {
-        const totalMinutes = getTotalExamMinutes();
-        const hours = Math.floor(totalMinutes / 60);
-        const mins = totalMinutes % 60;
-        if (hours === 0) return `${mins} Mins`;
-        return `${hours}.${mins.toString().padStart(2, '0')} Hrs`;
-    };
-
     const getItemQuestionCount = (item: BlueprintItem) => Math.max(item.questionCount || 1, 1);
     const getItemTotalScore = (item: BlueprintItem) => getItemQuestionCount(item) * (item.marksPerQuestion || 0);
 
@@ -145,49 +137,23 @@ export const ReportsView = ({
         formats: Object.fromEntries(formatDefinitions.map(def => [def.key, { count: 0, score: 0 }])) as Record<string, { count: number; score: number }>
     });
 
-    const normalizeCPValue = (stored: string): string => {
+    const normalizeValue = (stored: string, definitions: any[]): string => {
         if (!stored) return '';
         const s = stored.toString().trim().toLowerCase();
         const clean = (str: string) => str.replace(/[^a-z0-9]/g, '');
         const sClean = clean(s);
-        const byVal = cpDefinitions.find(def => clean(def.value.toLowerCase()) === sClean);
+        const byVal = definitions.find(def => clean(def.value.toLowerCase()) === sClean);
         if (byVal) return byVal.value;
-        const byKey = cpDefinitions.find(def => clean(def.key.toLowerCase()) === sClean);
+        const byKey = definitions.find(def => clean(def.key.toLowerCase()) === sClean);
         if (byKey) return byKey.value;
-        const byLabel = cpDefinitions.find(def => clean(def.label.toLowerCase()) === sClean);
-        if (byLabel) return byLabel.value;
-        const partial = cpDefinitions.find(def => sClean.startsWith(clean(def.label.toLowerCase()).substring(0, 10)));
-        if (partial) return partial.value;
-        return stored;
-    };
-
-    const normalizeLevelValue = (stored: string): string => {
-        if (!stored) return '';
-        const s = stored.toString().trim().toLowerCase();
-        const clean = (str: string) => str.replace(/[^a-z0-9]/g, '');
-        const sClean = clean(s);
-        const byVal = levelDefinitions.find(def => clean(def.value.toLowerCase()) === sClean);
-        if (byVal) return byVal.value;
-        const byKey = levelDefinitions.find(def => clean(def.key.toLowerCase()) === sClean);
-        if (byKey) return byKey.value;
-        const byLabel = levelDefinitions.find(def => clean(def.label.toLowerCase()) === sClean);
+        const byLabel = definitions.find(def => clean(def.label.toLowerCase()) === sClean);
         if (byLabel) return byLabel.value;
         return stored;
     };
 
-    const normalizeFormatValue = (stored: string): string => {
-        if (!stored) return '';
-        const s = stored.toString().trim().toLowerCase();
-        const clean = (str: string) => str.replace(/[^a-z0-9]/g, '');
-        const sClean = clean(s);
-        const byVal = formatDefinitions.find(def => clean(def.value.toLowerCase()) === sClean);
-        if (byVal) return byVal.value;
-        const byKey = formatDefinitions.find(def => clean(def.key.toLowerCase()) === sClean);
-        if (byKey) return byKey.value;
-        const byLabel = formatDefinitions.find(def => clean(def.label.toLowerCase()) === sClean);
-        if (byLabel) return byLabel.value;
-        return stored;
-    };
+    const normalizeCPValue = (stored: string) => normalizeValue(stored, cpDefinitions);
+    const normalizeLevelValue = (stored: string) => normalizeValue(stored, levelDefinitions);
+    const normalizeFormatValue = (stored: string) => normalizeValue(stored, formatDefinitions);
 
     const addToStats = (
         stats: ReturnType<typeof createStats>,
@@ -220,10 +186,7 @@ export const ReportsView = ({
 
     const renderMixedText = (text: string | undefined | null) => {
         if (!text) return '-';
-        
-        // Split by Tamil characters vs others (English/Numbers/Symbols)
         const segments = text.toString().split(/([அ-ஹ\u0B80-\u0BFF]+)/);
-        
         return segments.map((seg, i) => {
             if (!seg) return null;
             const isTamil = /[அ-ஹ\u0B80-\u0BFF]/.test(seg);
@@ -243,7 +206,6 @@ export const ReportsView = ({
         });
     };
 
-    const termTamil = blueprint.examTerm === ExamTerm.FIRST ? 'முதல்' : blueprint.examTerm === ExamTerm.SECOND ? 'இரண்டாம்' : 'மூன்றாம்';
     const termEnglish = blueprint.examTerm;
     const academicYear = blueprint.academicYear || '2025-26';
     const qpCodeValue = blueprint.questionPaperTypeId?.split('-').shift() || 'QP';
@@ -256,8 +218,6 @@ export const ReportsView = ({
             ? { tamil: 'Tamil Language Paper II (BT)', english: 'Tamil Language Paper II (BT)', code: '12' }
             : { tamil: blueprint.subject, english: blueprint.subject, code: '00' };
 
-    const paperCode = `T${blueprint.classLevel}${subjectInfo.code}`;
-    const examYear = academicYear.split('-')[0] || academicYear;
     const sectionIndexMap = new Map((paperType?.sections || []).map((section, idx) => [section.id, idx]));
     const unitOrderMap = new Map((curriculum?.units || []).map(unit => [unit.id, unit.unitNumber]));
     const orderedItems = [...blueprint.items].sort((a, b) => {
@@ -274,349 +234,48 @@ export const ReportsView = ({
     const report3Items = orderedItems;
 
     // ============================================================
-    // PRINT HANDLER — Dynamically inject @page size before printing
+    // PDF DOWNLOAD — Uses Puppeteer Backend
     // ============================================================
-    const handlePrint = () => {
-        const currentSettings = getSettingsForTab(activeTab);
-        const isLandscape = currentSettings.orientation 
-            ? currentSettings.orientation === 'l'
-            : (activeTab === 'report2' || activeTab === 'report3');
-
-        const existing = document.getElementById('qp-dynamic-print-page');
-        if (existing) existing.remove();
-        const style = document.createElement('style');
-        style.id = 'qp-dynamic-print-page';
-        style.textContent = `
-            @media print {
-                @page {
-                    size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-                    margin: 10mm;
-                }
-            }
-        `;
-        document.head.appendChild(style);
-        setTimeout(() => {
-            window.print();
-            setTimeout(() => { document.getElementById('qp-dynamic-print-page')?.remove(); }, 1500);
-        }, 80);
-    };
-
-    // ============================================================
-    // COLLECT ALL DOCUMENT STYLES (for PDF/Word export)
-    // ============================================================
-    const collectStyles = (): string => {
-        const sheets: string[] = [];
+    const handleDownloadPDF = async (tab: string) => {
         try {
-            Array.from(document.styleSheets).forEach(sheet => {
-                try {
-                    const rules = Array.from(sheet.cssRules || []).map(r => r.cssText).join('\n');
-                    sheets.push(rules);
-                } catch { /* cross-origin, skip */ }
+            Swal.fire({
+                title: 'Generating PDF...',
+                text: 'Please wait while we prepare your document.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
             });
-        } catch { /* ignore */ }
-        return sheets.join('\n');
-    };
 
-    // ============================================================
-    // COMMON: Build reportable header string
-    // ============================================================
-    const pdfHeaderLeft = `Class: ${blueprint.classLevel}  |  ${subjectInfo.english}`;
-    const pdfHeaderRight = `Set: ${setId}  |  Type: ${displayQpType}`;
+            const response = await fetch('/api/export/pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    id: blueprint.id,
+                    baseUrl: window.location.origin,
+                    tab: tab
+                })
+            });
 
-    // ============================================================
-    // PDF DOWNLOAD — Opens print dialog in a new window with header/footer
-    // ============================================================
-    const handleDownloadPDF = (tab: string) => {
-        const currentSettings = getSettingsForTab(tab);
-        // Use user preference if set, otherwise fallback to defaults
-        const isLandscape = currentSettings.orientation 
-            ? currentSettings.orientation === 'l'
-            : (tab === 'report2' || tab === 'report3');
+            if (!response.ok) throw new Error('Failed to generate PDF');
 
-        // Pick the capture element id
-        let captureId = '';
-        if (tab === 'report1') captureId = 'pdf-report1-pages';
-        else if (tab === 'report2') captureId = 'pdf-report2-page';
-        else if (tab === 'report3') captureId = 'pdf-report3-page';
-        else if (tab === 'answerkey') captureId = 'pdf-answerkey-page';
-        else captureId = 'pdf-report1-pages';
-
-        const el = document.getElementById(captureId);
-        const bodyHTML = el ? el.innerHTML : '<p>Content not found.</p>';
-        const allStyles = collectStyles();
-
-        const html = `<!DOCTYPE html>
-<html lang="ta">
-<head>
-<meta charset="utf-8">
-<title>QP Design - ${blueprint.classLevel} - ${academicYear}</title>
-<style>
-/* ===== Font Setup ===== */
-@font-face {
-    font-family: 'TAU-Urai';
-    src: url('/fonts/TAU-Urai.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-}
-@font-face {
-    font-family: 'TAU-Urai';
-    src: url('/fonts/TAU-Urai Bold.ttf') format('truetype');
-    font-weight: bold;
-    font-style: normal;
-}
-@font-face {
-    font-family: 'TAU-Paalai';
-    src: url('/fonts/TAU-Paalai.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-}
-@font-face {
-    font-family: 'TAU-Paalai';
-    src: url('/fonts/TAU-Paalai Bold.ttf') format('truetype');
-    font-weight: bold;
-    font-style: normal;
-}
-
-/* ===== Page Setup ===== */
-@page {
-    size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: 18mm 10mm 16mm 10mm;
-}
-*, *::before, *::after {
-    box-sizing: border-box;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-}
-html, body {
-    margin: 0; padding: 0;
-    font-family: '${settings.fontFamilyEnglish || 'Georgia'}', '${settings.fontFamily}', serif;
-    font-size: ${settings.fontSizeBody}pt;
-    line-height: ${settings.lineHeight};
-    background: white;
-    color: black;
-}
-
-/* ===== Content wrapper ===== */
-.pdf-body-content {
-    width: 100%;
-}
-
-/* ===== Sync with screen styles exactly ===== */
-table { 
-    border-collapse: collapse; 
-    width: 100%; 
-    font-family: '${settings.fontFamilyEnglish || 'Georgia'}', '${settings.fontFamily}', serif;
-}
-th, td { 
-    border: 1px solid black !important; 
-    padding: 6px 8px;
-    line-height: ${settings.lineHeight} !important;
-    height: ${settings.rowHeight}px;
-}
-th {
-    background-color: #f3f4f6 !important;
-    font-family: '${settings.headerFontStyle || 'Syne'}', sans-serif !important;
-    font-weight: bold;
-}
-.tamil-font, .report-topic-cell, .report-lo-cell { 
-    font-family: '${settings.fontFamily}', 'Latha', Arial Unicode MS, serif !important; 
-    font-size: ${settings.fontSizeTamil}pt !important; 
-    line-height: ${settings.lineHeight} !important; 
-}
-.report-analysis-table { table-layout: fixed; width: 100% !important; border-collapse: collapse; }
-.report-analysis-table th, .report-analysis-table td { word-break: break-word; vertical-align: middle; border: 1px solid black !important; height: ${settings.rowHeight}px !important; }
-.break-after-page { break-after: page; page-break-after: always; }
-.bg-gray-50 { background-color: #f9fafb !important; }
-.bg-gray-100 { background-color: #f3f4f6 !important; }
-.bg-gray-200 { background-color: #e5e7eb !important; }
-.bg-\\[\\#d9ead3\\] { background-color: #d9ead3 !important; }
-.bg-\\[\\#fff2cc\\] { background-color: #fff2cc !important; }
-.font-bold { font-weight: bold; }
-.font-semibold { font-weight: 600; }
-.text-center { text-align: center; }
-.text-left { text-align: left; }
-.text-right { text-align: right; }
-.uppercase { text-transform: uppercase; }
-.italic { font-style: italic; }
-.no-print { display: none !important; }
-
-/* App-collected styles */
-${allStyles}
-
-/* Override print media queries from app styles */
-@media screen {
-    .landscape-fit-capture { 
-        width: ${isLandscape ? '277mm' : '190mm'} !important;
-    }
-}
-</style>
-</head>
-<body>
-<div class="pdf-page-header">
-    <span>${pdfHeaderLeft}</span>
-    <span>${pdfHeaderRight}</span>
-</div>
-<div class="pdf-page-footer"></div>
-<div class="pdf-body-content">
-${bodyHTML}
-</div>
-<script>
-window.onload = function() {
-    setTimeout(function() { window.print(); }, 400);
-};
-window.onafterprint = function() {
-    setTimeout(function() { window.close(); }, 300);
-};
-</script>
-</body>
-</html>`;
-
-        const pw = window.open('', '_blank', 'width=1200,height=900,scrollbars=no');
-        if (!pw) { 
-            Swal.fire("Pop-up Blocked", "Please allow pop-ups to download PDF.", "warning");
-            return; 
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            Swal.close();
+        } catch (err: any) {
+            console.error(err);
+            Swal.fire("Error", err.message || "Failed to download PDF", "error");
         }
-        pw.document.open();
-        pw.document.write(html);
-        pw.document.close();
     };
 
     // ============================================================
-    // WORD DOWNLOAD — Office HTML format (.doc)
+    // WORD DOWNLOAD
     // ============================================================
     const handleDownloadWord = (tab: string) => {
-        const currentSettings = getSettingsForTab(tab);
-        const isLandscape = currentSettings.orientation 
-            ? currentSettings.orientation === 'l'
-            : (tab === 'report2' || tab === 'report3');
-
-        let captureId = '';
-        if (tab === 'report1') captureId = 'pdf-report1-pages';
-        else if (tab === 'report2') captureId = 'pdf-report2-page';
-        else if (tab === 'report3') captureId = 'pdf-report3-page';
-        else if (tab === 'answerkey') captureId = 'pdf-answerkey-page';
-        else captureId = 'pdf-report1-pages';
-
-        const el = document.getElementById(captureId);
-        const bodyHTML = el ? el.innerHTML : '<p>Content not found.</p>';
-
-        const pageWidth = isLandscape ? '29.7cm' : '21cm';
-        const pageHeight = isLandscape ? '21cm' : '29.7cm';
-        const marginStr = '1.0cm 1.0cm 1.0cm 1.0cm';
-
-        const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="utf-8">
-<title>QP Design - ${blueprint.classLevel} - ${academicYear}</title>
-<!--[if gte mso 9]><xml>
-<w:WordDocument>
-  <w:View>Print</w:View>
-  <w:Zoom>100</w:Zoom>
-  <w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml><![endif]-->
-<style>
-/* Word page setup */
-@page {
-    size: ${pageWidth} ${pageHeight};
-    margin: ${marginStr};
-    mso-page-orientation: ${isLandscape ? 'landscape' : 'portrait'};
-    mso-header-margin: 0.8cm;
-    mso-footer-margin: 0.8cm;
-    mso-header: h1;
-    mso-footer: f1;
-}
-body {
-    font-family: "Times New Roman", Georgia, serif;
-    font-size: 10pt;
-    color: black;
-    margin: 0;
-    padding: 0;
-}
-table {
-    border-collapse: collapse;
-    width: 100%;
-    mso-table-layout-alt: fixed;
-}
-th, td {
-    border: 1pt solid black;
-    padding: 2pt 4pt;
-    font-size: 8pt;
-    vertical-align: middle;
-    word-wrap: break-word;
-}
-.tamil-font, .report-topic-cell, .report-lo-cell {
-    font-size: 14pt;
-    line-height: ${settings.lineHeight};
-}
-.english-font {
-    font-family: 'Times New Roman', serif;
-}
-.bg-gray-50 { background: #f9fafb; }
-.bg-gray-100 { background: #f3f4f6; }
-.bg-gray-200 { background: #e5e7eb; }
-.bg-\\[\\#d9ead3\\] { background: #d9ead3; }
-.bg-\\[\\#fff2cc\\] { background: #fff2cc; }
-.font-bold { font-weight: bold; }
-.text-center { text-align: center; }
-.text-left { text-align: left; }
-.text-right { text-align: right; }
-.uppercase { text-transform: uppercase; }
-.no-print { display: none !important; }
-h1 { font-size: 14pt; font-weight: bold; text-align: center; }
-h3 { font-size: 11pt; font-weight: bold; }
-
-/* Word header/footer div style */
-div.header-div {
-    display: block;
-    border-bottom: 1pt solid #555;
-    padding-bottom: 2pt;
-    margin-bottom: 4pt;
-    font-size: 8pt;
-    font-family: Arial, sans-serif;
-}
-div.footer-div {
-    display: block;
-    border-top: 1pt solid #555;
-    padding-top: 2pt;
-    text-align: center;
-    font-size: 8pt;
-    font-family: Arial, sans-serif;
-}
-</style>
-</head>
-<body>
-<!--[if gte mso 9]>
-<div style="mso-element:header" id="h1">
-  <div class="header-div">
-    <table style="width:100%;border:none;"><tr>
-      <td style="border:none;text-align:left;font-size:8pt;font-weight:bold;">${pdfHeaderLeft}</td>
-      <td style="border:none;text-align:right;font-size:8pt;font-weight:bold;">${pdfHeaderRight}</td>
-    </tr></table>
-  </div>
-</div>
-<div style="mso-element:footer" id="f1">
-  <div class="footer-div">
-    <p style="text-align:center;font-size:8pt;">- <span style="mso-field-code:PAGE"></span> -</p>
-  </div>
-</div>
-<![endif]-->
-${bodyHTML}
-</body>
-</html>`;
-
-        const blob = new Blob(['\ufeff', wordHtml], {
-            type: 'application/vnd.ms-word;charset=utf-8'
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `QP_Design_${tab}_${blueprint.classLevel}_${setId}_${academicYear}.doc`;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+        if (onDownloadWord) {
+            onDownloadWord(tab);
+        } else {
+            Swal.fire("Error", "Word export is not available in this view.", "error");
+        }
     };
 
     // ============================================================
@@ -641,100 +300,134 @@ ${bodyHTML}
                 return { ...def, score };
             });
 
-            return (
-                <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner reports-visible-content">
-                    <div className="flex justify-between items-start mb-4 relative">
-                        <div className="flex-1 text-center">
-                            <h1 className="text-2xl font-bold text-black border-b-2 border-black inline-block px-4 pb-0.5 uppercase tracking-tight">Question Paper Design - HS</h1>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-4 text-[11pt] font-bold border-b border-black pb-3">
-                        <div className="flex"><span className="w-24 text-gray-700">Class</span><span className="mx-2">:</span><span className="english-font">{blueprint.classLevel}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2">:</span><span className="leading-none !text-[11pt] !font-normal !not-italic">{renderMixedText(subjectInfo.tamil)}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Set</span><span className="mx-2">:</span><span className="english-font">{setId}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Type</span><span className="mx-2">:</span><span className="english-font">{displayQpType}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Score</span><span className="mx-2">:</span><span className="english-font">{totalScore} Marks</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span className="english-font">{totalExamMinutes} Minutes</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic english-font">{termEnglish}</span></div>
-                        <div className="flex"><span className="w-24 text-gray-700">Year</span><span className="mx-2">:</span><span className="english-font">{academicYear}</span></div>
-                    </div>
-
-                    <div className="mb-4">
-                        <h3 className="text-[12pt] font-bold text-black border-b border-black mb-1.5 pb-0.5">I. Weightage to Content Area</h3>
-                        <table className="w-full border-collapse border border-black text-[10pt] leading-none">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="border border-black px-1 py-0 text-center font-bold w-[6%]">Sl. No</th>
-                                    <th className="border border-black px-1.5 py-0 text-center font-bold w-[28%]">Learning Objective</th>
-                                    <th className="border border-black px-1.5 py-0 text-center font-bold w-[22%]">Unit / Topic / Chapter</th>
-                                    <th className="border border-black px-1.5 py-0 text-center font-bold w-[22%]">Sub-unit / Sub-topic</th>
-                                    <th className="border border-black px-1 py-0 text-center font-bold w-[6%]">Score</th>
-                                    <th className="border border-black px-1 py-0 text-center font-bold w-[7%]">%</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {contentAreaStats.map((row, idx) => (
-                                    <tr key={row.unit.id}>
-                                        <td className="border border-black px-1 py-2 text-center align-middle">{idx + 1}</td>
-                                        <td className="border border-black px-1.5 py-2 tamil-font text-[9pt] text-left whitespace-pre-line">{row.unit.learningOutcomes || '-'}</td>
-                                        <td className="border border-black px-1.5 py-2 tamil-font text-left">{row.unit.name}</td>
-                                        <td className="border border-black px-1.5 py-2 tamil-font italic text-[9pt] text-left whitespace-pre-line">{row.unit.subUnits.map(s => s.name).join(', ')}</td>
-                                        <td className="border border-black px-1 py-2 text-center font-bold align-middle">{formatMark(row.score)}</td>
-                                        <td className="border border-black px-1 py-2 text-center align-middle">{Math.round((row.score / totalScore) * 100)}%</td>
-                                    </tr>
-                                ))}
-                                <tr className="bg-white font-bold">
-                                    <td colSpan={4} className="border border-black px-1.5 py-1 text-center uppercase tracking-wider">Total</td>
-                                    <td className="border border-black px-1.5 py-0 text-center">{totalScore}</td>
-                                    <td className="border border-black px-1.5 py-0 text-center">100%</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="mb-4">
-                        <h3 className="text-[12pt] font-bold text-black border-b border-black mb-1.5 pb-0.5">II. Weightage to Cognitive Process</h3>
-                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[12%]">Sl. No.</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-left font-bold w-[54%]">Cognitive Process</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[17%]">Score</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[17%]">Percentage</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {cpStats.map((row, idx) => (
-                                    <tr key={row.key}>
-                                        <td className="border border-black px-1.5 py-0.5 text-center font-bold">CP{idx + 1}</td>
-                                        <td className="border border-black px-1.5 py-0.5 text-left leading-tight">{row.label}</td>
-                                        <td className="border border-black px-1.5 py-0.5 text-center">{row.score ? formatMark(row.score) : '-'}</td>
-                                        <td className="border border-black px-1.5 py-0.5 text-center">{row.score > 0 ? (row.score / totalScore * 100).toFixed(row.score / totalScore * 100 % 1 === 0 ? 0 : 1) + '%' : '-'}</td>
-                                    </tr>
-                                ))}
-                                <tr className="bg-white font-bold">
-                                    <td colSpan={2} className="border border-black px-1.5 py-0.5 text-center uppercase tracking-wider">Total</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{totalScore}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">100%</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <div className="mt-2 text-[10px] italic font-bold">
-                            Index of Abbreviation: CP - Cognitive Process
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        if (page === 2) {
             const levelStats = levelDefinitions.map(def => {
                 const score = blueprint.items.reduce((sum, item) =>
                     item.knowledgeLevel === def.value ? sum + getItemTotalScore(item) : sum, 0);
                 return { ...def, score };
             });
 
+            return (
+                <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner reports-visible-content">
+                    <div className="text-center mb-4">
+                        <h1 className="text-2xl font-bold text-black border-b border-black inline-block px-12 pb-0.5">Proforma for Analysing Question Paper</h1>
+                        <div className="text-xl font-bold mt-1">Topic/Sub Topic wise Analysis</div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-12 gap-y-1 mb-2 text-[11pt] font-bold">
+                        <div className="flex justify-start"><span className="w-20">Class</span><span className="mx-2">:</span><span className="english-font">{blueprint.classLevel}</span></div>
+                        <div className="flex justify-start"><span className="w-24">Subject</span><span className="mx-2">:</span><span className="leading-none !text-[11pt] !font-normal !not-italic">{renderMixedText(subjectInfo.tamil)}</span></div>
+                        <div className="flex justify-start"><span className="w-20">Set</span><span className="mx-2">:</span><span className="english-font">{setId}</span></div>
+                        <div className="flex justify-start"><span className="w-24">Type</span><span className="mx-2">:</span><span className="english-font">1</span></div>
+                        <div className="flex justify-start"><span className="w-20">Score</span><span className="mx-2">:</span><span className="english-font">{totalScore} Marks</span></div>
+                        <div className="flex justify-start"><span className="w-24">Time</span><span className="mx-2">:</span><span className="english-font">{totalExamMinutes} Minutes</span></div>
+                        <div className="flex justify-start"><span className="w-20">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic english-font">{termEnglish}</span></div>
+                        <div className="flex justify-start"><span className="w-24">Year</span><span className="mx-2">:</span><span className="english-font">{academicYear}</span></div>
+                    </div>
+                    <div className="border-b border-black w-full mb-4"></div>
+
+                    <div className="text-center text-xl font-bold text-black mb-1 uppercase tracking-tight">
+                        PART - I: QUESTION PAPER DESIGN - HS
+                    </div>
+                    <div className="border-b border-black w-full mb-4"></div>
+
+                    <div className="mb-6">
+                        <h3 className="text-[12pt] font-bold text-black mb-1">I. Weightage to Content Area</h3>
+                        <div className="border-b border-black w-full mb-2"></div>
+                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
+                            <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="border border-black px-1 py-1 text-center font-bold w-[6%] text-[9pt]">Sl. No</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[28%] text-[9pt]">Learning Objective</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[22%] text-[9pt]">Unit / Topic / Chapter</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[22%] text-[9pt]">Sub-unit / Sub-topic</th>
+                                    <th className="border border-black px-1 py-1 text-center font-bold w-[6%] text-[9pt]">Score</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[7%] text-[9pt]">%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {contentAreaStats.map((row, idx) => (
+                                    <tr key={row.unit.id}>
+                                        <td className="border border-black px-1 py-2 text-center align-middle english-font">{idx + 1}</td>
+                                        <td className="border border-black px-2 py-2 tamil-font text-[10pt] text-left whitespace-pre-line leading-relaxed">{row.unit.learningOutcomes || '-'}</td>
+                                        <td className="border border-black px-2 py-2 tamil-font text-left leading-relaxed">{row.unit.name}</td>
+                                        <td className="border border-black px-2 py-2 tamil-font italic text-[10pt] text-left whitespace-pre-line leading-relaxed">{row.unit.subUnits.map(s => s.name).join(', ')}</td>
+                                        <td className="border border-black px-1 py-2 text-center font-bold align-middle english-font">{formatMark(row.score)}</td>
+                                        <td className="border border-black px-1 py-2 text-center align-middle english-font">{totalScore > 0 ? Math.round((row.score / totalScore) * 100) : 0}%</td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-white font-bold h-8">
+                                    <td colSpan={4} className="border border-black px-1.5 py-1 text-center uppercase tracking-widest">Total</td>
+                                    <td className="border border-black px-1.5 py-1 text-center english-font">{totalScore}</td>
+                                    <td className="border border-black px-1.5 py-1 text-center english-font">100%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="mb-4">
+                        <h3 className="text-[12pt] font-bold text-black mb-1">II. Weightage to Cognitive Process</h3>
+                        <div className="border-b border-black w-full mb-2"></div>
+                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
+                            <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[12%] text-[9pt]">Sl. No.</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[54%] text-[9pt]">Cognitive Process</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Score</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {cpStats.map((row, idx) => (
+                                    <tr key={row.key}>
+                                        <td className="border border-black px-1.5 py-1 text-center font-bold english-font">CP{idx + 1}</td>
+                                        <td className="border border-black px-4 py-1 text-left leading-tight text-[10pt]">{row.label}</td>
+                                        <td className="border border-black px-1.5 py-1 text-center english-font">{row.score ? formatMark(row.score) : '-'}</td>
+                                        <td className="border border-black px-1.5 py-1 text-center english-font">{row.score > 0 && totalScore > 0 ? (row.score / totalScore * 100).toFixed(row.score / totalScore * 100 % 1 === 0 ? 0 : 1) + '%' : '-'}</td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-white font-bold h-8">
+                                    <td colSpan={2} className="border border-black px-1.5 py-1 text-center uppercase tracking-widest">Total</td>
+                                    <td className="border border-black px-1.5 py-1 text-center english-font">{totalScore}</td>
+                                    <td className="border border-black px-1.5 py-1 text-center english-font">100%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="mb-4">
+                        <h3 className="text-[12pt] font-bold text-black mb-1">III. Weightage to Knowledge Level</h3>
+                        <div className="border-b border-black w-full mb-2"></div>
+                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
+                            <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[12%] text-[9pt]">Sl. No.</th>
+                                    <th className="border border-black px-1.5 py-1 text-left font-bold w-[54%] text-[9pt]">Knowledge Level</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Score</th>
+                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {levelStats.map((row, idx) => (
+                                    <tr key={row.key}>
+                                        <td className="border border-black px-1.5 py-1 text-center english-font">{idx + 1}</td>
+                                        <td className="border border-black px-1.5 py-1 text-left leading-tight text-[10pt]">{row.label.split(' ')[0]}</td>
+                                        <td className="border border-black px-1.5 py-1 text-center english-font">{row.score ? formatMark(row.score) : '-'}</td>
+                                        <td className="border border-black px-1.5 py-1 text-center english-font">{row.score > 0 && totalScore > 0 ? (row.score / totalScore * 100).toFixed(0) + '%' : '-'}</td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-white font-bold h-8">
+                                    <td colSpan={2} className="border border-black px-1.5 py-1 text-center uppercase tracking-widest">Total</td>
+                                    <td className="border border-black px-1.5 py-1 text-center english-font">{totalScore}</td>
+                                    <td className="border border-black px-1.5 py-1 text-center english-font">100%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+
+        if (page === 2) {
             const getFormatGroupStats = (formats: string[]) => {
                 return blueprint.items.reduce((acc, item) => {
                     if (formats.includes(item.itemFormat as string)) {
@@ -761,35 +454,6 @@ ${bodyHTML}
             return (
                 <div className="bg-white mx-auto w-full flex flex-col font-serif text-black r1-page-inner reports-visible-content">
                     <div className="mb-4">
-                        <h3 className="text-[12pt] font-bold text-black border-b border-black mb-1.5 pb-0.5 uppercase tracking-tight">III. Weightage to Knowledge Level</h3>
-                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[12%]">Sl. No.</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-left font-bold w-[54%]">Knowledge Level</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[17%]">Score</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[17%]">Percentage</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {levelStats.map((row, idx) => (
-                                    <tr key={row.key}>
-                                        <td className="border border-black px-1.5 py-0.5 text-center">{idx + 1}</td>
-                                        <td className="border border-black px-1.5 py-0.5 text-left leading-tight">{row.label.split(' ')[0]}</td>
-                                        <td className="border border-black px-1.5 py-0.5 text-center">{row.score ? formatMark(row.score) : '-'}</td>
-                                        <td className="border border-black px-1.5 py-0.5 text-center">{row.score > 0 ? (row.score / totalScore * 100).toFixed(0) + '%' : '-'}</td>
-                                    </tr>
-                                ))}
-                                <tr className="bg-white font-bold">
-                                    <td colSpan={2} className="border border-black px-1.5 py-0.5 text-center uppercase tracking-wider">Total</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{totalScore}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">100%</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="mb-4">
                         <h3 className="text-[12pt] font-bold text-black border-b border-black mb-1.5 pb-0.5 uppercase tracking-tight">IV. Weightage to Item Format</h3>
                         <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
                             <thead>
@@ -805,62 +469,30 @@ ${bodyHTML}
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">1</td>
-                                    <td className="border border-black px-1.5 py-0.5 font-semibold leading-tight">SR Item</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">SR1</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">MCI</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{sr1Stats.count || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{sr1Stats.time || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">{sr1Stats.score ? formatMark(sr1Stats.score) : '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{sr1Stats.score > 0 ? Math.round((sr1Stats.score / totalScore) * 100) : '-'}%</td>
-                                </tr>
-                                <tr>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">2</td>
-                                    <td className="border border-black px-1.5 py-0.5 font-semibold leading-tight">SR Item</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">SR2</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">MI</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{sr2Stats.count || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{sr2Stats.time || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">{sr2Stats.score ? formatMark(sr2Stats.score) : '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{sr2Stats.score > 0 ? Math.round((sr2Stats.score / totalScore) * 100) : '-'}%</td>
-                                </tr>
-                                <tr>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">3</td>
-                                    <td className="border border-black px-1.5 py-0.5 font-semibold leading-tight">CRS Item</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">CRS1</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">VSA</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crs1Stats.count || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crs1Stats.time || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">{crs1Stats.score ? formatMark(crs1Stats.score) : '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crs1Stats.score > 0 ? Math.round((crs1Stats.score / totalScore) * 100) : '-'}%</td>
-                                </tr>
-                                <tr>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">4</td>
-                                    <td className="border border-black px-1.5 py-0.5 font-semibold leading-tight">CRS Item</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">CRS2</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">SA</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crs2Stats.count || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crs2Stats.time || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">{crs2Stats.score ? formatMark(crs2Stats.score) : '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crs2Stats.score > 0 ? Math.round((crs2Stats.score / totalScore) * 100) : '-'}%</td>
-                                </tr>
-                                <tr>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">5</td>
-                                    <td className="border border-black px-1.5 py-0.5 font-semibold leading-tight">CRL Item</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">CRL</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">E</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crlStats.count || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crlStats.time || '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center font-bold">{crlStats.score ? formatMark(crlStats.score) : '-'}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{crlStats.score > 0 ? Math.round((crlStats.score / totalScore) * 100) : '-'}%</td>
-                                </tr>
+                                {[
+                                    { s: sr1Stats, code: 'SR1', fmt: 'MCI', n: 'SR Item', sl: 1 },
+                                    { s: sr2Stats, code: 'SR2', fmt: 'MI', n: 'SR Item', sl: 2 },
+                                    { s: crs1Stats, code: 'CRS1', fmt: 'VSA', n: 'CRS Item', sl: 3 },
+                                    { s: crs2Stats, code: 'CRS2', fmt: 'SA', n: 'CRS Item', sl: 4 },
+                                    { s: crlStats, code: 'CRL', fmt: 'E', n: 'CRL Item', sl: 5 }
+                                ].map(r => (
+                                    <tr key={r.code}>
+                                        <td className="border border-black px-1.5 py-0.5 text-center english-font">{r.sl}</td>
+                                        <td className="border border-black px-1.5 py-0.5 font-semibold leading-tight">{r.n}</td>
+                                        <td className="border border-black px-1.5 py-0.5 text-center font-bold english-font">{r.code}</td>
+                                        <td className="border border-black px-1.5 py-0.5 text-center font-bold english-font">{r.fmt}</td>
+                                        <td className="border border-black px-1.5 py-0.5 text-center english-font">{r.s.count || '-'}</td>
+                                        <td className="border border-black px-1.5 py-0.5 text-center english-font">{r.s.time || '-'}</td>
+                                        <td className="border border-black px-1.5 py-0.5 text-center font-bold">{r.s.score ? formatMark(r.s.score) : '-'}</td>
+                                        <td className="border border-black px-1.5 py-0.5 text-center english-font">{r.s.score > 0 ? Math.round((r.s.score / totalScore) * 100) : '-'}%</td>
+                                    </tr>
+                                ))}
                                 <tr className="bg-white font-bold">
                                     <td colSpan={4} className="border border-black px-1.5 py-0.5 text-center uppercase">Total</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{blueprint.items.reduce((sum, item) => sum + getItemQuestionCount(item), 0)}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{totalExamMinutes}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">{totalScore}</td>
-                                    <td className="border border-black px-1.5 py-0.5 text-center">100%</td>
+                                    <td className="border border-black px-1.5 py-0.5 text-center english-font">{blueprint.items.reduce((sum, item) => sum + getItemQuestionCount(item), 0)}</td>
+                                    <td className="border border-black px-1.5 py-0.5 text-center english-font">{totalExamMinutes}</td>
+                                    <td className="border border-black px-1.5 py-0.5 text-center english-font">{totalScore}</td>
+                                    <td className="border border-black px-1.5 py-0.5 text-center english-font">100%</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -870,18 +502,14 @@ ${bodyHTML}
                         <div>
                             <span className="font-bold underline">Index of Abbreviations:</span>
                             <div className="ml-4 space-y-0.5 mt-2">
-                                <div>SR - Selected Response</div>
-                                <div>CRS - Constructed Response Short Answer</div>
-                                <div>CRL - Constructed Response Long Answer</div>
-                                <div>MCI - Multiple Choice Items</div>
+                                <div>SR - Selected Response, CRS - Constructed Response Short Answer</div>
+                                <div>CRL - Constructed Response Long Answer, MCI - Multiple Choice Items</div>
                                 <div>MI - Matching Item</div>
                             </div>
                         </div>
                         <div className="pt-8">
                             <div className="space-y-0.5 mt-2">
-                                <div>VSA - Very Short Answer</div>
-                                <div>SA - Short Answer</div>
-                                <div>E - Essay</div>
+                                <div>VSA - Very Short Answer, SA - Short Answer, E - Essay</div>
                             </div>
                         </div>
                     </div>
@@ -896,10 +524,10 @@ ${bodyHTML}
                         <div className="space-y-2 ml-4">
                             <div className="flex items-center gap-4">
                                 <span className="w-40 font-bold text-sm">Internal choice</span>
-                                <div className="border border-black w-6 h-6 flex items-center justify-center text-lg font-bold">
+                                <div className="border border-black w-6 h-6 flex items-center justify-center text-lg font-bold english-font">
                                     {hasInternalChoice ? '✓' : ''}
                                 </div>
-                                <span className="text-sm font-bold ml-2">
+                                <span className="text-sm font-bold ml-2 english-font">
                                     {hasInternalChoice ? `${internalChoicePercent}%` : ''}
                                 </span>
                             </div>
@@ -915,21 +543,15 @@ ${bodyHTML}
         return null;
     };
 
-    // ============================================================
-    // QUESTION ROWS for Report 3
-    // ============================================================
     const questionRows = report3Items.flatMap((item, index) => {
         const unit = curriculum.units.find(u => u.id === item.unitId);
         const subUnit = unit?.subUnits.find(s => s.id === item.subUnitId);
         const effectiveHasInternalChoice = !!item.hasInternalChoice;
-        const normalizedCP = normalizeCPValue(item.cognitiveProcess as string) as CognitiveProcess;
-        const normalizedCPB = normalizeCPValue((item.cognitiveProcessB || item.cognitiveProcess) as string) as CognitiveProcess;
-
         const baseRow = {
             id: `${item.id}-A`,
             qNo: `${index + 1}${effectiveHasInternalChoice ? ' (அ)' : ''}`,
             item, unit, subUnit,
-            cognitiveProcess: normalizedCP,
+            cognitiveProcess: normalizeCPValue(item.cognitiveProcess as string) as CognitiveProcess,
             knowledgeLevel: normalizeLevelValue(item.knowledgeLevel as string) as KnowledgeLevel,
             itemFormat: normalizeFormatValue(item.itemFormat as string) as ItemFormat
         };
@@ -940,16 +562,13 @@ ${bodyHTML}
                 ...baseRow,
                 id: `${item.id}-B`,
                 qNo: `${index + 1} (ஆ)`,
-                cognitiveProcess: normalizedCPB,
+                cognitiveProcess: normalizeCPValue((item.cognitiveProcessB || item.cognitiveProcess) as string) as CognitiveProcess,
                 knowledgeLevel: normalizeLevelValue((item.knowledgeLevelB || item.knowledgeLevel) as string) as KnowledgeLevel,
                 itemFormat: normalizeFormatValue((item.itemFormatB || item.itemFormat) as string) as ItemFormat
             }
         ];
     });
 
-    // ============================================================
-    // REPORT 2 ROWS
-    // ============================================================
     const activeUnitIds = new Set(orderedItems.map(item => item.unitId));
     const report2Rows = curriculum.units
         .filter(unit => activeUnitIds.has(unit.id))
@@ -963,62 +582,49 @@ ${bodyHTML}
             });
             const unitStats = createStats();
             unitItems.forEach(item => addToStats(unitStats, item.cognitiveProcess, item.knowledgeLevel, item.itemFormat, getItemTotalScore(item), getItemQuestionCount(item)));
-            const optionItems = unitItems.filter(item => item.hasInternalChoice);
             const optionStats = createStats();
-            optionItems.forEach(item => addToStats(optionStats, item.cognitiveProcessB || item.cognitiveProcess, item.knowledgeLevelB || item.knowledgeLevel, item.itemFormatB || item.itemFormat, getItemTotalScore(item), getItemQuestionCount(item)));
+            unitItems.filter(item => item.hasInternalChoice).forEach(item => addToStats(optionStats, item.cognitiveProcessB || item.cognitiveProcess, item.knowledgeLevelB || item.knowledgeLevel, item.itemFormatB || item.itemFormat, getItemTotalScore(item), getItemQuestionCount(item)));
             return {
                 id: unit.id, unit, subUnitsStats, unitStats, optionStats,
-                hasOptions: optionItems.length > 0,
-                optionCount: optionItems.reduce((s, i) => s + getItemQuestionCount(i), 0),
-                optionScore: optionItems.reduce((s, i) => s + getItemTotalScore(i), 0),
+                hasOptions: unitItems.some(i => i.hasInternalChoice),
+                optionCount: unitItems.filter(i => i.hasInternalChoice).reduce((s, i) => s + getItemQuestionCount(i), 0),
+                optionScore: unitItems.filter(i => i.hasInternalChoice).reduce((s, i) => s + getItemTotalScore(i), 0),
                 totalTime: unitItems.reduce((s, i) => s + getDisplayTime(i), 0),
                 totalItems: unitItems.reduce((s, i) => s + getItemQuestionCount(i), 0),
                 totalScore: unitItems.reduce((s, i) => s + getItemTotalScore(i), 0)
             };
         });
 
-    // ============================================================
-    // SHARED: Report Header
-    // ============================================================
     const renderReportHeader = (partLabel: string) => (
         <div className="mb-4 relative">
-            <div className="flex justify-between items-start mb-4 relative">
-                <div className="flex-1 text-center">
-                    <h1 className="text-2xl font-bold text-black border-b-2 border-black inline-block px-4 pb-1">Proforma for Analysing Question Paper</h1>
-                    <div className="text-lg font-bold mt-1">Topic/Sub Topic wise Analysis</div>
-                </div>
+            <div className="text-center mb-4">
+                <h1 className="text-2xl font-bold text-black border-b-2 border-black inline-block px-4 pb-1">Proforma for Analysing Question Paper</h1>
+                <div className="text-lg font-bold mt-1">Topic/Sub Topic wise Analysis</div>
             </div>
             <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-4 text-[11pt] font-bold border-b border-black pb-3">
-                <div className="flex"><span className="w-24 text-gray-700">Class</span><span className="mx-2">:</span><span>{blueprint.classLevel}</span></div>
-                <div className="flex"><span className="w-24 text-gray-700">Subject</span><span className="mx-2">:</span><span className="tamil-font leading-none !text-[11pt] !font-normal !not-italic">{subjectInfo.tamil}</span></div>
-                <div className="flex"><span className="w-24 text-gray-700">Set</span><span className="mx-2">:</span><span>{setId}</span></div>
-                <div className="flex"><span className="w-24 text-gray-700">Type</span><span className="mx-2">:</span><span>{displayQpType}</span></div>
-                {/* <div className="flex"><span className="w-24 text-gray-700">Score</span><span className="mx-2">:</span><span>{totalScore} Marks</span></div>
-                <div className="flex"><span className="w-24 text-gray-700">Time</span><span className="mx-2">:</span><span>{totalExamMinutes} Minutes</span></div> */}
-                <div className="flex"><span className="w-24 text-gray-700">Term</span><span className="mx-2">:</span><span className="!font-normal !not-italic">{termEnglish}</span></div>
-                <div className="flex"><span className="w-24 text-gray-700">Year</span><span className="mx-2">:</span><span>{academicYear}</span></div>
+                <div className="flex"><span className="w-24">Class</span><span className="mx-2">:</span><span className="english-font">{blueprint.classLevel}</span></div>
+                <div className="flex"><span className="w-24">Subject</span><span className="mx-2">:</span><span>{renderMixedText(subjectInfo.tamil)}</span></div>
+                <div className="flex"><span className="w-24">Set</span><span className="mx-2">:</span><span className="english-font">{setId}</span></div>
+                <div className="flex"><span className="w-24">Type</span><span className="mx-2">:</span><span className="english-font">{displayQpType}</span></div>
+                <div className="flex"><span className="w-24">Term</span><span className="mx-2">:</span><span>{termEnglish}</span></div>
+                <div className="flex"><span className="w-24">Year</span><span className="mx-2">:</span><span className="english-font">{academicYear}</span></div>
             </div>
-            <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">
-                {partLabel}
-            </div>
+            <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">{partLabel}</div>
         </div>
     );
 
-    // ============================================================
-    // SHARED: Analysis Table ColGroup & Header
-    // ============================================================
     const renderAnalysisColGroup = (showFirst: boolean) => (
         <colgroup>
-            {showFirst && <col style={{ width: '3.5%' }} />}
-            <col style={{ width: showFirst ? '9.5%' : '10%' }} />
-            <col style={{ width: showFirst ? '24%' : '25%' }} />
-            <col style={{ width: showFirst ? '9.5%' : '10%' }} />
-            {cpDefinitions.map(def => <col key={def.key} style={{ width: '2.5%' }} />)}
-            {levelDefinitions.map(def => <col key={def.key} style={{ width: '2.5%' }} />)}
-            {formatDefinitions.map(def => <col key={def.key} style={{ width: '2.5%' }} />)}
-            <col style={{ width: '4%' }} />
-            <col style={{ width: '4%' }} />
-            <col style={{ width: '4%' }} />
+            {showFirst && <col style={{ width: '4%' }} />}
+            <col style={{ width: showFirst ? '15%' : '17.5%' }} />
+            <col style={{ width: showFirst ? '10%' : '11.5%' }} />
+            <col style={{ width: showFirst ? '15%' : '17.5%' }} />
+            {cpDefinitions.map(def => <col key={def.key} style={{ width: '2.6%' }} />)}
+            {levelDefinitions.map(def => <col key={def.key} style={{ width: '2.6%' }} />)}
+            {formatDefinitions.map(def => <col key={def.key} style={{ width: '2.6%' }} />)}
+            <col style={{ width: '3.2%' }} />
+            <col style={{ width: '3.2%' }} />
+            <col style={{ width: '3.2%' }} />
         </colgroup>
     );
 
@@ -1037,20 +643,17 @@ ${bodyHTML}
                     <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px' }}>Time</th>
                 </tr>
                 <tr className="bg-[#fff2cc] text-[7.5px] leading-tight">
-                    <th className="border border-black p-[2px] font-bold" style={{ fontSize: '7.5px' }}>Topic / Unit</th>
-                    <th className="border border-black p-[2px] font-bold" style={{ fontSize: '7.5px' }}>Learning Objective</th>
-                    <th className="border border-black p-[2px] font-bold" style={{ fontSize: '7.5px' }}>Sub Topic / Sub Unit</th>
-                    {cpDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
-                    {levelDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
-                    {formatDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" title={def.label} style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    <th className="border border-black p-[2px] font-bold">Topic / Unit</th>
+                    <th className="border border-black p-[2px] font-bold">Learning Objective</th>
+                    <th className="border border-black p-[2px] font-bold">Sub Topic</th>
+                    {cpDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    {levelDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    {formatDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" style={{ fontSize: '9px' }}>{def.key}</th>)}
                 </tr>
             </thead>
         );
     };
 
-    // ============================================================
-    // RENDER REPORT 2 (Landscape)
-    // ============================================================
     const renderReport2Content = () => {
         const grandTotals = createStats();
         report2Rows.forEach(row => {
@@ -1058,13 +661,10 @@ ${bodyHTML}
             Object.keys(grandTotals.levels).forEach(k => { grandTotals.levels[k].count += row.unitStats.levels[k].count; grandTotals.levels[k].score += row.unitStats.levels[k].score; });
             Object.keys(grandTotals.formats).forEach(k => { grandTotals.formats[k].count += row.unitStats.formats[k].count; grandTotals.formats[k].score += row.unitStats.formats[k].score; });
         });
-        const totalItemsInTable = Object.values(grandTotals.cp).reduce((s, cp) => s + cp.count, 0);
-        const totalScoreInTable = Object.values(grandTotals.cp).reduce((s, cp) => s + cp.score, 0);
-
         return (
             <div className="text-black">
                 {renderReportHeader('Part – II : Unit-wise Analysis')}
-                <table className="w-full border-collapse border-2 border-black text-[8px] leading-[1.05] report-analysis-table">
+                <table className="border-collapse border-2 border-black text-[8px] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
                     {renderAnalysisColGroup(false)}
                     {renderAnalysisTableHeader('')}
                     <tbody>
@@ -1074,11 +674,11 @@ ${bodyHTML}
                                     <tr key={su.subUnit.id} className="bg-white">
                                         {suIdx === 0 && (
                                             <>
-                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] report-topic-cell font-semibold align-top">{renderMixedText(`${row.unit.unitNumber}. ${row.unit.name}`)}</td>
-                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] report-lo-cell align-top">{renderMixedText(row.unit.learningOutcomes || '-')}</td>
+                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] font-semibold align-top">{renderMixedText(`${row.unit.unitNumber}. ${row.unit.name}`)}</td>
+                                                <td rowSpan={row.subUnitsStats.length} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] align-top">{renderMixedText(row.unit.learningOutcomes || '-')}</td>
                                             </>
                                         )}
-                                        <td className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] report-topic-cell">{renderMixedText(su.subUnit.name)}</td>
+                                        <td className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1]">{renderMixedText(su.subUnit.name)}</td>
                                         {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.stats.cp[def.key].count ? <>{su.stats.cp[def.key].count}({formatMark(su.stats.cp[def.key].score)})</> : ''}</td>)}
                                         {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.stats.levels[def.key].count ? <>{su.stats.levels[def.key].count}({formatMark(su.stats.levels[def.key].score)})</> : ''}</td>)}
                                         {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.stats.formats[def.key].count ? <>{su.stats.formats[def.key].count}({formatMark(su.stats.formats[def.key].score)})</> : ''}</td>)}
@@ -1087,45 +687,14 @@ ${bodyHTML}
                                         <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.totalTime || ''}</td>
                                     </tr>
                                 ))}
-                                <tr className="bg-gray-100">
-                                    <td colSpan={3} className="border border-black px-[2px] py-[1.5px] text-[9px] leading-[1] text-black font-normal">
-                                        {row.hasOptions ? `Options / Choice Questions (${row.optionCount})` : 'Options / Choice Questions'}
-                                    </td>
-                                    {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100 english-font">{row.optionStats.cp[def.key].count ? <>{row.optionStats.cp[def.key].count}({formatMark(row.optionStats.cp[def.key].score)})</> : ''}</td>)}
-                                    {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100 english-font">{row.optionStats.levels[def.key].count ? <>{row.optionStats.levels[def.key].count}({formatMark(row.optionStats.levels[def.key].score)})</> : ''}</td>)}
-                                    {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-medium bg-gray-100 english-font">{row.optionStats.formats[def.key].count ? <>{row.optionStats.formats[def.key].count}({formatMark(row.optionStats.formats[def.key].score)})</> : ''}</td>)}
-                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-semibold bg-gray-100 english-font">{row.hasOptions ? row.optionCount : ''}</td>
-                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 font-bold bg-gray-100 english-font">{row.hasOptions ? formatMark(row.optionScore) : ''}</td>
-                                    <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] text-gray-600 bg-gray-100"></td>
-                                </tr>
                             </React.Fragment>
                         ))}
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={3} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Item</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.cp[def.key].count || ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.levels[def.key].count || ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.formats[def.key].count || ''}</td>)}
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[9px] font-bold english-font">{totalItemsInTable}</td>
-                            <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[9px] font-bold english-font" rowSpan={2}>{orderedItems.reduce((s, i) => s + getDisplayTime(i), 0)}</td>
-                        </tr>
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={3} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Score</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] english-font">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
-                            <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font">{formatMark(totalScoreInTable)}</td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
         );
     };
 
-    // ============================================================
-    // RENDER REPORT 3 (Landscape)
-    // ============================================================
     const renderReport3Content = () => {
         const totals = questionRows.filter(row => !row.id.endsWith('-B')).reduce((acc, row) => {
             const rowMarks = getItemTotalScore(row.item);
@@ -1133,14 +702,10 @@ ${bodyHTML}
             addToStats(acc.stats, row.cognitiveProcess as CognitiveProcess, row.knowledgeLevel as KnowledgeLevel, row.itemFormat as ItemFormat, rowMarks, rowQuestionCount);
             return acc;
         }, { stats: createStats() });
-
-        const tableTotalItems = Object.values(totals.stats.cp).reduce((s, cp) => s + cp.count, 0);
-        const tableTotalMarks = Object.values(totals.stats.cp).reduce((s, cp) => s + cp.score, 0);
-
         return (
             <div className="text-black">
                 {renderReportHeader('Part – III : Item-wise Analysis')}
-                <table className="w-full border-collapse border-2 border-black text-[8px] leading-[1.05] report-analysis-table">
+                <table className="border-collapse border-2 border-black text-[8px] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
                     {renderAnalysisColGroup(true)}
                     {renderAnalysisTableHeader('Item / Q. No')}
                     <tbody>
@@ -1151,9 +716,9 @@ ${bodyHTML}
                             return (
                                 <tr key={row.id} className={isOptionRow ? "bg-gray-50/50" : "bg-white"}>
                                     <td className="border border-black px-[2px] py-[2px] text-center text-[7.5px] font-bold english-font">{row.qNo}</td>
-                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] report-topic-cell font-semibold">{renderMixedText(row.unit ? `${row.unit.unitNumber}. ${row.unit.name}` : '-')}</td>
-                                    <td className="border border-black px-[3px] py-[2px] text-[7px] leading-[1.02] report-lo-cell">{renderMixedText(row.unit?.learningOutcomes || '-')}</td>
-                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] report-topic-cell">{renderMixedText(row.subUnit?.name || '-')}</td>
+                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05] font-semibold">{renderMixedText(row.unit ? `${row.unit.unitNumber}. ${row.unit.name}` : '-')}</td>
+                                    <td className="border border-black px-[3px] py-[2px] text-[7px] leading-[1.02]">{renderMixedText(row.unit?.learningOutcomes || '-')}</td>
+                                    <td className="border border-black px-[3px] py-[2px] text-[8px] leading-[1.05]">{renderMixedText(row.subUnit?.name || '-')}</td>
                                     {cpDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] english-font ${row.cognitiveProcess === def.value ? "font-bold" : ""}`}>{row.cognitiveProcess === def.value ? <>{rowQuestionCount} ({formatMark(rowMarks)})</> : ''}</td>)}
                                     {levelDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] english-font ${row.knowledgeLevel === def.value ? "font-bold" : ""}`}>{row.knowledgeLevel === def.value ? <>{rowQuestionCount} ({formatMark(rowMarks)})</> : ''}</td>)}
                                     {formatDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[7px] english-font ${row.itemFormat === def.value ? "font-bold" : ""}`}>{row.itemFormat === def.value ? <>{rowQuestionCount} ({formatMark(rowMarks)})</> : ''}</td>)}
@@ -1163,50 +728,24 @@ ${bodyHTML}
                                 </tr>
                             );
                         })}
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={4} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Item</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.cp[def.key].count || ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.levels[def.key].count || ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.formats[def.key].count || ''}</td>)}
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font">{tableTotalItems}</td>
-                            <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font" rowSpan={2}>{orderedItems.reduce((s, i) => s + getDisplayTime(i), 0)}</td>
-                        </tr>
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={4} className="border border-black px-[3px] py-[4px] text-right uppercase text-[7.5px]">Total Score</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.cp[def.key].score ? formatMark(totals.stats.cp[def.key].score) : ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.levels[def.key].score ? formatMark(totals.stats.levels[def.key].score) : ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[7px] english-font">{totals.stats.formats[def.key].score ? formatMark(totals.stats.formats[def.key].score) : ''}</td>)}
-                            <td className="border border-black px-[1px] py-[4px] bg-black"></td>
-                            <td className="border border-black px-[1px] py-[4px] text-center text-[7.5px] font-bold english-font">{formatMark(tableTotalMarks)}</td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
         );
     };
 
-    // ============================================================
-    // MAIN RENDER
-    // ============================================================
-    const isLandscape = settings.orientation 
-        ? settings.orientation === 'l' 
-        : (activeTab === 'report2' || activeTab === 'report3');
+    const isLandscape = settings.orientation ? settings.orientation === 'l' : (activeTab === 'report2' || activeTab === 'report3');
 
     return (
         <div className="mt-10 w-full text-black reports-container relative overflow-x-auto">
-
-            {/* ─── Time Warning ─── */}
             {timeWarning && (
                 <div className={`mb-4 p-3 font-bold no-print flex items-center justify-center gap-2 ${examMinutes > 90 ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-yellow-100 text-yellow-700 border border-yellow-200'}`}>
-                    <span>⚠️</span>
-                    <span>{timeWarning} ({examMinutes} Mins)</span>
+                    <span>⚠️</span><span>{timeWarning} ({examMinutes} Mins)</span>
                 </div>
             )}
 
-            {/* ─── Sticky Tab Bar ─── */}
-            <div className="sticky top-[72px] z-30 bg-white py-4 mb-4 no-print border-b flex justify-center items-center gap-4 flex-wrap px-4">
-                <div className="flex bg-gray-100 p-1 border border-black/20 overflow-x-auto scrollbar-hide">
+            <div className="sticky top-[2px] z-30 bg-white py-4 mb-4 no-print border-b flex justify-center items-center gap-4 flex-wrap px-4">
+                <div className="flex bg-gray-100 p-1 border border-black/20 overflow-x-auto">
                     {['report1', 'report2', 'report3', 'answerkey'].map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === tab ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'}`}>
@@ -1216,430 +755,66 @@ ${bodyHTML}
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={() => handleDownloadPDF(activeTab)}
-                        className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
-                        <Download size={18} /> PDF
-                    </button>
-                    {isAdmin && (
-                        <button onClick={() => handleDownloadWord(activeTab)}
-                            className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
-                            <FileText size={18} /> Word
-                        </button>
-                    )}
-                    <button onClick={handlePrint}
-                        className="bg-black text-white border-2 border-black px-5 py-2 font-bold hover:bg-gray-800 flex items-center gap-2 transition-all text-sm md:text-base outline-none">
-                        <Printer size={18} /> Print
-                    </button>
-                    <button onClick={() => setIsSettingsOpen(true)}
-                        className="bg-gray-100 text-black border-2 border-gray-300 px-5 py-2 font-bold hover:bg-gray-200 flex items-center gap-2 transition-all text-sm md:text-base outline-none rounded-lg"
-                        title="Report Settings">
-                        <Settings size={18} />
-                    </button>
+                    <button onClick={() => handleDownloadPDF(activeTab)} className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base"><Download size={18} /> PDF</button>
+                    <button onClick={() => handleDownloadWord(activeTab)} className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base"><FileText size={18} /> Word</button>
+                    <button onClick={() => setIsSettingsOpen(true)} className="bg-gray-100 text-black border-2 border-gray-300 px-5 py-2 font-bold hover:bg-gray-200 flex items-center gap-2 transition-all text-sm md:text-base rounded-lg"><Settings size={18} /></button>
                 </div>
             </div>
 
-            {/* ─── Visible Report Content ─── */}
             <div className="reports-visible-content" style={{ fontFamily: `${settings.fontFamilyEnglish || 'Georgia'}, ${settings.fontFamily}, serif`, fontSize: `${settings.fontSizeBody}pt` }}>
-
-                {/* REPORT 1 — A4 Portrait */}
                 {activeTab === 'report1' && (
                     <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} mx-auto`}>
-                        {/* Page 1 */}
-                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow mb-4 border border-gray-200 p-[12mm]`}>
-                            {renderReport1Content(1)}
-                        </div>
-                        {/* Page 2 */}
-                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow border border-gray-200 p-[12mm]`}>
-                            {renderReport1Content(2)}
-                        </div>
+                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow mb-4 border border-gray-200 p-[12mm]`}>{renderReport1Content(1)}</div>
+                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow border border-gray-200 p-[12mm]`}>{renderReport1Content(2)}</div>
                     </div>
                 )}
-
-                {/* REPORT 2 — Landscape */}
                 {activeTab === 'report2' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>
-                        {renderReport2Content()}
-                    </div>
+                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>{renderReport2Content()}</div>
                 )}
-
-                {/* REPORT 3 — Landscape */}
                 {activeTab === 'report3' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>
-                        {renderReport3Content()}
-                    </div>
+                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>{renderReport3Content()}</div>
                 )}
-
-                {/* ANSWER KEY — Portrait */}
                 {activeTab === 'answerkey' && (
                     <div className="report-1-screen-wrapper mx-auto">
                         <div className="report-1-screen-page bg-white shadow border border-gray-200 p-[12mm]">
-                            <AnswerKeyView
-                                blueprint={blueprint}
-                                curriculum={curriculum}
-                                discourses={discourses}
-                                isPdf={false}
-                            />
+                            <AnswerKeyView blueprint={blueprint} curriculum={curriculum} discourses={discourses} isPdf={false} />
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* ─── Hidden Print / PDF / Word Capture Sources ─── */}
-            <div className="no-print" aria-hidden="true">
-                {/* Report 1 capture — both pages */}
-                <div id="pdf-report1-pages" style={{ position: 'absolute', left: '-99999px', top: 0, width: '190mm', background: 'white', pointerEvents: 'none' }}>
-                    <div className="r1-capture-page" style={{ padding: '10mm 10mm 8mm', pageBreakAfter: 'always', breakAfter: 'page' }}>
-                        {renderReport1Content(1)}
-                    </div>
-                    <div className="r1-capture-page" style={{ padding: '10mm 10mm 8mm' }}>
-                        {renderReport1Content(2)}
-                    </div>
-                </div>
-
-                {/* Report 2 capture */}
-                <div id="pdf-report2-page" style={{ position: 'absolute', left: '-99999px', top: 0, width: '277mm', background: 'white', pointerEvents: 'none' }}>
-                    <div style={{ padding: '8mm' }}>
-                        {renderReport2Content()}
-                    </div>
-                </div>
-
-                {/* Report 3 capture */}
-                <div id="pdf-report3-page" style={{ position: 'absolute', left: '-99999px', top: 0, width: '277mm', background: 'white', pointerEvents: 'none' }}>
-                    <div style={{ padding: '8mm' }}>
-                        {renderReport3Content()}
-                    </div>
-                </div>
-
-                {/* Answer Key capture */}
-                <div id="pdf-answerkey-page" style={{ position: 'absolute', left: '-99999px', top: 0, width: '190mm', background: 'white', pointerEvents: 'none' }}>
-                    <div style={{ padding: '10mm 10mm 8mm' }}>
-                        <AnswerKeyView
-                            blueprint={blueprint}
-                            curriculum={curriculum}
-                            discourses={discourses}
-                            isPdf={true}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* ─── Settings Modal ─── */}
             {isSettingsOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm no-print">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                         <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                <Settings className="text-blue-600" size={20} /> Report Settings
-                            </h3>
-                            <button onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                                <X size={24} />
-                            </button>
+                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Settings className="text-blue-600" size={20} /> Report Settings</h3>
+                            <button onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
                         </div>
                         <div className="p-6 space-y-5">
-                            <div className="bg-blue-50 -mx-6 -mt-6 px-6 py-3 mb-2 border-b border-blue-100 flex items-center justify-between">
-                                <span className="text-xs font-black uppercase tracking-widest text-blue-700">Settings for: {activeTab === 'report1' ? 'Report 1' : activeTab === 'report2' ? 'Report 2' : activeTab === 'report3' ? 'Report 3' : 'Answer Key'}</span>
-                            </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Tamil Font Family</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontFamily}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontFamily: e.target.value } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="TAU-Paalai">TAU-Paalai (Recommended)</option>
-                                        <option value="Latha">Latha</option>
-                                        <option value="Arial Unicode MS">Arial Unicode MS</option>
-                                        <option value="serif">Serif</option>
+                                    <label className="text-sm font-bold text-gray-700">Tamil Font</label>
+                                    <select className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50" value={settings.fontFamily} onChange={(e) => { const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontFamily: e.target.value } }; onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer); }}>
+                                        <option value="TAU-Paalai">TAU-Paalai</option><option value="Latha">Latha</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">English Font Family</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontFamilyEnglish || 'Georgia'}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontFamilyEnglish: e.target.value } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="Georgia">Georgia</option>
-                                        <option value="Times New Roman">Times New Roman</option>
-                                        <option value="Arial">Arial</option>
-                                        <option value="Verdana">Verdana</option>
+                                    <label className="text-sm font-bold text-gray-700">Orientation</label>
+                                    <select className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50" value={settings.orientation || 'p'} onChange={(e) => { const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, orientation: e.target.value as 'p' | 'l' } }; onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer); }}>
+                                        <option value="p">Portrait</option><option value="l">Landscape</option>
                                     </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Header Font Style</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.headerFontStyle || 'Syne'}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, headerFontStyle: e.target.value } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="Syne">Syne</option>
-                                        <option value="DM Sans">DM Sans</option>
-                                        <option value="Arial">Arial</option>
-                                        <option value="Georgia">Georgia</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Page Orientation</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.orientation || 'p'}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, orientation: e.target.value as 'p' | 'l' } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    >
-                                        <option value="p">Portrait</option>
-                                        <option value="l">Landscape</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Tamil Font Size</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontSizeTamil}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontSizeTamil: parseInt(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Line Spacing</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.lineHeight}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, lineHeight: parseFloat(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Row Height (px)</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.rowHeight}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, rowHeight: parseInt(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">English Font Size</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50"
-                                        value={settings.fontSizeBody}
-                                        onChange={(e) => {
-                                            const newPer = { ...(blueprint.perReportSettings || {}), [activeTab]: { ...settings, fontSizeBody: parseInt(e.target.value) } };
-                                            onUpdateReportSettings && onUpdateReportSettings(blueprint.reportSettings, newPer);
-                                        }}
-                                    />
                                 </div>
                             </div>
                         </div>
                         <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-                            <button
-                                onClick={() => setIsSettingsOpen(false)}
-                                className="px-6 py-3 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition-all"
-                                disabled={isSavingSettings}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSavingSettings}
-                                className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isSavingSettings ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        Saving...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Check size={20} /> Save Settings
-                                    </>
-                                )}
+                            <button onClick={() => setIsSettingsOpen(false)} className="px-6 py-3 rounded-xl font-bold text-gray-600 hover:bg-gray-200">Cancel</button>
+                            <button onClick={handleSave} disabled={isSavingSettings} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 transition-all shadow-lg shadow-blue-100 disabled:opacity-50">
+                                {isSavingSettings ? 'Saving...' : <><Check size={20} /> Save Settings</>}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-
-            {/* ─── Styles ─── */}
-            <style dangerouslySetInnerHTML={{
-                __html: `
-/* ======================================================
-   SCREEN styles
-====================================================== */
-.reports-visible-content {
-    font-family: '${settings.fontFamilyEnglish || 'Georgia'}', serif !important;
-    font-size: ${settings.fontSizeBody}pt !important;
-}
-
-.report-1-screen-wrapper {
-    width: 210mm;
-    max-width: 100%;
-}
-.report-1-screen-page {
-    width: 100%;
-    min-height: 297mm;
-}
-.report-landscape-screen-wrapper {
-    width: 297mm;
-    max-width: 100%;
-    margin: 0 auto;
-    min-height: 210mm;
-}
-
-/* Global Table Overrides for Report 1 */
-.reports-visible-content table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.reports-visible-content th, 
-.reports-visible-content td {
-    border: 1px solid black !important;
-    padding: 6px 8px;
-    line-height: ${settings.lineHeight} !important;
-}
-.reports-visible-content th {
-    background-color: #f3f4f6 !important;
-    font-weight: bold;
-    text-align: center;
-    font-family: '${settings.headerFontStyle || 'Syne'}', sans-serif !important;
-}
-/* Tamil font */
-.tamil-font {
-    line-height: ${settings.lineHeight} !important;
-}
-.report-topic-cell,
-.report-lo-cell {
-    line-height: ${settings.lineHeight} !important;
-}
-.english-font {
-    font-family: 'Times New Roman', serif !important;
-}
-
-/* Row Height */
-.reports-visible-content tr {
-    min-height: ${settings.rowHeight}px;
-}
-.reports-visible-content td {
-    height: ${settings.rowHeight}px;
-}
-
-.break-after-page {
-    break-after: page;
-    page-break-after: always;
-}
-}
-
-/* ======================================================
-   PRINT styles
-====================================================== */
-@media print {
-    /* ─── Basics ─── */
-    *,
-    *::before,
-    *::after {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        box-sizing: border-box !important;
-    }
-    html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-        overflow: visible !important;
-        font-family: '${settings.fontFamilyEnglish || 'Georgia'}', serif !important;
-        font-size: ${settings.fontSizeBody}pt !important;
-    }
-
-    /* ─── Hide all UI chrome ─── */
-    .no-print,
-    .sticky,
-    .reports-view-container > div:first-child {
-        display: none !important;
-    }
-
-    /* ─── Report 1: Portrait ─── */
-    .report-1-screen-wrapper {
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    .report-1-screen-page {
-        width: 100% !important;
-        min-height: 297mm !important;
-        padding: 10mm !important;
-        margin: 0 !important;
-        border: none !important;
-        box-shadow: none !important;
-        break-after: page;
-        page-break-after: always;
-    }
-
-    /* Table styles matching screen exactly */
-    table {
-        width: 100% !important;
-        border-collapse: collapse !important;
-    }
-    th, td {
-        border: 1px solid black !important;
-        padding: 6px 8px !important;
-        line-height: ${settings.lineHeight} !important;
-        height: ${settings.rowHeight}px !important;
-    }
-    th {
-        background-color: #f3f4f6 !important;
-        font-family: '${settings.headerFontStyle || 'Syne'}', sans-serif !important;
-    }
-
-    .tamil-font, .report-topic-cell, .report-lo-cell {
-        font-size: ${settings.fontSizeTamil}pt !important;
-        line-height: ${settings.lineHeight} !important;
-    }
-    .english-font {
-        font-family: 'Times New Roman', serif !important;
-    }
-
-    #pdf-report1-pages,
-    #pdf-report2-page,
-    #pdf-report3-page,
-    #pdf-answerkey-page {
-        display: none !important;
-    }
-
-    tr { break-inside: avoid; page-break-inside: avoid; }
-}
-`}} />
         </div>
     );
 };

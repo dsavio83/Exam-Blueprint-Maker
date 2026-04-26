@@ -46,21 +46,9 @@ const splitTextByLanguage = (text: string) => {
 };
 
 const createLanguageRuns = (text: string, options: any = {}) => {
-    // Global replacement for fractions
     const processedText = text.toString()
         .replace(/(\d+)\.5/g, '$1½')
         .replace(/(^|[^0-9])0\.5/g, '$1½');
-
-    // Special handling for the main header
-    if (processedText === "சமக்ர சிக்ஷா கேரளம்") {
-        return [new TextRun({
-            ...options,
-            text: processedText,
-            font: HEADING_FONT,
-            bold: true,
-            size: 36 // 18pt
-        })];
-    }
 
     const segments = splitTextByLanguage(processedText);
     return segments.map(seg => new TextRun({
@@ -71,181 +59,68 @@ const createLanguageRuns = (text: string, options: any = {}) => {
     }));
 };
 
-const createHorizontalLine = () => {
-    return new Paragraph({
-        border: {
-            bottom: { color: "000000", space: 1, style: BorderStyle.SINGLE, size: 6 },
-        },
-        spacing: { before: 100, after: 100 }
-    });
-};
+const htmlToDocxElements = (html: string) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const elements: any[] = [];
 
-const escapeXml = (value: string) => value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    const processNode = (node: Node, options: any = {}) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent || '';
+            if (text.trim() || text === ' ') {
+                return createLanguageRuns(text, options);
+            }
+            return [];
+        }
 
-const buildMassViewXml = (payload: MassViewExportPayload) => {
-    const questionNodes = payload.includeQuestions && payload.questionText
-        ? payload.questionText.split('\n').map(line => `<line>${escapeXml(line)}</line>`).join('')
-        : '';
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            const newOptions = { ...options };
 
-    const answerHeaderRows = payload.includeAnswers && payload.answerRows?.length
-        ? payload.answerRows.slice(0, 9).map(row =>
-            `<row>${row.map(cell => `<cell>${escapeXml(cell)}</cell>`).join('')}</row>`
-        ).join('')
-        : '';
+            if (el.tagName === 'B' || el.tagName === 'STRONG') newOptions.bold = true;
+            if (el.tagName === 'I' || el.tagName === 'EM') newOptions.italics = true;
+            if (el.tagName === 'U') newOptions.underline = { type: BorderStyle.SINGLE, color: "000000" };
+            
+            if (el.tagName === 'P' || el.tagName.startsWith('H')) {
+                const children: any[] = [];
+                el.childNodes.forEach(child => {
+                    children.push(...processNode(child, newOptions));
+                });
+                
+                let alignment = AlignmentType.LEFT;
+                if (el.style.textAlign === 'center') alignment = AlignmentType.CENTER;
+                if (el.style.textAlign === 'right') alignment = AlignmentType.RIGHT;
+                if (el.style.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED;
 
-    const answerDataRows = payload.includeAnswers && payload.answerRows?.length
-        ? payload.answerRows.slice(9).map(row =>
-            `<row>${row.map(cell => `<cell>${escapeXml(cell)}</cell>`).join('')}</row>`
-        ).join('')
-        : '';
+                return [new Paragraph({
+                    alignment,
+                    children,
+                    spacing: { after: 120 }
+                })];
+            }
 
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<massViewExport>
-    <meta>
-        <classLevel>${escapeXml(String(payload.blueprint.classLevel))}</classLevel>
-        <subject>${escapeXml(payload.blueprint.subject)}</subject>
-        <setId>${escapeXml(payload.blueprint.setId || 'Set A')}</setId>
-        <includeQuestions>${payload.includeQuestions}</includeQuestions>
-        <includeAnswers>${payload.includeAnswers}</includeAnswers>
-    </meta>
-    <questionDocument>${questionNodes}</questionDocument>
-    <answerDocument>
-        <header>${answerHeaderRows}</header>
-        <body>${answerDataRows}</body>
-    </answerDocument>
-</massViewExport>`;
-};
+            const children: any[] = [];
+            el.childNodes.forEach(child => {
+                children.push(...processNode(child, newOptions));
+            });
+            return children;
+        }
 
-const parseXml = (xml: string) => new DOMParser().parseFromString(xml, 'application/xml');
+        return [];
+    };
 
-const readRows = (nodes: Element[]) =>
-    nodes.map(node => Array.from(node.querySelectorAll(':scope > cell')).map(cell => cell.textContent || ''));
-
-const createHeader = (bp: Blueprint) => {
-    const setLabel = bp.setId || 'SET A';
-    const code = bp.subject.includes('BT') ? 'T1012' : 'T1002';
-
-    const line1 = new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-            insideHorizontal: { style: BorderStyle.NONE },
-            insideVertical: { style: BorderStyle.NONE },
-        },
-        rows: [
-            new TableRow({
-                children: [
-                    new TableCell({
-                        width: { size: 20, type: WidthType.PERCENTAGE },
-                        children: [new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: setLabel,
-                                    bold: true,
-                                    size: 24,
-                                    font: ENGLISH_FONT,
-                                    border: { style: BorderStyle.SINGLE, size: 1, space: 1, color: "000000" }
-                                })
-                            ]
-                        })]
-                    }),
-                    new TableCell({
-                        width: { size: 60, type: WidthType.PERCENTAGE },
-                        children: [new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: createLanguageRuns("சமக்ர சிக்ஷா கேரளம்", { bold: true, size: 28, sizeTamil: 28 })
-                        })]
-                    }),
-                    new TableCell({
-                        width: { size: 20, type: WidthType.PERCENTAGE },
-                        children: [new Paragraph({
-                            alignment: AlignmentType.RIGHT,
-                            children: [
-                                new TextRun({
-                                    text: code,
-                                    bold: true,
-                                    size: 24,
-                                    font: ENGLISH_FONT,
-                                    color: "FFFFFF",
-                                    shading: { fill: "000000", type: ShadingType.CLEAR }
-                                })
-                            ]
-                        })]
-                    })
-                ]
-            })
-        ]
+    doc.body.childNodes.forEach(node => {
+        const processed = processNode(node);
+        processed.forEach(p => {
+            if (p instanceof Paragraph) elements.push(p);
+            else if (Array.isArray(p)) {
+                 // If we got runs, wrap them in a paragraph if not already
+                 elements.push(new Paragraph({ children: p }));
+            }
+        });
     });
 
-    const term = bp.examTerm === 'First Term Summative' ? 'முதல் பருவத் தொகுத்தறி மதிப்பீடு 2026-27' : 'தொகுத்தறி மதிப்பீடு 2026-27';
-    const subTamil = bp.subject.includes('BT') ? 'தமிழ் இரண்டாம் தாள்' : 'தமிழ் முதல் தாள்';
-    const subEng = bp.subject.includes('BT') ? 'Tamil Language Paper II (BT)' : 'Tamil Language Paper I (AT)';
-
-    return [
-        line1,
-        new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 100 },
-            children: createLanguageRuns(term, { bold: true, size: 26 })
-        }),
-        new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: createLanguageRuns(subTamil, { bold: true, size: 26 })
-        }),
-        new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: createLanguageRuns(subEng, { bold: true, size: 24 })
-        }),
-        new Paragraph({
-            spacing: { before: 100 },
-            children: [
-                ...createLanguageRuns(`நேரம்: 90 நிமிடம்`, { size: 22 }),
-                new TextRun({ text: "\t\t\t\t\t\t\t\t", font: ENGLISH_FONT }),
-                ...createLanguageRuns(`வகுப்பு: ${bp.classLevel}`, { size: 22 })
-            ]
-        }),
-        new Paragraph({
-            children: [
-                ...createLanguageRuns(`சிந்தனை நேரம் : 15 நிமிடம்`, { size: 22 }),
-                new TextRun({ text: "\t\t\t\t\t\t\t", font: ENGLISH_FONT }),
-                ...createLanguageRuns(`மதிப்பெண் : ${bp.totalMarks}`, { size: 22 })
-            ]
-        }),
-        createHorizontalLine()
-    ];
-};
-
-const createNotes = () => {
-    return [
-        new Paragraph({
-            children: createLanguageRuns("குறிப்புகள்:", { bold: true, size: 22 })
-        }),
-        new Paragraph({
-            indent: { left: 360 },
-            children: createLanguageRuns("- முதல் 15 நிமிடம் சிந்தனை நேரமாகும்.", { size: 20 })
-        }),
-        new Paragraph({
-            indent: { left: 360 },
-            children: createLanguageRuns("- வினாக்களை வாசித்து விடைகளை வரிசைப்படுத்த இந்த நேரத்தைப் பயன்படுத்தலாம்.", { size: 20 })
-        }),
-        new Paragraph({
-            indent: { left: 360 },
-            children: createLanguageRuns("- வினாக்களையும் குறிப்புகளையும் நன்கு வாசித்துப் புரிந்து விடையளிக்கவும்.", { size: 20 })
-        }),
-        new Paragraph({
-            indent: { left: 360 },
-            children: createLanguageRuns("- விடையளிக்கும்போது மதிப்பெண், நேரம் போன்றவற்றை கவனித்து செயல்படவும்.", { size: 20 })
-        }),
-        new Paragraph({ spacing: { after: 200 } })
-    ];
+    return elements;
 };
 
 export const exportMassViewDocx = async (payload: MassViewExportPayload) => {
@@ -253,41 +128,17 @@ export const exportMassViewDocx = async (payload: MassViewExportPayload) => {
     const bp = payload.blueprint;
 
     if (payload.includeQuestions && payload.questionText) {
-        children.push(...createHeader(bp));
-        children.push(...createNotes());
-
-        const lines = payload.questionText.split('\n');
-        let startIndex = 0;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('---') || lines[i].includes('===')) {
-                startIndex = i + 1;
-                for (let j = i + 1; j < lines.length; j++) {
-                    if (lines[j].includes('===')) {
-                        startIndex = j + 1;
-                        break;
-                    }
-                }
-                break;
-            }
+        // If it looks like HTML (from Tiptap), use rich parsing
+        if (payload.questionText.includes('<p>') || payload.questionText.includes('<h')) {
+            children.push(...htmlToDocxElements(payload.questionText));
+        } else {
+            // Fallback to old plain text logic
+            payload.questionText.split('\n').forEach(line => {
+                children.push(new Paragraph({
+                    children: createLanguageRuns(line)
+                }));
+            });
         }
-
-        lines.slice(startIndex).forEach(line => {
-            const trimmed = line.trim();
-            if (!trimmed) {
-                children.push(new Paragraph({ spacing: { after: 120 } }));
-                return;
-            }
-
-            const isQuestion = /^\d+\./.test(trimmed);
-            const isOption = /^\s*\(.\)/.test(line);
-
-            children.push(new Paragraph({
-                alignment: AlignmentType.LEFT,
-                indent: isQuestion ? { left: 0, hanging: 0 } : (isOption ? { left: 720 } : { left: 360 }),
-                spacing: { after: 80 },
-                children: createLanguageRuns(line, { size: 24, sizeTamil: 24 })
-            }));
-        });
     }
 
     if (payload.includeAnswers && payload.answerRows?.length) {
@@ -301,8 +152,7 @@ export const exportMassViewDocx = async (payload: MassViewExportPayload) => {
             new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: createLanguageRuns(`${bp.academicYear} | Grade ${bp.classLevel} | ${bp.subject}`, { size: 22 })
-            }),
-            createHorizontalLine()
+            })
         );
 
         const headerRow = payload.answerRows[8] || [];
@@ -348,31 +198,23 @@ export const exportMassViewDocx = async (payload: MassViewExportPayload) => {
 };
 
 export const exportMassViewIcml = async (payload: MassViewExportPayload) => {
-    const xml = parseXml(buildMassViewXml(payload));
-    const lines: string[] = [];
+    // Basic implementation remains similar but could be enhanced for HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(payload.questionText || '', 'text/html');
+    const plainText = doc.body.innerText;
 
-    if (payload.includeQuestions && payload.questionText) {
-        lines.push(...payload.questionText.split('\n'));
-    }
-
-    if (payload.includeAnswers) {
-        if (lines.length > 0) lines.push('', 'ANSWER KEY', '');
-        const header = readRows(Array.from(xml.querySelectorAll('answerDocument > header > row')));
-        const body = readRows(Array.from(xml.querySelectorAll('answerDocument > body > row')));
-        lines.push(...header.map(row => row.filter(Boolean).join('\t')));
-        lines.push(...body.map(row => row.join('\t')));
-    }
+    const lines = plainText.split('\n');
 
     const paragraphs = lines.map(line => `
     <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle">
         <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
-            <Content>${escapeXml(line || ' ')}</Content>
+            <Content>${line || ' '}</Content>
         </CharacterStyleRange>
     </ParagraphStyleRange>`).join('');
 
     const icml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <?aid style="50" type="document" readerVersion="6.0" featureSet="257" product="20.0(0)"?>
-<Story Self="story_u1" AppliedTOCStyle="n" TrackChanges="false" StoryTitle="${escapeXml(getBaseFileName(payload.blueprint))}">
+<Story Self="story_u1" AppliedTOCStyle="n" TrackChanges="false" StoryTitle="${getBaseFileName(payload.blueprint)}">
     <StoryPreference OpticalMarginAlignment="false" OpticalMarginSize="12" FrameType="TextFrameType"/>
     <InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false"/>
     ${paragraphs}

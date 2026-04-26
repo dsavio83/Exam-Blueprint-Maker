@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { X, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Info, RefreshCw, ClipboardCheck } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Info, RefreshCw, ClipboardCheck, Save, Sparkles, Plus, Settings, Trash2 } from 'lucide-react';
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 export enum KnowledgeLevel {
@@ -41,7 +41,7 @@ export interface Unit {
 }
 
 export interface Curriculum {
-  classLevel: string;
+  classLevel: any;
   subject: string;
   units: Unit[];
 }
@@ -50,7 +50,7 @@ export interface PaperSection {
   id: string;
   marks: number;
   count: number;
-  optionCount: number;
+  optionCount?: number;
   instruction?: string;
 }
 
@@ -83,7 +83,7 @@ export interface BlueprintItem {
 
 export interface Blueprint {
   id: string;
-  classLevel: string;
+  classLevel: any;
   subject: string;
   totalMarks: number;
   setId?: string;
@@ -129,11 +129,10 @@ export const isLanguageSubject = (subject: string): boolean => {
   return LANGUAGE_KEYWORDS.some(kw => lower.includes(kw));
 };
 
-/** Returns the allowed CognitiveProcess list for a given subject. */
-const getAllowedCPs = (subject: string): CognitiveProcess[] =>
-  isLanguageSubject(subject)
-    ? Object.values(CognitiveProcess).filter(cp => cp !== CognitiveProcess.CP3)
-    : Object.values(CognitiveProcess);
+/** Returns the allowed CognitiveProcess list — CP3 (Computational Thinking) is
+ *  excluded from ALL subjects as per blueprint policy. */
+const getAllowedCPs = (_subject?: string): CognitiveProcess[] =>
+  Object.values(CognitiveProcess).filter(cp => cp !== CognitiveProcess.CP3);
 
 // ─── Validation Engine ───────────────────────────────────────────────────────
 
@@ -203,9 +202,14 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
   let perfectKL = items.length > 0;
   const klSummary = emptyKlSummary();
 
+  const KL_EXACT: Record<KnowledgeLevel, number> = {
+    [KnowledgeLevel.BASIC]: Math.round(blueprint.totalMarks * KL_TARGETS[KnowledgeLevel.BASIC]),     // 30%
+    [KnowledgeLevel.AVERAGE]: Math.round(blueprint.totalMarks * KL_TARGETS[KnowledgeLevel.AVERAGE]),  // 50%
+    [KnowledgeLevel.PROFOUND]: Math.round(blueprint.totalMarks * KL_TARGETS[KnowledgeLevel.PROFOUND]),// 20%
+  };
+
   ([KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND] as KnowledgeLevel[]).forEach(kl => {
-    // Targets computed from actual totalMarks (not hardcoded)
-    const target = Math.round(blueprint.totalMarks * KL_TARGETS[kl]);
+    const target = KL_EXACT[kl];
     const marks = klMarks[kl] || 0;
     klSummary[kl] = { marks, target };
 
@@ -215,16 +219,16 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       perfectKL = false;
       pushError({
         type: 'error', code: `KL_MISSING_${kl.toUpperCase()}`,
-        message: `${kl}: 0M — தேவை ${target}M (${Math.round(KL_TARGETS[kl] * 100)}%)`,
-        detail: `${kl} நிலை வினாக்கள் இல்லை.`
+        message: `${kl}: 0M — கட்டாயம் ${target}M (${Math.round(KL_TARGETS[kl] * 100)}%) இருக்க வேண்டும்`,
+        detail: `${kl} நிலை வினாக்கள் இல்லை. இது கட்டாய தேவை.`
       });
     } else if (marks !== target) {
       perfectKL = false;
       const diff = marks - target;
       pushError({
-        type: 'warning', code: `KL_DEVIATION_${kl.toUpperCase()}`,
-        message: `${kl}: ${marks}M — இலக்கு ${target}M (${diff > 0 ? '+' : ''}${diff}M)`,
-        detail: `${target}M இருக்க வேண்டும் (${Math.round(KL_TARGETS[kl] * 100)}%).`
+        type: 'error', code: `KL_DEVIATION_${kl.toUpperCase()}`,
+        message: `${kl}: ${marks}M — தேவை சரியாக ${target}M (${diff > 0 ? '+' : ''}${diff}M வேறுபாடு)`,
+        detail: `Blueprint விதி: ${kl} = ${Math.round(KL_TARGETS[kl] * 100)}% = ${target}M சரியாக இருக்க வேண்டும்.`
       });
     }
   });
@@ -365,7 +369,67 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
     }
   }
 
-  // ── 6. Sub-unit coverage & balance ────────────────────────────────────────
+  // ── 5b. examTerm-based OR distribution ─────────────────────────────────────
+  // BT (1st term): single unit — OR must come from DIFFERENT sub-units
+  // AT (3rd term): 5-6 units — OR must spread across ≥3 units, max 1 OR per unit
+  if (choiceItems.length > 0 && items.length > 0) {
+    const examTermLower = (blueprint.examTerm || '').toLowerCase();
+    const isATTerm = examTermLower.includes('at') || examTermLower.includes('third') || examTermLower.includes('மூன்று');
+    const isBTTerm = examTermLower.includes('bt') || examTermLower.includes('first') || examTermLower.includes('முதல்');
+
+    if (isATTerm && curriculum.units.length >= 3) {
+      // AT: max 1 OR per unit
+      const atUnitOrMap = new Map<string, number>();
+      choiceItems.forEach(item => {
+        atUnitOrMap.set(item.unitId, (atUnitOrMap.get(item.unitId) || 0) + item.questionCount);
+      });
+      atUnitOrMap.forEach((cnt, unitId) => {
+        if (cnt > 1) {
+          const unit = curriculum.units.find(u => u.id === unitId);
+          pushError({
+            type: 'error', code: `AT_OR_UNIT_EXCESS_${unitId}`,
+            message: `"${unit?.name || unitId}" — ஒரே யூனிட்டில் ${cnt} OR வினாக்கள் (AT)`,
+            detail: 'AT பருவத்தில் ஒரு யூனிட்டில் அதிகபட்சம் 1 OR வினா மட்டுமே இருக்க வேண்டும்.'
+          });
+        }
+      });
+      // AT: OR spread across ≥3 units
+      const atUnitsWithOR = atUnitOrMap.size;
+      if (atUnitsWithOR < 3) {
+        pushError({
+          type: 'warning', code: 'AT_OR_SPREAD_INSUFFICIENT',
+          message: `OR வினாக்கள் ${atUnitsWithOR} யூனிட்(கள்)ல் மட்டுமே உள்ளன`,
+          detail: 'AT (மூன்றாம் பருவம்): குறைந்தது 3 யூனிட்களில் OR வினாக்கள் பரவியிருக்க வேண்டும்.'
+        });
+      } else if (atUnitsWithOR >= 3 && [...atUnitOrMap.values()].every(v => v <= 1)) {
+        pushError({
+          type: 'info', code: 'AT_OR_SPREAD_OK',
+          message: `AT OR வினாக்கள் ${atUnitsWithOR} யூனிட்களில் சரியாக பரவியுள்ளன`,
+          detail: 'AT term OR distribution சரியாக உள்ளது.'
+        });
+      }
+    }
+
+    if (isBTTerm || curriculum.units.length === 1) {
+      // BT / Single-unit: every OR must come from a different sub-unit
+      const btSubOrMap = new Map<string, number>();
+      choiceItems.forEach(item => {
+        btSubOrMap.set(item.subUnitId, (btSubOrMap.get(item.subUnitId) || 0) + item.questionCount);
+      });
+      btSubOrMap.forEach((cnt, subUnitId) => {
+        if (cnt > 1) {
+          const subName = curriculum.units.flatMap(u => u.subUnits).find(su => su.id === subUnitId)?.name || subUnitId;
+          pushError({
+            type: 'error', code: `BT_OR_SUBUNIT_EXCESS_${subUnitId}`,
+            message: `"${subName}" — ஒரே துணைப்பாடத்தில் ${cnt} OR வினாக்கள் (BT)`,
+            detail: 'BT பருவத்தில் ஒரு துணைப்பாடத்தில் 1 OR வினா மட்டுமே இருக்க வேண்டும். வெவ்வேறு sub-units-ஐ தேர்வு செய்யவும்.'
+          });
+        }
+      });
+    }
+  }
+
+
   const subUnitCoverage: ValidationResult['subUnitCoverage'] = [];
   let uncoveredSubUnits = 0;
 
@@ -441,17 +505,17 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
     });
   }
 
-  // ── 10. CP3 (Computational Thinking) in language subjects ──────────────────
-  if (items.length > 0 && isLanguageSubject(blueprint.subject)) {
+  // ── 10. CP3 (Computational Thinking) is not allowed in any question ──────────
+  if (items.length > 0) {
     const cp3Items = items.filter(i =>
       i.cognitiveProcess === CognitiveProcess.CP3 ||
       (i.hasInternalChoice && i.cognitiveProcessB === CognitiveProcess.CP3)
     );
     if (cp3Items.length > 0) {
       pushError({
-        type: 'warning', code: 'CP3_IN_LANGUAGE_SUBJECT',
-        message: `"Computational Thinking" மொழிப்பாடத்திற்கு பொருந்தாது (${cp3Items.length} வினாக்கள்)`,
-        detail: 'மொழிப்பாடங்களில் Computational Thinking பயன்படுத்துவதை தவிர்க்கவும். Auto-fill மூலம் சரிசெய்யலாம்.'
+        type: 'error', code: 'CP3_NOT_ALLOWED',
+        message: `"Computational Thinking (CP3)" எந்த வினாவிலும் பயன்படுத்தக் கூடாது (${cp3Items.length} வினாக்கள்)`,
+        detail: 'CP3 blueprint விதிகளுக்கு அனுமதிக்கப்படவில்லை. Auto-fix மூலம் சரிசெய்யலாம்.'
       });
     }
   }
@@ -569,16 +633,17 @@ export function autoFillBlueprint(
   const result = items.map(item => ({ ...item }));
   const allowedCPs = getAllowedCPs(subject ?? curriculum.subject ?? '');
 
-  // Step 0: Fix any CP3 usage in language subjects
-  if (isLanguageSubject(subject ?? curriculum.subject ?? '')) {
+  // Step 0: Fix any CP3 usage — CP3 is not allowed in any blueprint
+  {
+    const allowedNonCP3 = getAllowedCPs();
     let cpIdx = 0;
     result.forEach(item => {
       if (item.cognitiveProcess === CognitiveProcess.CP3) {
-        item.cognitiveProcess = allowedCPs[cpIdx % allowedCPs.length];
+        item.cognitiveProcess = allowedNonCP3[cpIdx % allowedNonCP3.length];
         cpIdx++;
       }
       if (item.cognitiveProcessB === CognitiveProcess.CP3) {
-        item.cognitiveProcessB = allowedCPs[cpIdx % allowedCPs.length];
+        item.cognitiveProcessB = allowedNonCP3[cpIdx % allowedNonCP3.length];
         cpIdx++;
       }
     });
@@ -633,8 +698,11 @@ export function autoFillBlueprint(
     item.itemFormatB = undefined;
   });
 
+  const examTermLower = (subject || '').toLowerCase(); // fallback; caller should pass examTerm
+  const isATTerm = (subject || '').toLowerCase().includes('at');
   const allSubUnitIds = curriculum.units.flatMap(u => u.subUnits.map(su => su.id));
   const usedSubUnits = new Set<string>();
+  const usedUnits = new Set<string>(); // for AT: max 1 OR per unit
 
   paperType.sections.forEach(section => {
     if (section.optionCount <= 0) return;
@@ -642,15 +710,17 @@ export function autoFillBlueprint(
     const sectionItems = result.filter(i => i.sectionId === section.id);
     let assigned = 0;
 
-    // Pick items from different sub-units
+    // Pick items from different sub-units (and different units for AT)
     for (const item of sectionItems) {
       if (assigned >= section.optionCount) break;
-      if (!usedSubUnits.has(item.subUnitId)) {
+      const unitAlreadyUsed = isATTerm && usedUnits.has(item.unitId);
+      if (!usedSubUnits.has(item.subUnitId) && !unitAlreadyUsed) {
         item.hasInternalChoice = true;
         item.knowledgeLevelB = item.knowledgeLevel;
         item.cognitiveProcessB = item.cognitiveProcess;
         item.itemFormatB = item.itemFormat;
         usedSubUnits.add(item.subUnitId);
+        usedUnits.add(item.unitId);
         assigned++;
       }
     }
@@ -748,7 +818,7 @@ const ValidationPanel: React.FC<ValidationPanelProps> = ({ result, paperType, on
           <div>
             <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">OR நிலை</div>
             <div className="flex flex-wrap gap-1.5">
-              {Object.entries(result.orStatus).map(([sId, info]) => (
+              {(Object.entries(result.orStatus) as [string, { filled: number; required: number; label: string }][]).map(([sId, info]) => (
                 <span key={sId}
                   className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${info.filled === info.required ? 'bg-green-50 text-green-700 border-green-300'
                     : info.filled > info.required ? 'bg-red-50 text-red-700 border-red-300'
@@ -873,6 +943,18 @@ const ValidationPanel: React.FC<ValidationPanelProps> = ({ result, paperType, on
                 <td className="py-0.5 text-gray-600 font-medium">OR</td>
                 <td className="py-0.5 text-gray-400">Section optionCount-க்கு ஏற்ப</td>
               </tr>
+              <tr>
+                <td className="py-0.5 text-gray-600 font-medium">CP3</td>
+                <td className="py-0.5 text-red-400 font-semibold">அனுமதியில்லை</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-gray-600 font-medium">BT OR</td>
+                <td className="py-0.5 text-gray-400">Sub-unit வாரியாக</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-gray-600 font-medium">AT OR</td>
+                <td className="py-0.5 text-gray-400">≥3 Units, max 1/Unit</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -899,9 +981,43 @@ const ItemCard: React.FC<ItemCardProps> = ({
 }) => {
   const markColor = MARK_COLORS[item.marksPerQuestion] || 'bg-gray-50 border-gray-200 text-gray-900';
   const klBorder = `border-l-4 ${KL_COLORS[item.knowledgeLevel]?.border || 'border-l-gray-300'}`;
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const [popStyle, setPopStyle] = React.useState<React.CSSProperties>({ top: '100%', left: 0 });
+
+  React.useEffect(() => {
+    if (!isEditing || !cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const popW = 256; // w-64
+    const popH = 420; // estimated height
+
+    const style: React.CSSProperties = {};
+    // Vertical placement
+    if (rect.bottom + popH > vh && rect.top > popH) {
+      style.bottom = '100%';
+      style.top = 'auto';
+      style.marginBottom = '4px';
+    } else {
+      style.top = '100%';
+      style.bottom = 'auto';
+      style.marginTop = '4px';
+    }
+    // Horizontal placement
+    if (rect.left + popW > vw) {
+      style.right = 0;
+      style.left = 'auto';
+    } else {
+      style.left = 0;
+      style.right = 'auto';
+    }
+    setPopStyle(style);
+  }, [isEditing]);
+
+  const allowedCPs = getAllowedCPs();
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5" ref={cardRef}>
       {/* Main card */}
       <div
         draggable={!readOnly}
@@ -959,8 +1075,8 @@ const ItemCard: React.FC<ItemCardProps> = ({
       {/* Edit popover */}
       {isEditing && (
         <div
-          className="absolute z-50 bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-64 space-y-3 text-sm"
-          style={{ top: '100%', left: 0 }}
+          className="absolute z-[9999] bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-64 space-y-3 text-sm"
+          style={popStyle}
           onClick={e => e.stopPropagation()}
         >
           <div className="flex justify-between items-center">
@@ -992,7 +1108,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
             <select value={item.cognitiveProcess}
               onChange={e => onUpdate(item.id, 'cognitiveProcess', e.target.value as CognitiveProcess)}
               className="w-full text-xs border rounded-lg p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-              {Object.values(CognitiveProcess).map(v => <option key={v} value={v}>{v}</option>)}
+              {allowedCPs.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
 
@@ -1030,7 +1146,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
                 <select value={item.cognitiveProcessB || item.cognitiveProcess}
                   onChange={e => onUpdate(item.id, 'cognitiveProcessB', e.target.value as CognitiveProcess)}
                   className="w-full text-xs border rounded-lg p-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400">
-                  {Object.values(CognitiveProcess).map(v => <option key={v} value={v}>{v}</option>)}
+                  {allowedCPs.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>
               <div>
@@ -1062,8 +1178,10 @@ interface SummaryBarProps {
   readOnly?: boolean;
   onRegenerate?: () => void;
   onConfirm?: () => void;
+  onSave?: () => void;
+  isSaving?: boolean;
 }
-const SummaryBar: React.FC<SummaryBarProps> = ({ result, totalMarks, readOnly, onRegenerate, onConfirm }) => {
+const SummaryBar: React.FC<SummaryBarProps> = ({ result, totalMarks, readOnly, onRegenerate, onConfirm, onSave, isSaving }) => {
   const filled = result.grandTotal;
   return (
     <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-xs bg-gray-50/50 p-2 rounded-xl border border-gray-100 shadow-sm">
@@ -1083,6 +1201,10 @@ const SummaryBar: React.FC<SummaryBarProps> = ({ result, totalMarks, readOnly, o
           <button onClick={onRegenerate}
             className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg font-bold hover:bg-amber-100 flex items-center gap-1.5 transition-all text-[10px] shadow-sm">
             <RefreshCw size={12} /> Reset
+          </button>
+          <button onClick={onSave} disabled={isSaving}
+            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-1.5 transition-all text-[10px] shadow-sm shadow-emerald-100 disabled:opacity-50">
+            {isSaving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />} {isSaving ? 'Saving' : 'Save'}
           </button>
           <button onClick={onConfirm}
             className="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 flex items-center gap-1.5 transition-all text-[10px] shadow-sm shadow-blue-100">
@@ -1246,6 +1368,8 @@ interface BlueprintMatrixProps {
   readOnly?: boolean;
   onRegenerate?: () => void;
   onConfirm?: () => void;
+  onSave?: () => void;
+  isSaving?: boolean;
 }
 
 export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
@@ -1260,6 +1384,8 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
   readOnly = false,
   onRegenerate,
   onConfirm,
+  onSave,
+  isSaving = false,
 }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
@@ -1328,6 +1454,7 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
         <div className="flex justify-center flex-wrap gap-6 mt-3 text-sm font-bold text-gray-700">
           <span>Class: {blueprint.classLevel}</span>
           <span>Subject: {blueprint.subject}</span>
+          {blueprint.examTerm && <span>Term: {blueprint.examTerm}</span>}
           <span>Set: {blueprint.setId || 'A'}</span>
           <span>Max Marks: {blueprint.totalMarks}</span>
         </div>
@@ -1340,6 +1467,8 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
         readOnly={readOnly}
         onRegenerate={onRegenerate}
         onConfirm={onConfirm}
+        onSave={onSave}
+        isSaving={isSaving}
       />
 
       {/* Matrix + Validation side-by-side */}
@@ -1427,7 +1556,7 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
                                   className="border border-gray-200 p-0.5 align-top min-h-[2rem] relative group/cell"
                                   onDragOver={handleDragOver}
                                   onDrop={e => handleDrop(e, unit.id, subUnit.id, section.id)}>
-                                  <div className="space-y-0.5 relative">
+                                  <div className="space-y-0.5 relative" style={{ overflow: 'visible' }}>
                                     {cellItems.map(item => (
                                       <div key={item.id} className="relative">
                                         <ItemCard

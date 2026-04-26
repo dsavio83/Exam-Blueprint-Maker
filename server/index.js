@@ -4,6 +4,9 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const { exec } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const {
   User, Curriculum, ExamConfig, Blueprint, PaperType,
@@ -47,6 +50,196 @@ app.use((req, res, next) => {
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 const PORT = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const puppeteer = require('puppeteer');
+const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, VerticalAlign } = require('docx');
+
+// --- Export Helpers ---
+async function createBlueprintDoc(bp, curriculum) {
+  return new Document({
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 720, right: 720, bottom: 720, left: 720 },
+        },
+      },
+      children: [
+        new Paragraph({
+          text: "Question Paper Design - HS",
+          heading: HeadingLevel.HEADING_1,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph(`Class: ${bp.classLevel}`)] }),
+                new TableCell({ children: [new Paragraph(`Subject: ${bp.subject}`)] }),
+              ]
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph(`Set: ${bp.setId || 'A'}`)] }),
+                new TableCell({ children: [new Paragraph(`Term: ${bp.examTerm}`)] }),
+              ]
+            })
+          ]
+        }),
+        new Paragraph({ text: "", spacing: { before: 200 } }),
+        new Paragraph({
+          text: "I. Weightage to Content Area",
+          heading: HeadingLevel.HEADING_3,
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ text: "Sl. No", alignment: AlignmentType.CENTER })] }),
+                new TableCell({ children: [new Paragraph({ text: "Unit / Topic", alignment: AlignmentType.CENTER })] }),
+                new TableCell({ children: [new Paragraph({ text: "Score", alignment: AlignmentType.CENTER })] }),
+              ]
+            }),
+            ...(curriculum?.units || []).map((u, i) => {
+              const score = bp.items.filter(it => it.unitId === u.id).reduce((s, it) => s + (it.totalMarks || 0), 0);
+              return new TableRow({
+                children: [
+                  new TableCell({ children: [new Paragraph({ text: String(i + 1), alignment: AlignmentType.CENTER })] }),
+                  new TableCell({ children: [new Paragraph(u.name)] }),
+                  new TableCell({ children: [new Paragraph({ text: String(score), alignment: AlignmentType.CENTER })] }),
+                ]
+              });
+            })
+          ]
+        })
+      ],
+    }],
+  });
+}
+
+// Export Routes
+app.post('/export/docx', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const bp = await Blueprint.findOne({ id });
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    const curriculum = await Curriculum.findOne({ classLevel: bp.classLevel, subject: bp.subject });
+    const doc = await createBlueprintDoc(bp, curriculum);
+    const buffer = await Packer.toBuffer(doc);
+    res.contentType('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="Blueprint_${id}.docx"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('DOCX Export Error:', err);
+    res.status(500).json({ error: `DOCX Generation Failed: ${err.message}` });
+  }
+});
+
+app.post('/export/odt', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
+
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const bp = await Blueprint.findOne({ id });
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    const curriculum = await Curriculum.findOne({ classLevel: bp.classLevel, subject: bp.subject });
+    
+    const doc = await createBlueprintDoc(bp, curriculum);
+    const docxBuffer = await Packer.toBuffer(doc);
+
+    // Temp file paths
+    const tempDir = os.tmpdir();
+    const docxPath = path.join(tempDir, `temp_${id}.docx`);
+    const odtPath = path.join(tempDir, `temp_${id}.odt`);
+
+    fs.writeFileSync(docxPath, docxBuffer);
+
+    // Use LibreOffice to convert
+    const cmd = `soffice --headless --convert-to odt --outdir "${tempDir}" "${docxPath}"`;
+    
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        console.error('LibreOffice Error:', error);
+        return res.status(500).json({ error: 'ODT Conversion Failed. Ensure LibreOffice is installed.' });
+      }
+
+      if (fs.existsSync(odtPath)) {
+        const odtBuffer = fs.readFileSync(odtPath);
+        res.contentType('application/vnd.oasis.opendocument.text');
+        res.setHeader('Content-Disposition', `attachment; filename="Blueprint_${id}.odt"`);
+        res.send(odtBuffer);
+        
+        // Cleanup
+        try { fs.unlinkSync(docxPath); fs.unlinkSync(odtPath); } catch (e) {}
+      } else {
+        res.status(500).json({ error: 'ODT file was not created by converter.' });
+      }
+    });
+
+  } catch (err) {
+    console.error('ODT Export Error:', err);
+    res.status(500).json({ error: `ODT Generation Failed: ${err.message}` });
+  }
+});
+// Export Routes
+app.post('/export/pdf', async (req, res) => {
+  const { id, baseUrl, tab } = req.body;
+  if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
+
+  try {
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+
+    // Construct the print URL with tab filter
+    const printUrl = `${baseUrl || 'http://localhost:5173'}/print-view/${id}${tab ? `?tab=${tab}` : ''}`;
+    console.log('Puppeteer navigating to:', printUrl);
+
+    await page.goto(printUrl, { waitUntil: 'networkidle0', timeout: 60000 });
+    
+    const isLandscape = tab === 'report2' || tab === 'report3';
+    await page.setViewport({ 
+      width: isLandscape ? 1123 : 794, 
+      height: isLandscape ? 794 : 1123, 
+      deviceScaleFactor: 2 
+    });
+
+    const pdf = await page.pdf({
+      format: 'A4',
+      landscape: isLandscape,
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="width:100%; text-align:center; font-size:10px; font-family: 'Times New Roman', serif; color: #555; padding-bottom: 5px;">
+          Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+        </div>
+      `,
+      margin: {
+        top: '15mm',
+        bottom: '20mm',
+        left: '15mm',
+        right: '15mm'
+      }
+    });
+
+    await browser.close();
+
+    res.contentType('application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Blueprint_${id}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error('PDF Export Error:', err);
+    res.status(500).json({ error: `PDF Generation Failed: ${err.message}` });
+  }
+});
 
 let dbConnectionError = '';
 let dbConnectionState = 'idle';
@@ -452,6 +645,15 @@ app.post('/blueprints', auth, async (req, res) => {
 });
 
 // 10. /blueprints/:id - Blueprint Retrieval & Deletion
+app.get('/blueprints/single/:id', async (req, res) => {
+  try {
+    if (!(await ensureDbReady())) return serviceUnavailable(res);
+    const bp = await Blueprint.findOne({ id: req.params.id });
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    res.json(normalizeBlueprint(bp));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.route('/blueprints/:id')
   .get(auth, async (req, res) => {
     try {

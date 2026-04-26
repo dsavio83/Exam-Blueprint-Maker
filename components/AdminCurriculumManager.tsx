@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
-    Trash2, Plus, X, FileJson
+    Trash2, Plus, X
 } from 'lucide-react';
 import {
     ClassLevel, SubjectType, Curriculum, Unit
@@ -24,17 +24,6 @@ const AdminCurriculumManager = () => {
         load();
     }, [selectedClass, selectedSubject]);
 
-    const handleCopyJSON = () => {
-        const db = getDB();
-        if (!db) {
-            Swal.fire("Error", "Database not initialized yet.", "error");
-            return;
-        }
-        const json = JSON.stringify(db.curriculums, null, 2);
-        navigator.clipboard.writeText(json).then(() => {
-            Swal.fire("Copied", "All Curriculum data copied to clipboard!", "success");
-        });
-    };
 
     const saveCurr = async (curr: Curriculum) => {
         setCurriculum(curr);
@@ -84,12 +73,6 @@ const AdminCurriculumManager = () => {
                     <p className="text-gray-500 mt-1 font-medium italic">Manage syllabus structure and learning outcomes.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                    <button
-                        onClick={handleCopyJSON}
-                        className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 text-gray-600 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
-                    >
-                        <FileJson size={18} className="text-blue-500" /> Export JSON
-                    </button>
                     <div className="flex items-center gap-2 bg-gray-100/50 p-1 rounded-xl border border-gray-100">
                         <select 
                             value={selectedClass} 

@@ -225,6 +225,7 @@ export interface Blueprint {
   reportSettings?: ReportSettings; // Global fallback
   perReportSettings?: Record<string, ReportSettings>; // Per report (report1, report2, etc.)
   isAdminAssigned?: boolean; // New field to track if assigned by admin
+  massViewHeader?: string; // Content for the consolidated editor
 }
 
 export type SavedBlueprint = Blueprint;

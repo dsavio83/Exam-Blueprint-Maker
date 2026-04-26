@@ -355,7 +355,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
             if (type === 'report1' || type === 'all') await DocExportService.exportReport1(currentBlueprint, curriculum);
             if (type === 'report2' || type === 'all') await DocExportService.exportReport2(currentBlueprint, curriculum);
             if (type === 'report3' || type === 'all') await DocExportService.exportReport3(currentBlueprint, curriculum);
-            if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(currentBlueprint, curriculum);
+            if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(currentBlueprint, curriculum, discourses);
         } catch (error) {
             console.error("Word export failed:", error);
             Swal.fire("Error", "Failed to export Word document.", "error");
@@ -696,7 +696,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     margin-top: 1rem;
                     animation: fadeUp 0.6s 0.2s ease both;
                 }
-                @media (min-width: 1024px) { .ud-table-wrap { display: block; } }
+                @media (min-width: 960px) { .ud-table-wrap { display: block; } }
 
                 .ud-table { 
                     width: 100%; 
@@ -840,7 +840,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     animation: fadeUp 0.5s 0.15s ease both;
                 }
                 @media (min-width: 560px) { .ud-cards { grid-template-columns: repeat(2, 1fr); } }
-                @media (min-width: 1024px) { .ud-cards { display: none; } }
+                @media (min-width: 960px) { .ud-cards { display: none; } }
 
                 .ud-card {
                     background: var(--ap-surface);
@@ -975,7 +975,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     gap: 0.85rem;
                 }
                 @media (min-width: 640px) { .ud-form-grid { grid-template-columns: repeat(2, 1fr); } }
-                @media (min-width: 1024px) { .ud-form-grid { grid-template-columns: repeat(4, 1fr); } }
+                @media (min-width: 960px) { .ud-form-grid { grid-template-columns: repeat(4, 1fr); } }
 
                 .ud-form-group { display: flex; flex-direction: column; gap: 0.35rem; }
                 .ud-form-label {
@@ -1166,7 +1166,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {filteredBlueprints.map((bp, idx) => {
+                                                    {filteredBlueprints.map((bp) => {
                                                         const isOwner = bp.ownerId === user.id;
                                                         const ownerUser = !isOwner ? allUsers.find(u => u.id === bp.ownerId) : null;
                                                         return (
@@ -1177,7 +1177,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                                                             ? <span className="ud-table-badge owner"><UserCircle size={12} />Owner</span>
                                                                             : <span className="ud-table-badge shared"><Share2 size={12} />Shared</span>
                                                                         }
-                                                                        {bp.isConfirmed && <span className="ud-table-badge confirmed"><CheckCircle size={12} />Confirmed</span>}
+                                                                        {bp.isConfirmed ? (
+                                                                            <span className="ud-table-badge confirmed"><CheckCircle size={12} />Confirmed</span>
+                                                                        ) : (
+                                                                            <span className="ud-table-badge" style={{ background: '#fef3c7', color: '#b45309' }}><Clock size={12} />Draft</span>
+                                                                        )}
                                                                         {bp.isLocked && <span className="ud-table-badge locked"><Lock size={12} />Locked</span>}
                                                                     </div>
                                                                 </td>

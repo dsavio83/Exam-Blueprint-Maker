@@ -87,16 +87,30 @@ const handleResponse = async (response: Response) => {
   return rawBody ? JSON.parse(rawBody) : null;
 };
 
-export const initDB = async (): Promise<DB> => {
-  try {
-    const res = await fetch(`${API_URL}/init`);
-    const data = await handleResponse(res);
-    cachedDB = data;
-    return data;
-  } catch (err) {
-    console.error('Database initialization error:', err);
-    throw err;
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const initDB = async (retries = 5, delay = 2000): Promise<DB> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(`${API_URL}/init`);
+      if (res.status === 503 && i < retries - 1) {
+        console.warn(`Database initializing (Attempt ${i + 1}/${retries}). Retrying in ${delay}ms...`);
+        await wait(delay);
+        continue;
+      }
+      const data = await handleResponse(res);
+      cachedDB = data;
+      return data;
+    } catch (err) {
+      if (i === retries - 1) {
+        console.error('Database initialization error after retries:', err);
+        throw err;
+      }
+      console.warn(`Fetch error (Attempt ${i + 1}/${retries}). Retrying in ${delay}ms...`);
+      await wait(delay);
+    }
   }
+  throw new Error('Failed to initialize database after multiple retries.');
 };
 
 export const validateSession = async (): Promise<User> => {
@@ -232,6 +246,11 @@ export const getBlueprints = async (userId: string): Promise<Blueprint[]> => {
   return await handleResponse(res) || [];
 };
 
+export const getBlueprintById = async (id: string): Promise<Blueprint | null> => {
+  const res = await fetch(`${API_URL}/blueprints/single/${id}`, { headers: getAuthHeaders() });
+  return await handleResponse(res);
+};
+
 export const saveBlueprint = async (bp: Blueprint): Promise<void> => {
   await fetch(`${API_URL}/blueprints`, {
     method: 'POST',
@@ -314,7 +333,7 @@ export const shareBlueprint = async (blueprintId: string, fromUserId: string, to
   };
   const res = await fetch(`${API_URL}/share`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(share)
   });
   return !!(await handleResponse(res));

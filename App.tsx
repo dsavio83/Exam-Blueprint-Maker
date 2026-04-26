@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import Login from './components/Login';
 import AdminPortal from './components/AdminPortal';
 import UserDashboard from './components/UserDashboard';
+import PrintView from './components/PrintView';
 
 /**
  * Main Application Component
@@ -91,10 +92,22 @@ const App = () => {
 
     // Unauthenticated view
     if (!currentUser) {
+        // Handle Print View even if not logged in (Puppeteer will access it)
+        const path = window.location.pathname;
+        if (path.startsWith('/print-view/')) {
+            const id = path.split('/').pop() || '';
+            return <PrintView id={id} />;
+        }
         return <Login onLogin={handleLogin} />;
     }
 
     // Role-based routing
+    const path = window.location.pathname;
+    if (path.startsWith('/print-view/')) {
+        const id = path.split('/').pop() || '';
+        return <PrintView id={id} />;
+    }
+
     if (currentUser.role === Role.ADMIN) {
         return <AdminPortal user={currentUser} onLogout={handleLogout} />;
     }

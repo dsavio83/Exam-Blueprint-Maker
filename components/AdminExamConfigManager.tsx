@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
-    Trash2, Plus, Save, FileJson, Settings2, Target, Percent, CheckCircle
+    Trash2, Plus, Save, Settings2, Target, Percent, CheckCircle
 } from 'lucide-react';
 import {
     ClassLevel, SubjectType, ExamTerm, ExamConfiguration, Curriculum, UnitWeightage
@@ -18,17 +18,6 @@ const AdminExamConfigManager = () => {
     const [currentConfig, setCurrentConfig] = useState<ExamConfiguration | null>(null);
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
 
-    const handleCopyJSON = () => {
-        const db = getDB();
-        if (!db) {
-            Swal.fire("Error", "Database not initialized yet.", "error");
-            return;
-        }
-        const json = JSON.stringify(db.examConfigs, null, 2);
-        navigator.clipboard.writeText(json).then(() => {
-            Swal.fire("Copied", "All Exam Configuration data copied to clipboard!", "success");
-        });
-    };
 
     useEffect(() => {
         const load = async () => {
@@ -104,41 +93,39 @@ const AdminExamConfigManager = () => {
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-1">
-                <div>
-                    <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Exam Weightage</h2>
-                    <p className="text-gray-500 mt-1 font-medium italic">Define how marks are distributed across units for each term.</p>
-                </div>
-                <button
-                    onClick={handleCopyJSON}
-                    className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 text-gray-600 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
-                >
-                    <FileJson size={18} className="text-blue-500" /> Export JSON
-                </button>
+            <div className="border-b border-gray-100 pb-4">
+                <h2 className="text-3xl font-bold text-gray-900 font-display tracking-tight">Exam Weightage</h2>
+                <p className="text-gray-500 mt-1 font-medium italic">Define how marks are distributed across units for each term.</p>
             </div>
 
             {/* Selection Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Class Level</label>
-                    <select 
-                        value={selectedClass} 
-                        onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} 
-                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['Times_New_Roman']"
-                    >
-                        {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
-                    </select>
+            <div className="space-y-4">
+                {/* Row 1: Class & Subject */}
+                <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300 flex flex-col md:flex-row gap-6">
+                    <div className="flex-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Class Level</label>
+                        <select 
+                            value={selectedClass} 
+                            onChange={(e) => setSelectedClass(parseInt(e.target.value, 10) as ClassLevel)} 
+                            className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['Times_New_Roman']"
+                        >
+                            {Object.values(ClassLevel).filter(v => typeof v === 'number').map(v => <option key={v} value={v}>Class {v}</option>)}
+                        </select>
+                    </div>
+                    <div className="w-px h-10 bg-gray-100 hidden md:block self-center"></div>
+                    <div className="flex-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Subject Area</label>
+                        <select 
+                            value={selectedSubject} 
+                            onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} 
+                            className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['TAU-Paalai']"
+                        >
+                            {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                    </div>
                 </div>
-                <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Subject Area</label>
-                    <select 
-                        value={selectedSubject} 
-                        onChange={(e) => setSelectedSubject(e.target.value as SubjectType)} 
-                        className="w-full border-none bg-gray-50/50 rounded-xl p-2.5 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-['TAU-Paalai']"
-                    >
-                        {Object.values(SubjectType).map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                </div>
+
+                {/* Row 2: Exam Term */}
                 <div className="ap-card p-5 group hover:border-blue-300 transition-all duration-300">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-2 group-hover:text-blue-500 transition-colors">Exam Term</label>
                     <select 

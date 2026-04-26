@@ -58,9 +58,14 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
             const csKey = `${bp.classLevel}|${bp.subject}`;
             if (!classSubjectGroups[csKey]) classSubjectGroups[csKey] = {};
 
-            const typeKey = bp.questionPaperTypeName;
-            if (!classSubjectGroups[csKey][typeKey]) classSubjectGroups[csKey][typeKey] = [];
-            classSubjectGroups[csKey][typeKey].push(bp);
+            // We group by a unique key for the paper itself
+            // If the same paper (same class, sub, term, type, year, set) is assigned to multiple people
+            const paperKey = `${bp.questionPaperTypeId}|${bp.examTerm}|${bp.academicYear}|${bp.setId || 'A'}`;
+            
+            if (!classSubjectGroups[csKey][paperKey]) {
+                classSubjectGroups[csKey][paperKey] = [];
+            }
+            classSubjectGroups[csKey][paperKey].push(bp);
         });
 
         return Object.keys(classSubjectGroups).sort((a, b) => {
@@ -74,16 +79,18 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
             };
             return parse(a) - parse(b);
         }).map(csKey => {
-            const typeGroups = classSubjectGroups[csKey];
-            // Sort types: Type 1, Type 2, etc.
-            const sortedTypeKeys = Object.keys(typeGroups).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+            const paperGroups = classSubjectGroups[csKey];
+            const sortedPaperKeys = Object.keys(paperGroups).sort();
 
             return {
                 key: csKey,
                 label: `Class ${csKey.split('|')[0]} - ${csKey.split('|')[1]}`,
-                types: sortedTypeKeys.map(typeKey => ({
-                    typeName: typeKey,
-                    blueprints: typeGroups[typeKey]
+                papers: sortedPaperKeys.map(paperKey => ({
+                    paperKey: paperKey,
+                    blueprints: paperGroups[paperKey],
+                    typeName: paperGroups[paperKey][0].questionPaperTypeName,
+                    examTerm: paperGroups[paperKey][0].examTerm,
+                    setId: paperGroups[paperKey][0].setId
                 }))
             };
         });
@@ -103,7 +110,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
     const classOptions = [ClassLevel._8, ClassLevel._9, ClassLevel._10, ClassLevel._SSLC];
     const subjectOptions = Object.values(SubjectType);
     const termOptions = Object.values(ExamTerm);
-    const setOptions = ['SET A', 'SET B', 'SET C', 'SET D', 'GENERAL'];
+    const setOptions = ['A', 'B', 'C', 'D', 'GENERAL'];
 
     useEffect(() => {
         loadBaseData();
@@ -212,11 +219,19 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                         th { background-color: #f3f4f6; color: #374151; font-weight: bold; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; }
                         th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
                         tr:nth-child(even) { background-color: #fafafa; }
+                        .flex { display: flex !important; }
+                        .flex-wrap { flex-wrap: wrap !important; }
+                        .gap-2 { gap: 8px !important; }
+                        .bg-white { background-color: white !important; }
+                        .border { border: 1px solid #e5e7eb !important; }
+                        .p-2 { padding: 8px !important; }
+                        .rounded-lg { border-radius: 8px !important; }
                         .print-teacher-name { font-size: 13px !important; font-weight: bold; color: #000; display: block; margin-bottom: 2px; }
                         .print-school-info { font-size: 9px !important; color: #666 !important; font-style: italic; display: block; }
                         .footer { margin-top: 20px; font-size: 9px; color: #999; text-align: right; border-top: 1px solid #eee; padding-top: 5px; }
                         @media print {
                             button, .no-print { display: none !important; }
+                            td { page-break-inside: avoid; }
                         }
                     </style>
                 </head>
@@ -360,7 +375,8 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                         rowHeight: 35,
                         columnWidths: {},
                         showLogo: true,
-                        compactMode: false
+                        compactMode: false,
+                        lineHeight: 1.6
                     }
                 };
 
@@ -447,7 +463,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                     1. Paper Setup
                                 </h3>
                             </div>
-                            <div className="p-4 space-y-4">
+                            <div className="p-4 grid grid-cols-2 md:grid-cols-1 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
                                         <Layers size={12} /> Class
@@ -527,7 +543,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                     </select>
                                 </div>
 
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 col-span-1 md:col-span-1">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Marks & Year</label>
                                     <div className="grid grid-cols-2 gap-2">
                                         <input
@@ -733,16 +749,15 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                             <table className="w-full text-sm border-collapse">
                                 <thead>
                                     <tr className="bg-gray-50/80 border-b border-gray-100 text-left">
-                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Type</th>
-                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Teacher 1</th>
-                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Teacher 2</th>
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Paper Details</th>
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Assigned Teachers (ஒதுக்கப்பட்ட ஆசிரியர்கள்)</th>
                                         <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 text-right no-print border-l border-gray-100">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
                                     {loadingAssignments ? (
                                         <tr>
-                                            <td colSpan={4} className="p-12 text-center">
+                                            <td colSpan={3} className="p-12 text-center">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Loader2 className="animate-spin text-blue-600" size={24} />
                                                     <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest">Loading...</p>
@@ -751,7 +766,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                         </tr>
                                     ) : groupedAssignments.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="p-12 text-center">
+                                            <td colSpan={3} className="p-12 text-center">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <FileText className="text-gray-200" size={32} />
                                                     <p className="text-gray-400 font-bold text-xs">No assignments found.</p>
@@ -762,51 +777,42 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                         groupedAssignments.map(group => (
                                             <React.Fragment key={group.key}>
                                                 <tr className="bg-blue-50/40 border-y border-blue-100">
-                                                    <td colSpan={4} className="p-2 px-4 font-black text-blue-800 text-[9px] uppercase tracking-[0.15em]">
+                                                    <td colSpan={3} className="p-2 px-4 font-black text-blue-800 text-[9px] uppercase tracking-[0.15em]">
                                                         {group.label}
                                                     </td>
                                                 </tr>
-                                                {group.types.map(typeGroup => {
-                                                    const bps = typeGroup.blueprints;
-                                                    const teacher1 = users.find(u => u.id === bps[0]?.ownerId);
-                                                    const teacher2 = bps.length > 1 ? users.find(u => u.id === bps[1]?.ownerId) : null;
-
+                                                {group.papers.map(paperGroup => {
+                                                    const bps = paperGroup.blueprints;
+                                                    
                                                     return (
-                                                        <tr key={typeGroup.typeName} className="hover:bg-purple-50/20 transition-colors group border-b border-gray-100">
+                                                        <tr key={paperGroup.paperKey} className="hover:bg-purple-50/20 transition-colors group border-b border-gray-100">
                                                             <td className="p-3 align-middle border-x border-gray-50">
-                                                                <div className="font-bold text-gray-700 text-xs">
-                                                                    {typeGroup.typeName}
+                                                                <div className="flex flex-col">
+                                                                    <div className="font-bold text-gray-700 text-xs">
+                                                                        {paperGroup.typeName}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
+                                                                        {paperGroup.examTerm} | {paperGroup.setId || 'SET A'}
+                                                                    </div>
                                                                 </div>
                                                             </td>
 
-                                                            <td className={`p-3 align-middle border-r border-gray-50 ${bps.length === 1 ? 'col-span-1' : ''}`} colSpan={bps.length === 1 ? 2 : 1}>
-                                                                {teacher1 && (
-                                                                    <div className="flex flex-col">
-                                                                        <div className="font-bold text-gray-900 text-sm leading-tight print-teacher-name">{teacher1.name}</div>
-                                                                        <div className="text-[10px] text-gray-500 font-medium truncate max-w-[200px] print-school-info">
-                                                                            {teacher1.schoolName} | {teacher1.district}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </td>
-
-                                                            {bps.length > 1 && (
-                                                                <td className="p-3 align-middle border-r border-gray-50">
-                                                                    {teacher2 && (
-                                                                        <div className="flex flex-col">
-                                                                            <div className="font-bold text-gray-900 text-sm leading-tight print-teacher-name">{teacher2.name}</div>
-                                                                            <div className="text-[10px] text-gray-500 font-medium truncate max-w-[200px] print-school-info">
-                                                                                {teacher2.schoolName} | {teacher2.district}
+                                                            <td className="p-3 align-middle border-r border-gray-50">
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {bps.map((bp, idx) => {
+                                                                        const teacher = users.find(u => u.id === bp.ownerId);
+                                                                        if (!teacher) return null;
+                                                                        return (
+                                                                            <div key={bp.id} className="flex flex-col bg-white border border-gray-100 p-2 rounded-lg shadow-sm min-w-[200px] max-w-[250px]">
+                                                                                <div className="font-bold text-gray-900 text-sm leading-tight print-teacher-name">{teacher.name}</div>
+                                                                                <div className="text-[10px] text-gray-500 font-medium truncate print-school-info">
+                                                                                    {teacher.schoolName} | {teacher.district}
+                                                                                </div>
                                                                             </div>
-                                                                        </div>
-                                                                    )}
-                                                                    {bps.length > 2 && (
-                                                                        <div className="text-[9px] text-blue-600 font-black mt-1">
-                                                                            + {bps.length - 2} more teachers
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                            )}
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </td>
 
                                                             <td className="p-3 text-right no-print align-middle border-l border-gray-50">
                                                                 <div className="flex items-center justify-end gap-2">

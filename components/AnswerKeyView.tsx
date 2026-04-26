@@ -56,10 +56,6 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
             .replace(/(^|[^0-9])0\.5/g, '$1½')
             .replace(/(\d+(?:\.\d+)?)M\b/g, '$1');
 
-        const paragraphs = Array.from(wrapper.querySelectorAll('p'));
-        // Deduplication logic removed to ensure all enabled sections (Write Content, Discourse) are visible.
-
-
         wrapper.querySelectorAll('ul').forEach((ul) => {
             if (!ul.classList.contains('rubric-list')) ul.classList.add('rubric-list');
         });
@@ -245,7 +241,7 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
 
     return (
         <div className={isPdf ? 'bg-white' : 'bg-white paper-container max-w-[210mm] mx-auto'}>
-            <div className="mb-3">
+            <div className="">
                 <div className="border-b-2 border-black pb-1">
                     <div className="relative flex items-center justify-center py-0.5">
                         <div className="absolute left-0 top-1/2 -translate-y-1/2">
@@ -265,13 +261,7 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                         </div>
                     </div>
 
-                    <div className="text-center -mt-0.5">
-                        <h1 className="text-[17px] font-bold tamil-heading-font text-black uppercase leading-tight">
-                            Answer Key & Scoring Indicators
-                        </h1>
-                    </div>
-
-                    <div className="text-center -mt-0.5">
+                    <div className="text-center mt-1">
                         <h2 className="text-[16px] font-bold text-black tamil-font leading-tight">{termHeading}</h2>
                     </div>
 
@@ -293,9 +283,15 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
                 </div>
             </div>
 
+            <div className="text-center mb-3">
+                <div className="border-b-2 border-black">
+                    <h1 className="text-[18px] font-bold text-black uppercase tracking-wider">Answer Key & Scoring Indicators</h1>
+                </div>
+            </div>
+
             {/* Answer Key Table */}
             <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+                <table className="w-[99%] border-collapse border border-black" style={{ margin: '0 auto 0 0' }}>
                     <thead>
                         <tr className="bg-white text-black">
                             <th className="border border-black p-1.5 text-sm font-bold w-16 text-center english-font">Item /<br />Qn No</th>
@@ -486,4 +482,3 @@ const AnswerKeyView = ({ blueprint, curriculum, discourses = [], isPdf = false }
 };
 
 export default AnswerKeyView;
-

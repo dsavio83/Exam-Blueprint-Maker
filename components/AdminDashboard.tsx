@@ -32,9 +32,14 @@ const AdminDashboard = () => {
                     getHealth()
                 ]);
 
+                // Calculate unique blueprints count
+                const uniqueBlueprintKeys = new Set(blueprintsData.map(bp => 
+                    `${bp.classLevel}|${bp.subject}|${bp.questionPaperTypeId}|${bp.examTerm}|${bp.academicYear || '2025-26'}|${bp.setId || 'SET A'}`
+                ));
+
                 setStats({
                     users: userData.length,
-                    blueprints: blueprintsData.length,
+                    blueprints: uniqueBlueprintKeys.size,
                     paperTypes: paperTypesData.length,
                     configs: configsData.length
                 });
@@ -73,7 +78,32 @@ const AdminDashboard = () => {
             const [term, year] = selectedFilter.split('|');
             filtered = filtered.filter(bp => bp.examTerm === term && (bp.academicYear || '2025-26') === year);
         }
-        const sorted = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        // Group by unique paper configuration
+        const groups: Record<string, Blueprint[]> = {};
+        filtered.forEach(bp => {
+            const key = `${bp.classLevel}|${bp.subject}|${bp.questionPaperTypeId}|${bp.examTerm}|${bp.academicYear || '2025-26'}|${bp.setId || 'SET A'}`;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(bp);
+        });
+
+        // Convert to list of representative blueprints for the table
+        const uniqueList = Object.values(groups).map(group => {
+            // Sort to get the most recently updated one as representative
+            const sortedGroup = [...group].sort((a, b) => 
+                new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+            );
+            
+            // Attach a virtual property for display of multiple owners
+            const representative = { ...sortedGroup[0] };
+            (representative as any).allOwners = group.map(b => b.ownerId);
+            return representative;
+        });
+
+        const sorted = uniqueList.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        
         setRecentBlueprints(sorted.slice(0, 5));
     }, [selectedFilter, allBlueprints]);
 
@@ -150,12 +180,28 @@ const AdminDashboard = () => {
                                     <tr><td colSpan={4} className="p-10 text-center text-gray-400 font-medium italic">No recent activity found.</td></tr>
                                 ) : (
                                     recentBlueprints.map(bp => {
-                                        const owner = users.find(u => u.id === bp.ownerId);
+                                        const allOwners = (bp as any).allOwners || [bp.ownerId];
+                                        const ownerData = users.filter(u => allOwners.includes(u.id));
+                                        
                                         return (
                                             <tr key={bp.id} className="hover:bg-blue-50/30 transition-colors group">
                                                 <td className="p-4">
-                                                    <div className="font-bold text-gray-800">{owner ? owner.name : 'Unknown'}</div>
-                                                    <div className="text-[11px] text-gray-400 font-medium">{owner?.pen || 'N/A'}</div>
+                                                    {ownerData.length > 1 ? (
+                                                        <div>
+                                                            <div className="font-bold text-gray-800 flex items-center gap-1.5">
+                                                                <Users size={12} className="text-blue-500" />
+                                                                {ownerData.length} Teachers
+                                                            </div>
+                                                            <div className="text-[10px] text-gray-400 font-medium truncate max-w-[150px]">
+                                                                {ownerData.map(o => o.name).join(', ')}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="font-bold text-gray-800">{ownerData[0] ? ownerData[0].name : 'Unknown'}</div>
+                                                            <div className="text-[11px] text-gray-400 font-medium">{ownerData[0]?.pen || 'N/A'}</div>
+                                                        </>
+                                                    )}
                                                 </td>
                                                 <td className="p-4">
                                                     <div className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Class {bp.classLevel}</div>
@@ -164,7 +210,12 @@ const AdminDashboard = () => {
                                                     <div className="font-bold text-gray-500">{bp.subject}</div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">{bp.questionPaperTypeName}</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-bold uppercase whitespace-nowrap">{bp.questionPaperTypeName}</span>
+                                                        {bp.setId && (
+                                                            <span className="px-2 py-0.5 rounded-md bg-orange-100 text-orange-600 text-[10px] font-bold uppercase whitespace-nowrap">{bp.setId}</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

@@ -62,10 +62,14 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (ids: string[]) => {
+        const msg = ids.length > 1 
+            ? `These ${ids.length} question papers will be permanently deleted!`
+            : "This question paper will be permanently deleted!";
+
         Swal.fire({
             title: "Are you sure?",
-            text: "This question paper will be permanently deleted!",
+            text: msg,
             icon: "warning",
             showCancelButton: true,
             confirmButtonColor: "#d33",
@@ -73,24 +77,30 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
             confirmButtonText: "Yes, delete it!"
         }).then(async (result) => {
             if (result.isConfirmed) {
-                await deleteBlueprint(id);
+                for (const id of ids) {
+                    await deleteBlueprint(id);
+                }
                 await loadData();
-                Swal.fire("Deleted", "Question paper removed successfully.", "success");
+                Swal.fire("Deleted", "Question paper(s) removed successfully.", "success");
             }
         });
     };
 
-    const handleToggleLock = async (id: string) => {
-        await toggleBlueprintLock(id);
+    const handleToggleLock = async (ids: string[]) => {
+        for (const id of ids) {
+            await toggleBlueprintLock(id);
+        }
         await loadData();
     };
 
-    const handleToggleHidden = async (id: string) => {
-        await toggleBlueprintHidden(id);
+    const handleToggleHidden = async (ids: string[]) => {
+        for (const id of ids) {
+            await toggleBlueprintHidden(id);
+        }
         await loadData();
     };
 
-    const handleResetConfirmation = async (id: string) => {
+    const handleResetConfirmation = async (ids: string[]) => {
         Swal.fire({
             title: "Reset Confirmation?",
             text: "This will allow users to edit the pattern again. Continue?",
@@ -101,7 +111,9 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
             confirmButtonText: "Yes, reset it"
         }).then(async (result) => {
             if (result.isConfirmed) {
-                await resetBlueprintConfirmation(id);
+                for (const id of ids) {
+                    await resetBlueprintConfirmation(id);
+                }
                 await loadData();
                 Swal.fire("Reset", "Confirmation has been reset.", "success");
             }
@@ -182,6 +194,40 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
         return matchesSearch && matchesFilter;
     });
 
+    const groupedBlueprints = React.useMemo(() => {
+        const groups: Record<string, Blueprint[]> = {};
+
+        filteredBlueprints.forEach(bp => {
+            // Group by core paper configuration
+            const key = `${bp.classLevel}|${bp.subject}|${bp.questionPaperTypeId}|${bp.examTerm}|${bp.academicYear || '2025-26'}|${bp.setId || 'SET A'}`;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(bp);
+        });
+
+        return Object.values(groups).sort((a, b) => {
+            const firstA = a[0];
+            const firstB = b[0];
+
+            // 1. Sort by Class Level
+            const classA = firstA.classLevel === 'SSLC' ? 11 : parseInt(firstA.classLevel as string) || 0;
+            const classB = firstB.classLevel === 'SSLC' ? 11 : parseInt(firstB.classLevel as string) || 0;
+            if (classA !== classB) return classA - classB;
+
+            // 2. Sort by Subject (AT before BT)
+            const getSubjectType = (s: string) => s.includes('BT') ? 1 : 0;
+            const typeA = getSubjectType(firstA.subject);
+            const typeB = getSubjectType(firstB.subject);
+            if (typeA !== typeB) return typeA - typeB;
+            
+            if (firstA.subject !== firstB.subject) return firstA.subject.localeCompare(firstB.subject);
+
+            // 3. Sort by Set
+            const setA = (firstA.setId || '').toUpperCase();
+            const setB = (firstB.setId || '').toUpperCase();
+            return setA.localeCompare(setB);
+        });
+    }, [filteredBlueprints]);
+
     const activeShareBp = blueprints.find(b => b.id === selectedShareBp);
 
     return (
@@ -227,67 +273,79 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
 
             {/* Mobile & Tablet Card View - optimized for smaller screens */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:hidden gap-4">
-                {filteredBlueprints.length > 0 ? (
-                    filteredBlueprints.map((bp) => (
-                        <div key={bp.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-4 hover:shadow-md transition-all">
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-start gap-3">
-                                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                                        <FileText size={20} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex flex-col">
-                                            <span className="font-black text-blue-700 text-sm truncate uppercase tracking-tight">Class {bp.classLevel}</span>
-                                            <div className="font-black text-gray-900 text-xs mt-1 uppercase line-clamp-2">{bp.subject}</div>
+                {groupedBlueprints.length > 0 ? (
+                    groupedBlueprints.map((group) => {
+                        const bp = group[0];
+                        const ids = group.map(b => b.id);
+                        const allConfirmed = group.every(b => b.isConfirmed);
+                        const anyConfirmed = group.some(b => b.isConfirmed);
+                        const anyLocked = group.some(b => b.isLocked);
+                        const anyHidden = group.some(b => b.isHidden);
+
+                        return (
+                            <div key={bp.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-4 hover:shadow-md transition-all">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                                            <FileText size={20} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-col">
+                                                <span className="font-black text-blue-700 text-sm truncate uppercase tracking-tight">Class {bp.classLevel}</span>
+                                                <div className="font-black text-gray-900 text-xs mt-1 uppercase line-clamp-2">{bp.subject}</div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-1">
-                                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-black uppercase border border-blue-100">{bp.setId || 'SET A'}</span>
-                                    <button
-                                        onClick={() => setSelectedShareBp(bp.id)}
-                                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold transition-colors ${bp.sharedWith?.length ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'}`}
-                                    >
-                                        <Share2 size={9} /> {bp.sharedWith?.length || 0}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{bp.questionPaperTypeName}</div>
-                                <div className="text-[10px] font-medium text-gray-500 truncate">{bp.examTerm} | {bp.academicYear}</div>
-                            </div>
-
-                            <div className="flex items-center justify-between border-t border-gray-50 pt-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[10px]">
-                                        <UserIcon size={12} />
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-black uppercase border border-blue-100">{bp.setId || 'SET A'}</span>
+                                        <button
+                                            onClick={() => setSelectedShareBp(bp.id)}
+                                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold transition-colors ${bp.sharedWith?.length ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'}`}
+                                        >
+                                            <Share2 size={9} /> {bp.sharedWith?.length || 0}
+                                        </button>
                                     </div>
-                                    <div className="overflow-hidden">
-                                        <div className="text-[11px] font-bold text-gray-800 truncate">{getUserName(bp.ownerId)}</div>
-                                        <div className="text-[9px] text-gray-400 flex items-center gap-1">
+                                </div>
+
+                                <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{bp.questionPaperTypeName}</div>
+                                    <div className="text-[10px] font-medium text-gray-500 truncate">{bp.examTerm} | {bp.academicYear}</div>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-gray-50 pt-3">
+                                    <div className="flex flex-col gap-1 w-full overflow-hidden">
+                                        {group.map(b => (
+                                            <div key={b.id} className="flex items-center gap-2">
+                                                <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[8px]">
+                                                    <UserIcon size={10} />
+                                                </div>
+                                                <div className="text-[10px] font-bold text-gray-800 truncate">{getUserName(b.ownerId)}</div>
+                                            </div>
+                                        ))}
+                                        <div className="text-[9px] text-gray-400 flex items-center gap-1 mt-1">
                                             <Calendar size={8} /> {new Date(bp.createdAt).toLocaleDateString()}
                                         </div>
                                     </div>
+
+                                    <div className="flex flex-col gap-1 items-end shrink-0">
+                                        {allConfirmed ? (
+                                            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-green-100 text-green-700 uppercase tracking-tighter">Confirmed</span>
+                                        ) : (
+                                            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-100 text-amber-700 uppercase tracking-tighter">Draft</span>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="flex flex-col gap-1 items-end">
-                                    {bp.isConfirmed ? (
-                                        <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-green-100 text-green-700 uppercase tracking-tighter">Confirmed</span>
-                                    ) : (
-                                        <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-100 text-amber-700 uppercase tracking-tighter">Draft</span>
-                                    )}
+                                <div className="flex items-center justify-between bg-gray-50/40 rounded-xl p-1 border border-gray-100/50">
+                                    <button onClick={() => onEditBlueprint(bp)} className="flex-1 flex justify-center p-2 text-blue-600 hover:bg-white rounded-lg transition-all" title="Edit"><Edit2 size={16} /></button>
+                                    <button onClick={() => handleToggleLock(ids)} className={`flex-1 flex justify-center p-2 rounded-lg transition-all ${anyLocked ? 'text-amber-600' : 'text-gray-400'}`} title="Lock/Unlock">{anyLocked ? <Lock size={16} /> : <Unlock size={16} />}</button>
+                                    <button onClick={() => handleToggleHidden(ids)} className={`flex-1 flex justify-center p-2 rounded-lg transition-all ${anyHidden ? 'text-gray-400' : 'text-blue-600'}`} title="Show/Hide">{anyHidden ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                                    {anyConfirmed && <button onClick={() => handleResetConfirmation(ids)} className="flex-1 flex justify-center p-2 text-orange-500 hover:bg-white rounded-lg transition-all" title="Reset Confirmation"><RotateCcw size={16} /></button>}
+                                    <button onClick={() => handleDelete(ids)} className="flex-1 flex justify-center p-2 text-red-500 hover:text-red-700 rounded-lg transition-all" title="Delete"><Trash2 size={16} /></button>
                                 </div>
                             </div>
-
-                            <div className="flex items-center justify-between bg-gray-50/40 rounded-xl p-1 border border-gray-100/50">
-                                <button onClick={() => onEditBlueprint(bp)} className="flex-1 flex justify-center p-2 text-blue-600 hover:bg-white rounded-lg transition-all"><Edit2 size={16} /></button>
-                                <button onClick={() => handleToggleLock(bp.id)} className={`flex-1 flex justify-center p-2 rounded-lg transition-all ${bp.isLocked ? 'text-amber-600' : 'text-gray-400'}`}>{bp.isLocked ? <Lock size={16} /> : <Unlock size={16} />}</button>
-                                <button onClick={() => handleToggleHidden(bp.id)} className={`flex-1 flex justify-center p-2 rounded-lg transition-all ${bp.isHidden ? 'text-gray-400' : 'text-blue-600'}`}>{bp.isHidden ? <EyeOff size={16} /> : <Eye size={16} />}</button>
-                                <button onClick={() => handleDelete(bp.id)} className="flex-1 flex justify-center p-2 text-red-500 hover:text-red-700 rounded-lg transition-all"><Trash2 size={16} /></button>
-                            </div>
-                        </div>
-                    ))
+                        );
+                    })
                 ) : (
                     <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-gray-100 p-12 text-center text-gray-400">
                         <FileText size={48} className="mx-auto opacity-20 mb-3" />
@@ -302,93 +360,107 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                     <table className="w-full text-left border-collapse table-fixed">
                         <thead>
                             <tr className="bg-gray-50/50 border-b border-gray-100">
-                                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[32%]">Paper Details</th>
-                                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[18%]">Created By</th>
+                                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[30%]">Paper Details</th>
+                                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[20%]">Assigned Teachers</th>
                                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[15%]">Sharing</th>
                                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[15%] text-center">Status</th>
                                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest w-[20%] text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {filteredBlueprints.length > 0 ? (
-                                filteredBlueprints.map((bp) => (
-                                    <tr key={bp.id} className="hover:bg-blue-50/20 transition-colors group">
-                                        <td className="px-6 py-5">
-                                            <div className="flex items-start gap-3">
-                                                <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600 mt-0.5 group-hover:scale-110 transition-transform">
-                                                    <FileText size={20} />
-                                                </div>
-                                                <div className="flex flex-col gap-1 overflow-hidden">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-black text-blue-700 text-sm uppercase tracking-tight">Class {bp.classLevel}</span>
-                                                        <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-black uppercase border border-blue-100">{bp.setId || 'SET A'}</span>
+                            {groupedBlueprints.length > 0 ? (
+                                groupedBlueprints.map((group) => {
+                                    const bp = group[0];
+                                    const ids = group.map(b => b.id);
+                                    const allConfirmed = group.every(b => b.isConfirmed);
+                                    const anyConfirmed = group.some(b => b.isConfirmed);
+                                    const anyLocked = group.some(b => b.isLocked);
+                                    const anyHidden = group.some(b => b.isHidden);
+
+                                    return (
+                                        <tr key={bp.id} className="hover:bg-blue-50/20 transition-colors group">
+                                            <td className="px-6 py-5">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600 mt-0.5 group-hover:scale-110 transition-transform">
+                                                        <FileText size={20} />
                                                     </div>
-                                                    <div className="font-black text-gray-900 text-xs uppercase truncate" title={bp.subject}>{bp.subject}</div>
-                                                    <div className="flex flex-col gap-1 mt-0.5">
-                                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">{bp.questionPaperTypeName}</div>
-                                                        <div className="text-[9px] font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 w-fit">
-                                                            {bp.examTerm} | {bp.academicYear}
+                                                    <div className="flex flex-col gap-1 overflow-hidden">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-black text-blue-700 text-sm uppercase tracking-tight">Class {bp.classLevel}</span>
+                                                            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-black uppercase border border-blue-100">{bp.setId || 'SET A'}</span>
+                                                        </div>
+                                                        <div className="font-black text-gray-900 text-xs uppercase truncate" title={bp.subject}>{bp.subject}</div>
+                                                        <div className="flex flex-col gap-1 mt-0.5">
+                                                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">{bp.questionPaperTypeName}</div>
+                                                            <div className="text-[9px] font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 w-fit">
+                                                                {bp.examTerm} | {bp.academicYear}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                                                    <UserIcon size={14} />
+                                            </td>
+                                            <td className="px-6 py-5">
+                                                <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                                                    {group.map(b => (
+                                                        <div key={b.id} className="flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors shrink-0">
+                                                                <UserIcon size={12} />
+                                                            </div>
+                                                            <div className="overflow-hidden">
+                                                                <div className="text-xs font-bold text-gray-800 truncate">{getUserName(b.ownerId)}</div>
+                                                                <div className="text-[8px] text-gray-400 flex items-center gap-1">
+                                                                    <Calendar size={8} /> {new Date(b.createdAt).toLocaleDateString()}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div className="overflow-hidden">
-                                                    <div className="text-sm font-bold text-gray-800 truncate">{getUserName(bp.ownerId)}</div>
-                                                    <div className="text-[10px] text-gray-400 flex items-center gap-1">
-                                                        <Calendar size={10} /> {new Date(bp.createdAt).toLocaleDateString()}
-                                                    </div>
+                                            </td>
+                                            <td className="px-6 py-5">
+                                                <button
+                                                    onClick={() => setSelectedShareBp(bp.id)}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${bp.sharedWith?.length ? 'bg-blue-100 text-blue-800 hover:shadow-md hover:shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                                >
+                                                    <Share2 size={12} />
+                                                    {bp.sharedWith?.length ? `${bp.sharedWith.length} Users` : 'Not Shared'}
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-5">
+                                                <div className="flex flex-col items-center gap-1.5">
+                                                    {group.map(b => (
+                                                        <div key={b.id} className="w-full flex flex-col gap-1 mb-2 last:mb-0 border-b border-gray-50 pb-2 last:border-0">
+                                                            {b.isConfirmed ? (
+                                                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-green-100 text-green-700 gap-1 uppercase w-full justify-center tracking-tighter">
+                                                                    <CheckCircle size={10} /> {getUserName(b.ownerId)}: Confirmed
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-amber-100 text-amber-700 gap-1 uppercase w-full justify-center tracking-tighter">
+                                                                    <Clock size={10} /> {getUserName(b.ownerId)}: Draft
+                                                                </span>
+                                                            )}
+                                                            <div className="flex gap-1 w-full">
+                                                                {b.isLocked ? (
+                                                                    <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-gray-800 text-white gap-1 uppercase justify-center"><Lock size={8} /> Locked</span>
+                                                                ) : (
+                                                                    <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-blue-50 text-blue-600 gap-1 uppercase justify-center"><Unlock size={8} /> Unlocked</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <button
-                                                onClick={() => setSelectedShareBp(bp.id)}
-                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${bp.sharedWith?.length ? 'bg-blue-100 text-blue-800 hover:shadow-md hover:shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
-                                            >
-                                                <Share2 size={12} />
-                                                {bp.sharedWith?.length ? `${bp.sharedWith.length} Users` : 'Not Shared'}
-                                            </button>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <div className="flex flex-col items-center gap-1.5">
-                                                {bp.isConfirmed ? (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-green-100 text-green-700 gap-1 uppercase w-full justify-center tracking-tighter">
-                                                        <CheckCircle size={10} /> Confirmed
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-amber-100 text-amber-700 gap-1 uppercase w-full justify-center tracking-tighter">
-                                                        <Clock size={10} /> Draft
-                                                    </span>
-                                                )}
-                                                <div className="flex gap-1 w-full">
-                                                    {bp.isLocked ? (
-                                                        <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-gray-800 text-white gap-1 uppercase justify-center"><Lock size={8} /></span>
-                                                    ) : (
-                                                        <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-blue-50 text-blue-600 gap-1 uppercase justify-center"><Unlock size={8} /></span>
-                                                    )}
-                                                    {bp.isHidden && (
-                                                        <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-red-50 text-red-600 gap-1 uppercase justify-center"><EyeOff size={8} /></span>
-                                                    )}
+                                            </td>
+                                            <td className="px-6 py-5">
+                                                <div className="grid grid-cols-5 gap-1 max-w-[160px] mx-auto">
+                                                    <button onClick={() => onEditBlueprint(bp)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors flex justify-center" title="View/Edit"><Edit2 size={18} /></button>
+                                                    <button onClick={() => handleToggleLock(ids)} className={`p-2 rounded-xl transition-colors flex justify-center ${anyLocked ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Lock/Unlock">{anyLocked ? <Lock size={18} /> : <Unlock size={18} />}</button>
+                                                    <button onClick={() => handleToggleHidden(ids)} className={`p-2 rounded-xl transition-colors flex justify-center ${anyHidden ? 'text-gray-400 hover:bg-gray-100' : 'text-blue-600 hover:bg-blue-50'}`} title="Show/Hide">{anyHidden ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                                                    <button onClick={() => handleResetConfirmation(ids)} className={`p-2 rounded-xl transition-colors flex justify-center ${anyConfirmed ? 'text-orange-600 hover:bg-orange-50' : 'text-gray-300 pointer-events-none'}`} title="Reset Confirmation"><RotateCcw size={18} /></button>
+                                                    <button onClick={() => handleDelete(ids)} className="p-2 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors flex justify-center" title="Delete"><Trash2 size={18} /></button>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <div className="grid grid-cols-3 gap-1 max-w-[120px] mx-auto">
-                                                <button onClick={() => onEditBlueprint(bp)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors flex justify-center" title="View/Edit"><Edit2 size={18} /></button>
-                                                <button onClick={() => handleToggleLock(bp.id)} className={`p-2 rounded-xl transition-colors flex justify-center ${bp.isLocked ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Lock/Unlock">{bp.isLocked ? <Lock size={18} /> : <Unlock size={18} />}</button>
-                                                <button onClick={() => handleToggleHidden(bp.id)} className={`p-2 rounded-xl transition-colors flex justify-center ${bp.isHidden ? 'text-gray-400 hover:bg-gray-100' : 'text-blue-600 hover:bg-blue-50'}`} title="Show/Hide">{bp.isHidden ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                                                <button onClick={() => handleDelete(bp.id)} className="p-2 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors flex justify-center" title="Delete"><Trash2 size={18} /></button>
-                                                {bp.isConfirmed && <button onClick={() => handleResetConfirmation(bp.id)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors flex justify-center" title="Reset"><RotateCcw size={18} /></button>}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             ) : (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
