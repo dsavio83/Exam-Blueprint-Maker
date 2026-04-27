@@ -251,7 +251,8 @@ export const ReportsView = ({
                 body: JSON.stringify({ 
                     id: blueprint.id,
                     baseUrl: window.location.origin,
-                    tab: tab
+                    tab: tab,
+                    mode: isAdmin ? 'admin' : 'user'
                 })
             });
 
@@ -656,10 +657,15 @@ export const ReportsView = ({
 
     const renderReport2Content = () => {
         const grandTotals = createStats();
-        report2Rows.forEach(row => {
-            Object.keys(grandTotals.cp).forEach(k => { grandTotals.cp[k].count += row.unitStats.cp[k].count; grandTotals.cp[k].score += row.unitStats.cp[k].score; });
-            Object.keys(grandTotals.levels).forEach(k => { grandTotals.levels[k].count += row.unitStats.levels[k].count; grandTotals.levels[k].score += row.unitStats.levels[k].score; });
-            Object.keys(grandTotals.formats).forEach(k => { grandTotals.formats[k].count += row.unitStats.formats[k].count; grandTotals.formats[k].score += row.unitStats.formats[k].score; });
+        orderedItems.forEach(item => {
+            addToStats(
+                grandTotals,
+                item.cognitiveProcess,
+                item.knowledgeLevel,
+                item.itemFormat,
+                getItemTotalScore(item),
+                getItemQuestionCount(item)
+            );
         });
         return (
             <div className="text-black">
@@ -689,6 +695,23 @@ export const ReportsView = ({
                                 ))}
                             </React.Fragment>
                         ))}
+                        <tr className="bg-gray-100 font-black">
+                            <td colSpan={3} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[10px]">TOTAL ITEM</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.cp[def.key].count || ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.levels[def.key].count || ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.formats[def.key].count || ''}</td>)}
+                            <td className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{derivedTotalItems}</td>
+                            <td className="border border-black bg-black"></td>
+                            <td rowSpan={2} className="border border-black px-[1px] py-[6px] text-center text-[10px] font-black english-font align-middle">{examMinutes}</td>
+                        </tr>
+                        <tr className="bg-gray-100 font-black">
+                            <td colSpan={3} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[10px]">TOTAL SCORE</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
+                            <td className="border border-black bg-black"></td>
+                            <td className="border border-black px-[1px] py-[6px] text-center text-[10px] font-black english-font">{formatMark(derivedTotalMarks)}</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -728,6 +751,23 @@ export const ReportsView = ({
                                 </tr>
                             );
                         })}
+                        <tr className="bg-gray-100 font-black">
+                            <td colSpan={4} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[9px]">TOTAL ITEM</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.cp[def.key].count || ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.levels[def.key].count || ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.formats[def.key].count || ''}</td>)}
+                            <td className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{derivedTotalItems}</td>
+                            <td className="border border-black bg-black"></td>
+                            <td rowSpan={2} className="border border-black px-[1px] py-[6px] text-center text-[8px] font-black english-font align-middle">{examMinutes}</td>
+                        </tr>
+                        <tr className="bg-gray-100 font-black">
+                            <td colSpan={4} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[9px]">TOTAL SCORE</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.cp[def.key].score ? formatMark(totals.stats.cp[def.key].score) : ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.levels[def.key].score ? formatMark(totals.stats.levels[def.key].score) : ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.formats[def.key].score ? formatMark(totals.stats.formats[def.key].score) : ''}</td>)}
+                            <td className="border border-black bg-black"></td>
+                            <td className="border border-black px-[1px] py-[6px] text-center text-[8px] font-black english-font">{formatMark(derivedTotalMarks)}</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>

@@ -187,7 +187,7 @@ app.post('/export/odt', async (req, res) => {
 });
 // Export Routes
 app.post('/export/pdf', async (req, res) => {
-  const { id, baseUrl, tab } = req.body;
+  const { id, baseUrl, tab, mode } = req.body;
   if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
 
   try {
@@ -197,8 +197,12 @@ app.post('/export/pdf', async (req, res) => {
     });
     const page = await browser.newPage();
 
-    // Construct the print URL with tab filter
-    const printUrl = `${baseUrl || 'http://localhost:5173'}/print-view/${id}${tab ? `?tab=${tab}` : ''}`;
+    // Construct the print URL with tab filter and rendering mode
+    const query = new URLSearchParams();
+    if (tab) query.set('tab', tab);
+    if (mode) query.set('mode', mode);
+    const queryString = query.toString();
+    const printUrl = `${baseUrl || 'http://localhost:5173'}/print-view/${id}${queryString ? `?${queryString}` : ''}`;
     console.log('Puppeteer navigating to:', printUrl);
 
     await page.goto(printUrl, { waitUntil: 'networkidle0', timeout: 60000 });

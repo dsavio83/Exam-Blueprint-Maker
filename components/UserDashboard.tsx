@@ -104,6 +104,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
 
     const printRef = useRef<HTMLDivElement>(null);
+    const blueprintRef = useRef<Blueprint | null>(null);
+
+    useEffect(() => {
+        blueprintRef.current = currentBlueprint;
+    }, [currentBlueprint]);
 
     useEffect(() => {
         setAnimateHeader(true);
@@ -229,7 +234,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     };
 
     const handleRegeneratePattern = async () => {
-        if (!currentBlueprint || !curriculum) return;
+        const latestBlueprint = blueprintRef.current;
+        if (!latestBlueprint || !curriculum) return;
         Swal.fire({
             title: "Regenerate Pattern?",
             text: "This will replace all current questions with a new random pattern. Continue?",
@@ -242,8 +248,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
             if (result.isConfirmed) {
                 const db = getDB();
                 if (!db) await initDB();
-                const newItems = generateBlueprintTemplate(getDB()!, curriculum, currentBlueprint.examTerm, currentBlueprint.questionPaperTypeId);
-                setCurrentBlueprint({ ...currentBlueprint, items: newItems, isConfirmed: false });
+                const newItems = generateBlueprintTemplate(getDB()!, curriculum, latestBlueprint.examTerm, latestBlueprint.questionPaperTypeId);
+                setCurrentBlueprint({ ...latestBlueprint, items: newItems, isConfirmed: false });
                 Swal.fire("Regenerated", "A new pattern has been generated.", "success");
             }
         });
@@ -264,10 +270,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     };
 
     const handleSaveToDB = async () => {
-        if (!currentBlueprint) return;
+        const latestBlueprint = blueprintRef.current;
+        if (!latestBlueprint) return;
         setIsSaving(true);
         try {
-            await saveBlueprint(currentBlueprint);
+            await saveBlueprint(latestBlueprint);
             const updated = await getAllAccessibleBlueprints(user.id);
             setBlueprints(updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
             Swal.fire("Saved", "Blueprint saved successfully!", "success");
@@ -368,6 +375,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
             const updatedItems = prev.items.map(i => {
                 if (i.id === id) {
                     const updated = { ...i, [field]: value };
+                    if (field === 'questionCount') {
+                        updated.totalMarks = updated.marksPerQuestion * (Number(value) || 0);
+                    }
                     if (updated.marksPerQuestion === 1) {
                         updated.knowledgeLevel = KnowledgeLevel.BASIC;
                         updated.knowledgeLevelB = KnowledgeLevel.BASIC;
@@ -378,7 +388,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     }
                     if (updated.hasInternalChoice) {
                         if (field === 'knowledgeLevel') updated.knowledgeLevelB = value as KnowledgeLevel;
-                        else if (field === 'knowledgeLevelB') updated.knowledgeLevel = value as KnowledgeLevel;
+                        else if (field === 'knowledgeLevelB') updated.knowledgeLevelB = updated.knowledgeLevel;
+                        updated.unitIdB = updated.unitId;
+                        updated.subUnitIdB = updated.subUnitIdB || updated.subUnitId;
+                        updated.itemFormatB = updated.itemFormatB || updated.itemFormat;
+                    } else {
+                        updated.unitIdB = undefined;
+                        updated.subUnitIdB = undefined;
+                        updated.knowledgeLevelB = undefined;
+                        updated.cognitiveProcessB = undefined;
+                        updated.itemFormatB = undefined;
                     }
                     return updated;
                 }
@@ -404,7 +423,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     marksPerQuestion: newSection.marks,
                     totalMarks: newSection.marks * item.questionCount,
                     itemFormat: getDefaultFormat(newSection.marks),
-                    knowledgeLevel: getDefaultKnowledge(newSection.marks)
+                    knowledgeLevel: getDefaultKnowledge(newSection.marks),
+                    unitIdB: item.hasInternalChoice ? newUnitId : undefined,
+                    subUnitIdB: item.hasInternalChoice ? (item.subUnitIdB || newSubUnitId || newUnit.subUnits[0]?.id || 'unknown') : undefined,
+                    knowledgeLevelB: item.hasInternalChoice ? getDefaultKnowledge(newSection.marks) : undefined,
+                    itemFormatB: item.hasInternalChoice ? getDefaultFormat(newSection.marks) : undefined,
                 };
             }
             return item;

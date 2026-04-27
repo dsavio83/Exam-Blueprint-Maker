@@ -333,7 +333,7 @@ export const shareBlueprint = async (blueprintId: string, fromUserId: string, to
   };
   const res = await fetch(`${API_URL}/share`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(share)
   });
   return !!(await handleResponse(res));
@@ -409,6 +409,33 @@ const shuffle = <T>(array: T[]): T[] => {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+};
+
+const getAllowedBlueprintCPs = (): CognitiveProcess[] =>
+  Object.values(CognitiveProcess).filter(cp => cp !== CognitiveProcess.CP3);
+
+const computeKlTargets = (totalMarks: number): Record<KnowledgeLevel, number> => {
+  const exact = [
+    { level: KnowledgeLevel.BASIC, value: totalMarks * 0.3 },
+    { level: KnowledgeLevel.AVERAGE, value: totalMarks * 0.5 },
+    { level: KnowledgeLevel.PROFOUND, value: totalMarks * 0.2 },
+  ];
+  const result = {
+    [KnowledgeLevel.BASIC]: 0,
+    [KnowledgeLevel.AVERAGE]: 0,
+    [KnowledgeLevel.PROFOUND]: 0,
+  } as Record<KnowledgeLevel, number>;
+  exact.forEach(entry => { result[entry.level] = Math.floor(entry.value); });
+  let remaining = totalMarks - Object.values(result).reduce((sum, v) => sum + v, 0);
+  exact
+    .sort((a, b) => (b.value - Math.floor(b.value)) - (a.value - Math.floor(a.value)))
+    .forEach(entry => {
+      if (remaining > 0) {
+        result[entry.level] += 1;
+        remaining -= 1;
+      }
+    });
+  return result;
 };
 
 const partitionTokensToUnits = (
@@ -551,29 +578,39 @@ export const generateBlueprintTemplate = (
 
   const items: BlueprintItem[] = [];
   const usageTracker: Record<string, number> = {};
-  const cpList = Object.values(CognitiveProcess);
+  const cpList = getAllowedBlueprintCPs();
   let cpIdx = Math.floor(Math.random() * cpList.length);
-
-  const orTracker: Record<string, boolean> = {}; // Track section IDs that already got an OR item
+  const applyInternalChoiceMetadata = (item: BlueprintItem) => {
+    item.hasInternalChoice = true;
+    item.unitIdB = item.unitId;
+    item.subUnitIdB = item.subUnitId;
+    item.knowledgeLevelB = item.knowledgeLevel;
+    item.cognitiveProcessB = item.cognitiveProcess;
+    item.itemFormatB = item.itemFormat;
+  };
+  const clearInternalChoiceMetadata = (item: BlueprintItem) => {
+    item.hasInternalChoice = false;
+    item.unitIdB = undefined;
+    item.subUnitIdB = undefined;
+    item.knowledgeLevelB = undefined;
+    item.cognitiveProcessB = undefined;
+    item.itemFormatB = undefined;
+  };
 
   unitAllocation.forEach(alloc => {
-    // Randomize the order of tokens for this unit to ensure they don't always land in the same sub-units
     const shuffledTokens = shuffle(alloc.tokens);
     
     shuffledTokens.forEach(token => {
       if (!usageTracker[alloc.unit.id]) usageTracker[alloc.unit.id] = 0;
-      
-      // Use the usage tracker with an offset based on blueprint ID or random to rotate starting sub-units
       const subUnitOffset = Math.floor(Math.random() * alloc.unit.subUnits.length);
       const subUnitId = alloc.unit.subUnits.length > 0
         ? alloc.unit.subUnits[(usageTracker[alloc.unit.id] + subUnitOffset) % alloc.unit.subUnits.length].id
         : 'general';
       
       const section = paperType.sections.find(s => s.id === token.sectionId);
-      
-      // Rule: Strictly ONE internal choice per section that allows it
       const currentORCountInSection = items.filter(i => i.sectionId === token.sectionId && i.hasInternalChoice).length;
-      const hasInternalChoice = (section?.optionCount || 0) > 0 && currentORCountInSection === 0;
+      const requiredORCount = section?.optionCount || 0;
+      const hasInternalChoice = requiredORCount > 0 && currentORCountInSection < requiredORCount;
 
       const cp = cpList[cpIdx % cpList.length];
       cpIdx++;
@@ -592,6 +629,8 @@ export const generateBlueprintTemplate = (
         itemFormat: getDefaultFormat(token.mark),
         questionType: token.mark === 1 ? QuestionType.SR1 : token.mark === 2 ? QuestionType.CRS1 : token.mark === 3 ? QuestionType.CRS2 : token.mark === 4 ? QuestionType.CRS3 : QuestionType.CRL,
         hasInternalChoice: hasInternalChoice,
+        unitIdB: hasInternalChoice ? alloc.unit.id : undefined,
+        subUnitIdB: hasInternalChoice ? subUnitId : undefined,
         cognitiveProcessB: cp,
         itemFormatB: getDefaultFormat(token.mark),
         questionText: '',
@@ -600,35 +639,54 @@ export const generateBlueprintTemplate = (
     });
   });
 
-  // Final validation and fix for OR: Ensure every eligible section got EXACTLY one OR
+  // Final validation and fix for OR: match each section's requested OR count.
   paperType.sections.forEach(s => {
-    if (s.optionCount > 0) {
-      const sectionItems = items.filter(i => i.sectionId === s.id);
-      const withOR = sectionItems.filter(i => i.hasInternalChoice);
-      
-      if (withOR.length === 0 && sectionItems.length > 0) {
-        // Give OR to a random question in this section
-        const randIdx = Math.floor(Math.random() * sectionItems.length);
-        sectionItems[randIdx].hasInternalChoice = true;
-      } else if (withOR.length > 1) {
-        // Keep only the first one
-        withOR.forEach((item, idx) => {
-           if (idx > 0) item.hasInternalChoice = false;
-        });
-      }
-    } else {
-       // Ensure NO internal choices in other sections
-       items.filter(i => i.sectionId === s.id).forEach(i => i.hasInternalChoice = false);
+    const sectionItems = items.filter(i => i.sectionId === s.id);
+    const requiredORCount = Math.min(s.optionCount || 0, sectionItems.length);
+    const withOR = shuffle(sectionItems.filter(i => i.hasInternalChoice));
+    const withoutOR = shuffle(sectionItems.filter(i => !i.hasInternalChoice));
+
+    if (requiredORCount === 0) {
+      sectionItems.forEach(clearInternalChoiceMetadata);
+      return;
+    }
+
+    if (withOR.length < requiredORCount) {
+      withoutOR.slice(0, requiredORCount - withOR.length).forEach(applyInternalChoiceMetadata);
+    } else if (withOR.length > requiredORCount) {
+      withOR.slice(requiredORCount).forEach(clearInternalChoiceMetadata);
     }
   });
 
-  // Assign Knowledge Levels with refined rules
-  const klTargets = {
-    [KnowledgeLevel.BASIC]: Math.round(paperType.totalMarks * 0.3),
-    [KnowledgeLevel.AVERAGE]: Math.round(paperType.totalMarks * 0.5),
-    [KnowledgeLevel.PROFOUND]: paperType.totalMarks - Math.round(paperType.totalMarks * 0.3) - Math.round(paperType.totalMarks * 0.5)
-  };
+  // Spread OR within the same unit across a different sub-unit whenever possible.
+  paperType.sections.forEach(s => {
+    if (s.optionCount <= 0) return;
+    items
+      .filter(i => i.sectionId === s.id && i.hasInternalChoice)
+      .forEach(item => {
+        const unit = filteredUnits.find(u => u.id === item.unitId);
+        const alternatives = shuffle((unit?.subUnits || []).filter(su => su.id !== item.subUnitId));
+        const chosen = alternatives[0];
+        item.unitIdB = item.unitId;
+        item.subUnitIdB = chosen?.id || item.subUnitId;
+        item.knowledgeLevelB = item.knowledgeLevel;
+        item.cognitiveProcessB = cpList[cpIdx % cpList.length];
+        item.itemFormatB = item.itemFormat;
+        cpIdx++;
+      });
+  });
+
+  const klTargets = computeKlTargets(paperType.totalMarks);
   assignKnowledgeLevels(items, klTargets);
+
+  items.forEach(item => {
+    if (item.hasInternalChoice) {
+      item.knowledgeLevelB = item.knowledgeLevel;
+      item.itemFormatB = item.itemFormat;
+      item.cognitiveProcess = item.cognitiveProcess === CognitiveProcess.CP3 ? cpList[0] : item.cognitiveProcess;
+      item.cognitiveProcessB = item.cognitiveProcessB === CognitiveProcess.CP3 ? cpList[1 % cpList.length] : item.cognitiveProcessB;
+    }
+  });
 
   return items;
 };

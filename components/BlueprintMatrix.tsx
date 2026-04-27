@@ -74,6 +74,8 @@ export interface BlueprintItem {
   cognitiveProcess: CognitiveProcess;
   itemFormat: ItemFormat;
   hasInternalChoice: boolean;
+  unitIdB?: string;
+  subUnitIdB?: string;
   knowledgeLevelB?: KnowledgeLevel;
   cognitiveProcessB?: CognitiveProcess;
   itemFormatB?: ItemFormat;
@@ -134,6 +136,162 @@ export const isLanguageSubject = (subject: string): boolean => {
 const getAllowedCPs = (_subject?: string): CognitiveProcess[] =>
   Object.values(CognitiveProcess).filter(cp => cp !== CognitiveProcess.CP3);
 
+const DEFAULT_ALLOWED_CP = CognitiveProcess.CP1;
+
+const getSafeCP = (value?: CognitiveProcess): CognitiveProcess => {
+  if (value && value !== CognitiveProcess.CP3) return value;
+  return DEFAULT_ALLOWED_CP;
+};
+
+const getPreferredKLs = (mark: number): KnowledgeLevel[] => {
+  if (mark <= 2) return [KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE];
+  if (mark === 3) return [KnowledgeLevel.AVERAGE, KnowledgeLevel.BASIC, KnowledgeLevel.PROFOUND];
+  return [KnowledgeLevel.PROFOUND, KnowledgeLevel.AVERAGE];
+};
+
+const computeExactKlTargets = (totalMarks: number): Record<KnowledgeLevel, number> => {
+  const exactEntries = ([
+    [KnowledgeLevel.BASIC, totalMarks * KL_TARGETS[KnowledgeLevel.BASIC]],
+    [KnowledgeLevel.AVERAGE, totalMarks * KL_TARGETS[KnowledgeLevel.AVERAGE]],
+    [KnowledgeLevel.PROFOUND, totalMarks * KL_TARGETS[KnowledgeLevel.PROFOUND]],
+  ] as const).map(([level, exact]) => ({
+    level,
+    floor: Math.floor(exact),
+    remainder: exact - Math.floor(exact),
+  }));
+
+  const result = exactEntries.reduce((acc, entry) => {
+    acc[entry.level] = entry.floor;
+    return acc;
+  }, {
+    [KnowledgeLevel.BASIC]: 0,
+    [KnowledgeLevel.AVERAGE]: 0,
+    [KnowledgeLevel.PROFOUND]: 0,
+  } as Record<KnowledgeLevel, number>);
+
+  let remaining = totalMarks - Object.values(result).reduce((sum, value) => sum + value, 0);
+  exactEntries
+    .sort((a, b) => b.remainder - a.remainder || a.level.localeCompare(b.level))
+    .forEach(entry => {
+      if (remaining > 0) {
+        result[entry.level] += 1;
+        remaining -= 1;
+      }
+    });
+
+  return result;
+};
+
+const sanitizeBlueprintItem = (item: BlueprintItem): Partial<BlueprintItem> => {
+  const patch: Partial<BlueprintItem> = {};
+  const safeCP = getSafeCP(item.cognitiveProcess);
+  const safeCPB = getSafeCP(item.cognitiveProcessB || item.cognitiveProcess);
+
+  if (item.cognitiveProcess !== safeCP) patch.cognitiveProcess = safeCP;
+  if ((item.cognitiveProcessB || item.cognitiveProcess) !== safeCPB) patch.cognitiveProcessB = safeCPB;
+
+  if (item.marksPerQuestion === 1 && item.hasInternalChoice) {
+    patch.hasInternalChoice = false;
+  }
+
+  if (item.hasInternalChoice) {
+    if (!item.unitIdB) patch.unitIdB = item.unitId;
+    if (!item.subUnitIdB) patch.subUnitIdB = item.subUnitId;
+    if (!item.knowledgeLevelB) patch.knowledgeLevelB = item.knowledgeLevel;
+    if (!item.cognitiveProcessB || item.cognitiveProcessB === CognitiveProcess.CP3) patch.cognitiveProcessB = safeCP;
+    if (!item.itemFormatB) patch.itemFormatB = item.itemFormat;
+  } else if (item.unitIdB || item.subUnitIdB || item.knowledgeLevelB || item.cognitiveProcessB || item.itemFormatB) {
+    patch.unitIdB = undefined;
+    patch.subUnitIdB = undefined;
+    patch.knowledgeLevelB = undefined;
+    patch.cognitiveProcessB = undefined;
+    patch.itemFormatB = undefined;
+  }
+
+  return patch;
+};
+
+const assignKnowledgeLevelsExactly = (items: BlueprintItem[], totalMarks: number): BlueprintItem[] => {
+  if (!items.length) return items;
+
+  const targets = computeExactKlTargets(totalMarks);
+  const indexed = items.map((item, index) => ({ item, index }));
+  const sorted = [...indexed].sort((a, b) => b.item.totalMarks - a.item.totalMarks);
+  const memo = new Map<string, KnowledgeLevel[] | null>();
+
+  const search = (
+    idx: number,
+    basicRemain: number,
+    averageRemain: number,
+    profoundRemain: number,
+  ): KnowledgeLevel[] | null => {
+    if (idx === sorted.length) {
+      return basicRemain === 0 && averageRemain === 0 && profoundRemain === 0 ? [] : null;
+    }
+
+    const key = `${idx}|${basicRemain}|${averageRemain}|${profoundRemain}`;
+    if (memo.has(key)) return memo.get(key)!;
+
+    const current = sorted[idx].item.totalMarks;
+    const options = getPreferredKLs(sorted[idx].item.marksPerQuestion);
+
+    for (const kl of options) {
+      const nextBasic = basicRemain - (kl === KnowledgeLevel.BASIC ? current : 0);
+      const nextAverage = averageRemain - (kl === KnowledgeLevel.AVERAGE ? current : 0);
+      const nextProfound = profoundRemain - (kl === KnowledgeLevel.PROFOUND ? current : 0);
+      if (nextBasic < 0 || nextAverage < 0 || nextProfound < 0) continue;
+
+      const remainder = search(idx + 1, nextBasic, nextAverage, nextProfound);
+      if (remainder) {
+        const found = [kl, ...remainder];
+        memo.set(key, found);
+        return found;
+      }
+    }
+
+    memo.set(key, null);
+    return null;
+  };
+
+  const exact = search(0, targets[KnowledgeLevel.BASIC], targets[KnowledgeLevel.AVERAGE], targets[KnowledgeLevel.PROFOUND]);
+  const result = items.map(item => ({ ...item }));
+
+  if (exact) {
+    sorted.forEach((entry, idx) => {
+      const chosen = exact[idx];
+      result[entry.index].knowledgeLevel = chosen;
+      if (result[entry.index].hasInternalChoice) {
+        result[entry.index].knowledgeLevelB = chosen;
+      }
+    });
+    return result;
+  }
+
+  const running = {
+    [KnowledgeLevel.BASIC]: 0,
+    [KnowledgeLevel.AVERAGE]: 0,
+    [KnowledgeLevel.PROFOUND]: 0,
+  } as Record<KnowledgeLevel, number>;
+
+  sorted.forEach(entry => {
+    const mark = entry.item.totalMarks;
+    const choice = getPreferredKLs(entry.item.marksPerQuestion)
+      .slice()
+      .sort((a, b) => {
+        const aGap = targets[a] - running[a];
+        const bGap = targets[b] - running[b];
+        return bGap - aGap;
+      })[0];
+    running[choice] += mark;
+    result[entry.index].knowledgeLevel = choice;
+    if (result[entry.index].hasInternalChoice) {
+      result[entry.index].knowledgeLevelB = choice;
+    }
+  });
+
+  return result;
+};
+
 // ─── Validation Engine ───────────────────────────────────────────────────────
 
 interface ValidationError {
@@ -151,6 +309,12 @@ interface ValidationResult {
   grandTotal: number;
   isValid: boolean;
   subUnitCoverage: { unitId: string; subUnitId: string; marks: number; pct: number }[];
+  analytics: {
+    unitTargets: { unitId: string; unitName: string; actual: number; ideal: number; deviation: number; pct: number }[];
+    subUnitTargets: { unitId: string; unitName: string; subUnitId: string; subUnitName: string; actual: number; ideal: number; deviation: number; pct: number }[];
+    sectionTargets: { sectionId: string; label: string; actualQuestions: number; expectedQuestions: number; actualMarks: number }[];
+    datasetMeta: { unitCount: number; subUnitCount: number; questionCount: number };
+  };
 }
 
 function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculum: Curriculum): ValidationResult {
@@ -173,13 +337,15 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
   if (!paperType?.sections) {
     return {
       errors: [{ type: 'error', code: 'PAPER_TYPE_MISSING', message: 'பேப்பர் டைப் கிடைக்கவில்லை.' }],
-      klSummary: emptyKlSummary(), sectionSummary: [], orStatus: {}, grandTotal: 0, isValid: false, subUnitCoverage: []
+      klSummary: emptyKlSummary(), sectionSummary: [], orStatus: {}, grandTotal: 0, isValid: false, subUnitCoverage: [],
+      analytics: { unitTargets: [], subUnitTargets: [], sectionTargets: [], datasetMeta: { unitCount: 0, subUnitCount: 0, questionCount: 0 } }
     };
   }
   if (!curriculum?.units) {
     return {
       errors: [{ type: 'error', code: 'CURRICULUM_MISSING', message: 'பாடத்திட்டம் கிடைக்கவில்லை.' }],
-      klSummary: emptyKlSummary(), sectionSummary: [], orStatus: {}, grandTotal: 0, isValid: false, subUnitCoverage: []
+      klSummary: emptyKlSummary(), sectionSummary: [], orStatus: {}, grandTotal: 0, isValid: false, subUnitCoverage: [],
+      analytics: { unitTargets: [], subUnitTargets: [], sectionTargets: [], datasetMeta: { unitCount: 0, subUnitCount: 0, questionCount: 0 } }
     };
   }
 
@@ -202,11 +368,7 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
   let perfectKL = items.length > 0;
   const klSummary = emptyKlSummary();
 
-  const KL_EXACT: Record<KnowledgeLevel, number> = {
-    [KnowledgeLevel.BASIC]: Math.round(blueprint.totalMarks * KL_TARGETS[KnowledgeLevel.BASIC]),     // 30%
-    [KnowledgeLevel.AVERAGE]: Math.round(blueprint.totalMarks * KL_TARGETS[KnowledgeLevel.AVERAGE]),  // 50%
-    [KnowledgeLevel.PROFOUND]: Math.round(blueprint.totalMarks * KL_TARGETS[KnowledgeLevel.PROFOUND]),// 20%
-  };
+  const KL_EXACT = computeExactKlTargets(blueprint.totalMarks);
 
   ([KnowledgeLevel.BASIC, KnowledgeLevel.AVERAGE, KnowledgeLevel.PROFOUND] as KnowledgeLevel[]).forEach(kl => {
     const target = KL_EXACT[kl];
@@ -254,6 +416,13 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
     }
     return { sectionId: s.id, marks: s.marks, count: s.count, filled };
   });
+  const sectionTargets = paperType.sections.map(s => ({
+    sectionId: s.id,
+    label: `${s.marks}M`,
+    actualQuestions: items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.questionCount, 0),
+    expectedQuestions: s.count,
+    actualMarks: items.filter(i => i.sectionId === s.id).reduce((acc, i) => acc + i.totalMarks, 0),
+  }));
 
   // ── 4. Internal Choice (OR) validation ─────────────────────────────────────
   // Rule: Each section with optionCount > 0 needs exactly 1 OR question.
@@ -298,8 +467,9 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
   if (choiceItems.length > 0 && items.length > 0) {
     const subUnitOrMap = new Map<string, string[]>();
     choiceItems.forEach(item => {
-      const existing = subUnitOrMap.get(item.subUnitId) || [];
-      subUnitOrMap.set(item.subUnitId, [...existing, item.sectionId]);
+      const targetSubUnit = item.subUnitIdB || item.subUnitId;
+      const existing = subUnitOrMap.get(targetSubUnit) || [];
+      subUnitOrMap.set(targetSubUnit, [...existing, item.sectionId]);
     });
     subUnitOrMap.forEach((sectionIds, subUnitId) => {
       if (sectionIds.length > 1) {
@@ -316,7 +486,8 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       // Multi-subject: flag if one unit holds > 60% of all ORs
       const unitOrMap = new Map<string, number>();
       choiceItems.forEach(item => {
-        unitOrMap.set(item.unitId, (unitOrMap.get(item.unitId) || 0) + item.questionCount);
+        const targetUnit = item.unitIdB || item.unitId;
+        unitOrMap.set(targetUnit, (unitOrMap.get(targetUnit) || 0) + item.questionCount);
       });
       const totalOrQ = choiceItems.reduce((acc, i) => acc + i.questionCount, 0);
       unitOrMap.forEach((cnt, unitId) => {
@@ -335,7 +506,8 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       // Single-subject: every OR must come from a DIFFERENT sub-unit
       const singleSubMap = new Map<string, number>();
       choiceItems.forEach(item => {
-        singleSubMap.set(item.subUnitId, (singleSubMap.get(item.subUnitId) || 0) + item.questionCount);
+        const targetSubUnit = item.subUnitIdB || item.subUnitId;
+        singleSubMap.set(targetSubUnit, (singleSubMap.get(targetSubUnit) || 0) + item.questionCount);
       });
       singleSubMap.forEach((cnt, subUnitId) => {
         if (cnt > 1) {
@@ -350,6 +522,13 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
     }
 
     choiceItems.forEach(item => {
+      if (item.unitIdB && item.unitIdB !== item.unitId) {
+        pushError({
+          type: 'error', code: `OPTION_UNIT_MISMATCH_${item.id}`,
+          message: `${item.marksPerQuestion}M OR: Option B வேறு unit-க்கு நகர்ந்துள்ளது`,
+          detail: 'OR option அதே unit-க்குள் உள்ள sub-unit-ல் மட்டும் அமைக்க வேண்டும்.'
+        });
+      }
       if (item.knowledgeLevelB && item.knowledgeLevel !== item.knowledgeLevelB) {
         pushError({
           type: 'error', code: `OPTION_KL_MISMATCH_${item.id}`,
@@ -381,7 +560,8 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       // AT: max 1 OR per unit
       const atUnitOrMap = new Map<string, number>();
       choiceItems.forEach(item => {
-        atUnitOrMap.set(item.unitId, (atUnitOrMap.get(item.unitId) || 0) + item.questionCount);
+        const targetUnit = item.unitIdB || item.unitId;
+        atUnitOrMap.set(targetUnit, (atUnitOrMap.get(targetUnit) || 0) + item.questionCount);
       });
       atUnitOrMap.forEach((cnt, unitId) => {
         if (cnt > 1) {
@@ -414,7 +594,8 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
       // BT / Single-unit: every OR must come from a different sub-unit
       const btSubOrMap = new Map<string, number>();
       choiceItems.forEach(item => {
-        btSubOrMap.set(item.subUnitId, (btSubOrMap.get(item.subUnitId) || 0) + item.questionCount);
+        const targetSubUnit = item.subUnitIdB || item.subUnitId;
+        btSubOrMap.set(targetSubUnit, (btSubOrMap.get(targetSubUnit) || 0) + item.questionCount);
       });
       btSubOrMap.forEach((cnt, subUnitId) => {
         if (cnt > 1) {
@@ -431,20 +612,65 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
 
 
   const subUnitCoverage: ValidationResult['subUnitCoverage'] = [];
+  const unitTargets: ValidationResult['analytics']['unitTargets'] = [];
+  const subUnitTargets: ValidationResult['analytics']['subUnitTargets'] = [];
   let uncoveredSubUnits = 0;
+  const totalSubUnitCount = curriculum.units.reduce((sum, unit) => sum + unit.subUnits.length, 0);
+  const idealUnitMarks = curriculum.units.length > 0 ? blueprint.totalMarks / curriculum.units.length : 0;
+  const idealSubUnitMarks = totalSubUnitCount > 0 ? blueprint.totalMarks / totalSubUnitCount : 0;
+  const balancingTolerance = Math.max(...paperType.sections.map(s => s.marks), 2);
 
   curriculum.units.forEach(unit => {
+    const unitMarks = items.filter(i => i.unitId === unit.id).reduce((acc, i) => acc + i.totalMarks, 0);
+    const unitPct = blueprint.totalMarks > 0 ? Math.round((unitMarks / blueprint.totalMarks) * 100) : 0;
+    const unitDeviation = Math.round((unitMarks - idealUnitMarks) * 10) / 10;
+    unitTargets.push({
+      unitId: unit.id,
+      unitName: unit.name,
+      actual: unitMarks,
+      ideal: Math.round(idealUnitMarks * 10) / 10,
+      deviation: unitDeviation,
+      pct: unitPct,
+    });
+
+    if (items.length > 0 && Math.abs(unitDeviation) > balancingTolerance) {
+      pushError({
+        type: 'warning',
+        code: `UNIT_BALANCE_${unit.id}`,
+        message: `"${unit.name}" — ideal ${Math.round(idealUnitMarks)}M-இல் இருந்து ${unitDeviation > 0 ? '+' : ''}${unitDeviation}M வேறுபாடு`,
+        detail: 'எல்லா யூனிட்களுக்கும் சமநிலை மதிப்பெண் பகிர்வு பரிந்துரைக்கப்படுகிறது.',
+      });
+    }
+
     unit.subUnits.forEach(su => {
       const suMarks = items.filter(i => i.unitId === unit.id && i.subUnitId === su.id)
         .reduce((acc, i) => acc + i.totalMarks, 0);
       const pct = blueprint.totalMarks > 0 ? Math.round((suMarks / blueprint.totalMarks) * 100) : 0;
       subUnitCoverage.push({ unitId: unit.id, subUnitId: su.id, marks: suMarks, pct });
+      const subDeviation = Math.round((suMarks - idealSubUnitMarks) * 10) / 10;
+      subUnitTargets.push({
+        unitId: unit.id,
+        unitName: unit.name,
+        subUnitId: su.id,
+        subUnitName: su.name,
+        actual: suMarks,
+        ideal: Math.round(idealSubUnitMarks * 10) / 10,
+        deviation: subDeviation,
+        pct,
+      });
       if (suMarks === 0 && items.length > 0) {
         uncoveredSubUnits++;
         pushError({
           type: 'warning', code: `SUBUNIT_EMPTY_${su.id}`,
           message: `"${su.name}" — வினாக்கள் ஒதுக்கப்படவில்லை`,
           detail: 'இந்த பாடப்பகுதியிலிருந்து குறைந்தது ஒரு வினா சேர்க்கவும்.'
+        });
+      } else if (items.length > 0 && Math.abs(subDeviation) > balancingTolerance) {
+        pushError({
+          type: 'info',
+          code: `SUBUNIT_BALANCE_${su.id}`,
+          message: `"${su.name}" — ideal ${Math.round(idealSubUnitMarks)}M-இல் இருந்து ${subDeviation > 0 ? '+' : ''}${subDeviation}M வேறுபாடு`,
+          detail: 'Sub-unit சமநிலைக்கு இது ஒரு deviation signal ஆக கருதப்படுகிறது.',
         });
       }
     });
@@ -610,6 +836,16 @@ function validateBlueprint(blueprint: Blueprint, paperType: PaperType, curriculu
     grandTotal,
     isValid: rawErrors.filter(e => e.type === 'error').length === 0,
     subUnitCoverage,
+    analytics: {
+      unitTargets,
+      subUnitTargets,
+      sectionTargets,
+      datasetMeta: {
+        unitCount: curriculum.units.length,
+        subUnitCount: totalSubUnitCount,
+        questionCount: items.reduce((sum, item) => sum + item.questionCount, 0),
+      },
+    },
   };
 }
 
@@ -626,11 +862,12 @@ export function autoFillBlueprint(
   paperType: PaperType,
   curriculum: Curriculum,
   totalMarks: number,
-  subject?: string
+  subject?: string,
+  examTerm?: string
 ): BlueprintItem[] {
   if (!items.length || !paperType || !curriculum) return items;
 
-  const result = items.map(item => ({ ...item }));
+  let result = items.map(item => ({ ...item }));
   const allowedCPs = getAllowedCPs(subject ?? curriculum.subject ?? '');
 
   // Step 0: Fix any CP3 usage — CP3 is not allowed in any blueprint
@@ -649,58 +886,21 @@ export function autoFillBlueprint(
     });
   }
 
-  // Step 1: Fix KL distribution
-  const klTargetMarks: Record<KnowledgeLevel, number> = {
-    [KnowledgeLevel.BASIC]: Math.round(totalMarks * KL_TARGETS[KnowledgeLevel.BASIC]),
-    [KnowledgeLevel.AVERAGE]: Math.round(totalMarks * KL_TARGETS[KnowledgeLevel.AVERAGE]),
-    [KnowledgeLevel.PROFOUND]: Math.round(totalMarks * KL_TARGETS[KnowledgeLevel.PROFOUND]),
-  };
-
-  // Assign KL based on section marks: 1-2M → Basic, 3M → Average, 5-6M → Profound
-  result.forEach(item => {
-    if (item.marksPerQuestion <= 2) {
-      item.knowledgeLevel = KnowledgeLevel.BASIC;
-    } else if (item.marksPerQuestion === 3) {
-      item.knowledgeLevel = KnowledgeLevel.AVERAGE;
-    } else {
-      item.knowledgeLevel = KnowledgeLevel.PROFOUND;
-    }
-    // Sync B side
-    if (item.hasInternalChoice) {
-      item.knowledgeLevelB = item.knowledgeLevel;
-    }
-  });
-
-  // Verify and adjust Average — may need to absorb remainder
-  const klActual: Record<KnowledgeLevel, number> = {
-    [KnowledgeLevel.BASIC]: 0, [KnowledgeLevel.AVERAGE]: 0, [KnowledgeLevel.PROFOUND]: 0,
-  };
-  result.forEach(i => { klActual[i.knowledgeLevel] += i.totalMarks; });
-
-  // If Basic overfills, reclassify some 2M items as Average
-  if (klActual[KnowledgeLevel.BASIC] > klTargetMarks[KnowledgeLevel.BASIC]) {
-    const excess = klActual[KnowledgeLevel.BASIC] - klTargetMarks[KnowledgeLevel.BASIC];
-    let toMove = Math.round(excess / 2);
-    result.forEach(item => {
-      if (toMove > 0 && item.marksPerQuestion === 2 && item.knowledgeLevel === KnowledgeLevel.BASIC) {
-        item.knowledgeLevel = KnowledgeLevel.AVERAGE;
-        if (item.hasInternalChoice) item.knowledgeLevelB = KnowledgeLevel.AVERAGE;
-        toMove -= item.totalMarks;
-      }
-    });
-  }
+  // Step 1: Fix KL distribution exactly wherever possible
+  result = assignKnowledgeLevelsExactly(result, totalMarks);
 
   // Step 2: Fix OR — clear all existing, then assign correctly
   result.forEach(item => {
     item.hasInternalChoice = false;
+    item.unitIdB = undefined;
+    item.subUnitIdB = undefined;
     item.knowledgeLevelB = undefined;
     item.cognitiveProcessB = undefined;
     item.itemFormatB = undefined;
   });
 
-  const examTermLower = (subject || '').toLowerCase(); // fallback; caller should pass examTerm
-  const isATTerm = (subject || '').toLowerCase().includes('at');
-  const allSubUnitIds = curriculum.units.flatMap(u => u.subUnits.map(su => su.id));
+  const examTermLower = (examTerm || '').toLowerCase();
+  const isATTerm = examTermLower.includes('at') || examTermLower.includes('third') || examTermLower.includes('மூன்று');
   const usedSubUnits = new Set<string>();
   const usedUnits = new Set<string>(); // for AT: max 1 OR per unit
 
@@ -715,9 +915,13 @@ export function autoFillBlueprint(
       if (assigned >= section.optionCount) break;
       const unitAlreadyUsed = isATTerm && usedUnits.has(item.unitId);
       if (!usedSubUnits.has(item.subUnitId) && !unitAlreadyUsed) {
+        const optionSubUnits = curriculum.units.find(u => u.id === item.unitId)?.subUnits.filter(su => su.id !== item.subUnitId) || [];
+        const fallbackSubUnit = optionSubUnits[0]?.id || item.subUnitId;
         item.hasInternalChoice = true;
+        item.unitIdB = item.unitId;
+        item.subUnitIdB = fallbackSubUnit;
         item.knowledgeLevelB = item.knowledgeLevel;
-        item.cognitiveProcessB = item.cognitiveProcess;
+        item.cognitiveProcessB = getSafeCP(item.cognitiveProcess);
         item.itemFormatB = item.itemFormat;
         usedSubUnits.add(item.subUnitId);
         usedUnits.add(item.unitId);
@@ -730,9 +934,12 @@ export function autoFillBlueprint(
       for (const item of sectionItems) {
         if (assigned >= section.optionCount) break;
         if (!item.hasInternalChoice) {
+          const optionSubUnits = curriculum.units.find(u => u.id === item.unitId)?.subUnits.filter(su => su.id !== item.subUnitId) || [];
           item.hasInternalChoice = true;
+          item.unitIdB = item.unitId;
+          item.subUnitIdB = optionSubUnits[0]?.id || item.subUnitId;
           item.knowledgeLevelB = item.knowledgeLevel;
-          item.cognitiveProcessB = item.cognitiveProcess;
+          item.cognitiveProcessB = getSafeCP(item.cognitiveProcess);
           item.itemFormatB = item.itemFormat;
           assigned++;
         }
@@ -740,7 +947,7 @@ export function autoFillBlueprint(
     }
   });
 
-  return result;
+  return result.map(item => ({ ...item, ...sanitizeBlueprintItem(item) }));
 }
 
 // ─── KL Badge ────────────────────────────────────────────────────────────────
@@ -758,7 +965,7 @@ const KLBadge: React.FC<KLBadgeProps> = ({ level, short }) => {
 interface ValidationPanelProps {
   result: ValidationResult;
   paperType: PaperType;
-  onAutoFill: () => void;
+  onAutoFill?: () => void;
 }
 
 const ValidationPanel: React.FC<ValidationPanelProps> = ({ result, paperType, onAutoFill }) => {
@@ -916,7 +1123,8 @@ const ValidationPanel: React.FC<ValidationPanelProps> = ({ result, paperType, on
 
             {/* Auto-fill button */}
             <button
-              onClick={onAutoFill}
+              onClick={() => onAutoFill?.()}
+              disabled={!onAutoFill}
               className="w-full py-2 border-2 border-amber-400 bg-amber-50 text-amber-800 text-xs font-bold rounded-lg hover:bg-amber-100 transition-colors flex items-center justify-center gap-2"
             >
               <RefreshCw size={12} /> Auto-fix Blueprint
@@ -963,24 +1171,111 @@ const ValidationPanel: React.FC<ValidationPanelProps> = ({ result, paperType, on
   );
 };
 
+interface AnalyticsPanelProps {
+  result: ValidationResult;
+}
+
+const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ result }) => {
+  const [open, setOpen] = useState(true);
+  const topUnitDrift = [...result.analytics.unitTargets]
+    .sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation))
+    .slice(0, 4);
+  const topSubUnitDrift = [...result.analytics.subUnitTargets]
+    .sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation))
+    .slice(0, 6);
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 text-slate-800 font-bold text-sm"
+      >
+        <span className="flex items-center gap-2"><Sparkles size={14} /> Blueprint Analysis Dataset</span>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {open && (
+        <div className="p-3 space-y-3 text-xs">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <div className="text-[10px] uppercase text-slate-500 font-bold">Units</div>
+              <div className="text-lg font-black text-slate-800">{result.analytics.datasetMeta.unitCount}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <div className="text-[10px] uppercase text-slate-500 font-bold">Sub-units</div>
+              <div className="text-lg font-black text-slate-800">{result.analytics.datasetMeta.subUnitCount}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <div className="text-[10px] uppercase text-slate-500 font-bold">Questions</div>
+              <div className="text-lg font-black text-slate-800">{result.analytics.datasetMeta.questionCount}</div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Unit Balance</div>
+            <div className="space-y-1.5">
+              {topUnitDrift.map(unit => (
+                <div key={unit.unitId} className="rounded-lg border border-slate-100 px-2 py-1.5">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-semibold text-slate-700">{unit.unitName}</span>
+                    <span className={`font-black ${Math.abs(unit.deviation) <= 1 ? 'text-green-600' : unit.deviation > 0 ? 'text-amber-600' : 'text-blue-600'}`}>
+                      {unit.actual}M / ideal {unit.ideal}M
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Sub-unit Drift</div>
+            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+              {topSubUnitDrift.map(sub => (
+                <div key={sub.subUnitId} className="rounded-lg border border-slate-100 px-2 py-1.5">
+                  <div className="font-semibold text-slate-700 leading-tight">{sub.subUnitName}</div>
+                  <div className="text-[10px] text-slate-500">{sub.unitName}</div>
+                  <div className="mt-1 font-black text-slate-700">
+                    {sub.actual}M / ideal {sub.ideal}M
+                    <span className={`ml-1 ${sub.deviation === 0 ? 'text-green-600' : sub.deviation > 0 ? 'text-amber-600' : 'text-blue-600'}`}>
+                      ({sub.deviation > 0 ? '+' : ''}{sub.deviation}M)
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Item Card ────────────────────────────────────────────────────────────────
 
 interface ItemCardProps {
   item: BlueprintItem;
+  curriculum: Curriculum;
   readOnly: boolean;
   isEditing: boolean;
+  isActive: boolean;
+  isDragging: boolean;
+  renderAsOptionB?: boolean;
   onEdit: () => void;
   onClose: () => void;
+  onToggleActive: () => void;
   onUpdate: (id: string, field: keyof BlueprintItem, value: unknown) => void;
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
   onDragStart: (e: React.DragEvent, item: BlueprintItem) => void;
+  onDragEnd: () => void;
 }
 
 const ItemCard: React.FC<ItemCardProps> = ({
-  item, readOnly, isEditing, onEdit, onClose, onUpdate, onRemove, onDragStart,
+  item, curriculum, readOnly, isEditing, isActive, isDragging, renderAsOptionB = false, onEdit, onClose, onToggleActive, onUpdate, onRemove, onDragStart, onDragEnd,
 }) => {
+  const activeLevel = renderAsOptionB ? (item.knowledgeLevelB || item.knowledgeLevel) : item.knowledgeLevel;
+  const activeCP = renderAsOptionB ? (item.cognitiveProcessB || item.cognitiveProcess) : item.cognitiveProcess;
+  const activeFormat = renderAsOptionB ? (item.itemFormatB || item.itemFormat) : item.itemFormat;
   const markColor = MARK_COLORS[item.marksPerQuestion] || 'bg-gray-50 border-gray-200 text-gray-900';
-  const klBorder = `border-l-4 ${KL_COLORS[item.knowledgeLevel]?.border || 'border-l-gray-300'}`;
+  const klBorder = `border-l-4 ${KL_COLORS[activeLevel]?.border || 'border-l-gray-300'}`;
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [popStyle, setPopStyle] = React.useState<React.CSSProperties>({ top: '100%', left: 0 });
 
@@ -1015,6 +1310,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
   }, [isEditing]);
 
   const allowedCPs = getAllowedCPs();
+  const optionSubUnits = curriculum.units.find(u => u.id === item.unitId)?.subUnits || [];
 
   return (
     <div className="space-y-0.5" ref={cardRef}>
@@ -1022,21 +1318,22 @@ const ItemCard: React.FC<ItemCardProps> = ({
       <div
         draggable={!readOnly}
         onDragStart={e => onDragStart(e, item)}
-        onClick={() => !readOnly && onEdit()}
-        className={`p-1.5 rounded-sm text-xs border shadow-sm w-full relative transition-all group/item ${markColor} ${klBorder} ${!readOnly ? 'hover:shadow-md cursor-pointer active:scale-95' : 'cursor-default'}`}
+        onDragEnd={onDragEnd}
+        onClick={() => { onToggleActive(); !readOnly && onEdit(); }}
+        className={`p-1.5 rounded-sm text-xs border shadow-sm w-full relative transition-all group/item ${markColor} ${klBorder} ${!readOnly ? 'hover:shadow-md cursor-pointer active:scale-95' : 'cursor-default'} ${isActive ? 'ring-2 ring-fuchsia-400 animate-pulse' : ''} ${isDragging ? 'opacity-50' : ''}`}
       >
         <div className="font-bold flex justify-between items-center px-0.5">
-          <span>{item.questionCount}Q</span>
+          <span>{renderAsOptionB ? 'OR' : `${item.questionCount}Q`}</span>
           <span className="text-[10px] opacity-70">({item.totalMarks}M)</span>
         </div>
         <div className="flex justify-between items-center mt-0.5 gap-1">
-          <KLBadge level={item.knowledgeLevel} short />
-          <span className="text-[8px] opacity-60">{item.cognitiveProcess.split(' ')[0]}</span>
-          <span className="text-[8px] opacity-60">{item.itemFormat}</span>
+          <KLBadge level={activeLevel} short />
+          <span className="text-[8px] opacity-60">{activeCP.split(' ')[0]}</span>
+          <span className="text-[8px] opacity-60">{activeFormat}</span>
         </div>
-        {!readOnly && (
+        {!readOnly && !renderAsOptionB && (
           <button
-            onClick={e => { e.stopPropagation(); onRemove(item.id); }}
+            onClick={e => { e.stopPropagation(); onRemove?.(item.id); }}
             className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 hover:bg-red-600 transition-opacity text-[9px] font-bold z-10 group-hover/item:opacity-100"
             title="Remove"
           >
@@ -1046,19 +1343,19 @@ const ItemCard: React.FC<ItemCardProps> = ({
       </div>
 
       {/* OR (Option B) card */}
-      {item.hasInternalChoice && (
+      {item.hasInternalChoice && !renderAsOptionB && (
         <div
           className={`p-1.5 rounded-sm text-xs text-center border shadow-sm w-full relative transition-all border-dashed bg-purple-50/60 border-purple-300 group/or ${!readOnly ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
-          onClick={() => !readOnly && onEdit()}
+          onClick={() => { onToggleActive(); !readOnly && onEdit(); }}
         >
           <div className="font-bold flex justify-between items-center px-0.5 text-purple-700">
-            <span>{item.questionCount}Q (OR)</span>
+            <span>OR</span>
             <span className="text-[10px] opacity-70">({item.totalMarks}M)</span>
           </div>
           <div className="flex justify-between items-center mt-0.5 gap-1">
             <KLBadge level={item.knowledgeLevelB || item.knowledgeLevel} short />
             <span className="text-[8px] opacity-60 text-purple-600">{(item.cognitiveProcessB || item.cognitiveProcess).split(' ')[0]}</span>
-            <span className="text-[9px] font-bold text-purple-600">OR</span>
+            <span className="text-[9px] font-bold text-purple-600">{item.itemFormatB || item.itemFormat}</span>
           </div>
           {!readOnly && (
             <button
@@ -1073,7 +1370,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
       )}
 
       {/* Edit popover */}
-      {isEditing && (
+      {isEditing && !renderAsOptionB && (
         <div
           className="absolute z-[9999] bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-64 space-y-3 text-sm"
           style={popStyle}
@@ -1134,12 +1431,23 @@ const ItemCard: React.FC<ItemCardProps> = ({
             <div className="space-y-2 pt-2 border-t border-gray-100">
               <div className="text-[10px] font-bold text-purple-600 uppercase">Option B Settings</div>
               <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Knowledge Level (B)</label>
-                <select value={item.knowledgeLevelB || item.knowledgeLevel}
-                  onChange={e => onUpdate(item.id, 'knowledgeLevelB', e.target.value as KnowledgeLevel)}
+                <label className="block text-[10px] text-gray-500 mb-0.5">Option B Sub-unit</label>
+                <select value={item.subUnitIdB || item.subUnitId}
+                  onChange={e => {
+                    onUpdate(item.id, 'unitIdB', item.unitId);
+                    onUpdate(item.id, 'subUnitIdB', e.target.value);
+                  }}
                   className="w-full text-xs border rounded-lg p-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400">
-                  {Object.values(KnowledgeLevel).map(v => <option key={v} value={v}>{v}</option>)}
+                  {optionSubUnits.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Knowledge Level (B)</label>
+                <input
+                  value={item.knowledgeLevel}
+                  readOnly
+                  className="w-full text-xs border rounded-lg p-1.5 bg-gray-50 text-gray-600"
+                />
               </div>
               <div>
                 <label className="block text-[10px] text-gray-500 mb-0.5">Cognitive Process (B)</label>
@@ -1198,15 +1506,15 @@ const SummaryBar: React.FC<SummaryBarProps> = ({ result, totalMarks, readOnly, o
 
       {!readOnly && (
         <div className="flex items-center gap-2 ml-2 border-l pl-4 border-gray-200">
-          <button onClick={onRegenerate}
+          <button onClick={() => onRegenerate?.()} disabled={!onRegenerate}
             className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg font-bold hover:bg-amber-100 flex items-center gap-1.5 transition-all text-[10px] shadow-sm">
             <RefreshCw size={12} /> Reset
           </button>
-          <button onClick={onSave} disabled={isSaving}
+          <button onClick={() => onSave?.()} disabled={isSaving || !onSave}
             className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-1.5 transition-all text-[10px] shadow-sm shadow-emerald-100 disabled:opacity-50">
             {isSaving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />} {isSaving ? 'Saving' : 'Save'}
           </button>
-          <button onClick={onConfirm}
+          <button onClick={() => onConfirm?.()} disabled={!onConfirm}
             className="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 flex items-center gap-1.5 transition-all text-[10px] shadow-sm shadow-blue-100">
             <CheckCircle size={12} /> Confirm
           </button>
@@ -1362,13 +1670,13 @@ interface BlueprintMatrixProps {
   paperType: PaperType;
   onUpdateItem: (id: string, field: keyof BlueprintItem, value: unknown) => void;
   onMoveItem: (itemId: string, unitId: string, sectionId: string, subUnitId: string) => void;
-  onRemoveItem: (id: string) => void;
-  onAddItem: (unitId: string, subUnitId: string, sectionId: string) => void;
-  onAutoFill: () => void;
+  onRemoveItem?: (id: string) => void;
+  onAddItem?: (unitId: string, subUnitId: string, sectionId: string) => void;
+  onAutoFill?: () => void;
   readOnly?: boolean;
   onRegenerate?: () => void;
-  onConfirm?: () => void;
-  onSave?: () => void;
+  onConfirm?: () => void | Promise<void>;
+  onSave?: () => void | Promise<void>;
   isSaving?: boolean;
 }
 
@@ -1388,6 +1696,9 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
   isSaving = false,
 }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [activeOptionGroupId, setActiveOptionGroupId] = useState<string | null>(null);
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const sections = useMemo(
     () => [...(paperType?.sections || [])].sort((a, b) => a.marks - b.marks),
@@ -1399,12 +1710,28 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
     [blueprint, paperType, curriculum],
   );
 
+  React.useEffect(() => {
+    if (readOnly) return;
+    blueprint.items.forEach(item => {
+      const patch = sanitizeBlueprintItem(item);
+      (Object.entries(patch) as [keyof BlueprintItem, BlueprintItem[keyof BlueprintItem]][]).forEach(([field, value]) => {
+        onUpdateItem(item.id, field, value);
+      });
+    });
+  }, [blueprint.items, onUpdateItem, readOnly]);
+
   // ── Drag handlers ────────────────────────────────────────────────────────────
   const handleDragStart = useCallback((e: React.DragEvent, item: BlueprintItem) => {
     if (readOnly) return;
     e.dataTransfer.setData('text/plain', item.id);
     e.dataTransfer.effectAllowed = 'move';
+    setDraggingItemId(item.id);
   }, [readOnly]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingItemId(null);
+    setDropTarget(null);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     if (readOnly) return;
@@ -1416,12 +1743,25 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
     if (readOnly) return;
     e.preventDefault();
     const itemId = e.dataTransfer.getData('text/plain');
+    setDropTarget(null);
+    setDraggingItemId(null);
+    if (!itemId) return;
     onMoveItem(itemId, unitId, sectionId, subUnitId);
   }, [readOnly, onMoveItem]);
 
   // ── Cell helpers ─────────────────────────────────────────────────────────────
   const getCellItems = useCallback((unitId: string, subUnitId: string, sectionId: string): BlueprintItem[] =>
     blueprint.items.filter(i => i.unitId === unitId && i.subUnitId === subUnitId && i.sectionId === sectionId),
+    [blueprint.items]);
+
+  const getOptionBItems = useCallback((unitId: string, subUnitId: string, sectionId: string): BlueprintItem[] =>
+    blueprint.items.filter(i =>
+      i.hasInternalChoice &&
+      i.unitIdB === unitId &&
+      i.subUnitIdB === subUnitId &&
+      i.sectionId === sectionId &&
+      !(i.unitId === unitId && i.subUnitId === subUnitId)
+    ),
     [blueprint.items]);
 
   const getSubUnitTotal = useCallback((unitId: string, subUnitId: string): number =>
@@ -1551,29 +1891,60 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
                             {/* Section cells */}
                             {sections.map(section => {
                               const cellItems = getCellItems(unit.id, subUnit.id, section.id);
+                              const optionBItems = getOptionBItems(unit.id, subUnit.id, section.id);
+                              const cellKey = `${unit.id}:${subUnit.id}:${section.id}`;
                               return (
                                 <td key={section.id}
-                                  className="border border-gray-200 p-0.5 align-top min-h-[2rem] relative group/cell"
-                                  onDragOver={handleDragOver}
+                                  className={`border border-gray-200 p-0.5 align-top min-h-[2rem] relative group/cell transition-colors ${dropTarget === cellKey ? 'bg-blue-50 ring-2 ring-blue-300' : ''}`}
+                                  onDragOver={e => {
+                                    handleDragOver(e);
+                                    setDropTarget(cellKey);
+                                  }}
+                                  onDragLeave={() => setDropTarget(current => current === cellKey ? null : current)}
                                   onDrop={e => handleDrop(e, unit.id, subUnit.id, section.id)}>
                                   <div className="space-y-0.5 relative" style={{ overflow: 'visible' }}>
                                     {cellItems.map(item => (
                                       <div key={item.id} className="relative">
                                         <ItemCard
                                           item={item}
+                                          curriculum={curriculum}
                                           readOnly={readOnly}
                                           isEditing={editingItemId === item.id}
+                                          isActive={activeOptionGroupId === item.id}
+                                          isDragging={draggingItemId === item.id}
                                           onEdit={() => setEditingItemId(item.id)}
                                           onClose={() => setEditingItemId(null)}
+                                          onToggleActive={() => setActiveOptionGroupId(prev => prev === item.id ? null : item.id)}
                                           onUpdate={onUpdateItem}
                                           onRemove={onRemoveItem}
                                           onDragStart={handleDragStart}
+                                          onDragEnd={handleDragEnd}
+                                        />
+                                      </div>
+                                    ))}
+                                    {optionBItems.map(item => (
+                                      <div key={`${item.id}-option-b`} className="relative">
+                                        <ItemCard
+                                          item={item}
+                                          curriculum={curriculum}
+                                          readOnly={readOnly}
+                                          isEditing={editingItemId === `${item.id}:b`}
+                                          isActive={activeOptionGroupId === item.id}
+                                          isDragging={draggingItemId === item.id}
+                                          renderAsOptionB
+                                          onEdit={() => setEditingItemId(`${item.id}:b`)}
+                                          onClose={() => setEditingItemId(null)}
+                                          onToggleActive={() => setActiveOptionGroupId(prev => prev === item.id ? null : item.id)}
+                                          onUpdate={onUpdateItem}
+                                          onRemove={onRemoveItem}
+                                          onDragStart={handleDragStart}
+                                          onDragEnd={handleDragEnd}
                                         />
                                       </div>
                                     ))}
                                     {!readOnly && (
                                       <button
-                                        onClick={() => onAddItem(unit.id, subUnit.id, section.id)}
+                                        onClick={() => onAddItem?.(unit.id, subUnit.id, section.id)}
                                         className="w-full text-[10px] text-slate-200 hover:text-indigo-500 hover:bg-indigo-50 border border-dashed border-slate-100 hover:border-indigo-200 rounded py-0 transition-all opacity-0 group/row:opacity-100 group/cell:opacity-100"
                                         title="Add question">
                                         +
@@ -1637,6 +2008,7 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
           <div className="mt-0">
             <BlueprintSummaryTable blueprint={blueprint} validation={validation} />
           </div>
+          <AnalyticsPanel result={validation} />
         </div>
 
         {/* Validation panel - stays on the right on large screens */}

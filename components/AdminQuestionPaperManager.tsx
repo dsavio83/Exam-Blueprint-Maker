@@ -86,11 +86,38 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
         });
     };
 
-    const handleToggleLock = async (ids: string[]) => {
-        for (const id of ids) {
-            await toggleBlueprintLock(id);
+    const handleToggleLock = async (ids: string[], isLocking?: boolean) => {
+        const group = blueprints.filter(b => ids.includes(b.id));
+        if (group.length > 1) {
+            const options: Record<string, string> = { 'all': 'All Teachers / அனைத்து ஆசிரியர்களும்' };
+            group.forEach(b => {
+                const name = getUserName(b.ownerId);
+                options[b.id] = name;
+            });
+
+            const { value: selection } = await Swal.fire({
+                title: 'Lock / Unlock Selection',
+                text: 'Select teacher or apply to all:',
+                input: 'select',
+                inputOptions: options,
+                inputPlaceholder: 'Choose...',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb'
+            });
+
+            if (!selection) return;
+            
+            const targetIds = selection === 'all' ? ids : [selection];
+            for (const id of targetIds) {
+                await toggleBlueprintLock(id);
+            }
+        } else {
+            for (const id of ids) {
+                await toggleBlueprintLock(id);
+            }
         }
         await loadData();
+        Swal.fire("Success", "Lock status updated.", "success");
     };
 
     const handleToggleHidden = async (ids: string[]) => {
@@ -101,23 +128,46 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
     };
 
     const handleResetConfirmation = async (ids: string[]) => {
-        Swal.fire({
-            title: "Reset Confirmation?",
-            text: "This will allow users to edit the pattern again. Continue?",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonColor: "#f59e0b",
-            cancelButtonColor: "#64748b",
-            confirmButtonText: "Yes, reset it"
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                for (const id of ids) {
-                    await resetBlueprintConfirmation(id);
-                }
-                await loadData();
-                Swal.fire("Reset", "Confirmation has been reset.", "success");
-            }
-        });
+        const group = blueprints.filter(b => ids.includes(b.id));
+        let targetIds = ids;
+
+        if (group.length > 1) {
+            const options: Record<string, string> = { 'all': 'All Teachers / அனைத்து ஆசிரியர்களும்' };
+            group.forEach(b => {
+                const name = getUserName(b.ownerId);
+                options[b.id] = name;
+            });
+
+            const { value: selection } = await Swal.fire({
+                title: 'Reset Confirmation Selection',
+                text: 'Choose teacher to reset or select All:',
+                input: 'select',
+                inputOptions: options,
+                inputPlaceholder: 'Choose...',
+                showCancelButton: true,
+                confirmButtonColor: '#f59e0b'
+            });
+
+            if (!selection) return;
+            targetIds = selection === 'all' ? ids : [selection];
+        } else {
+            const result = await Swal.fire({
+                title: "Reset Confirmation?",
+                text: "This will allow the user to edit the pattern again. Continue?",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonColor: "#f59e0b",
+                cancelButtonColor: "#64748b",
+                confirmButtonText: "Yes, reset it"
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        for (const id of targetIds) {
+            await resetBlueprintConfirmation(id);
+        }
+        await loadData();
+        Swal.fire("Reset", "Confirmation has been reset successfully.", "success");
     };
 
     const handleRemoveShare = async (bpId: string, userId: string) => {

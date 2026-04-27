@@ -135,6 +135,8 @@ export interface BlueprintItem {
   answerText?: string;   // Added
   questionType?: QuestionType; // Added new field
   hasInternalChoice?: boolean; // Toggle for "Either/Or" options
+  unitIdB?: string;
+  subUnitIdB?: string;
   questionTextB?: string; // For Option B
   answerTextB?: string;   // For Option B
   structuredAnswers?: AnswerMark[]; // New structured answer field

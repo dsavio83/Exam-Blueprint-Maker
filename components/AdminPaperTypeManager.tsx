@@ -190,8 +190,8 @@ const AdminPaperTypeManager = () => {
                                                 <textarea
                                                     placeholder="Enter instructions or notes for this section (e.g. Answer all questions)"
                                                     className="w-full border-none bg-gray-50 rounded-xl p-3 text-sm font-medium text-gray-700 focus:ring-2 focus:ring-purple-100 transition-all min-h-[80px]"
-                                                    value={s.massViewHeader || ''}
-                                                    onChange={e => updateSection(idx, 'massViewHeader', e.target.value)}
+                                                    value={s.instruction || ''}
+                                                    onChange={e => updateSection(idx, 'instruction', e.target.value)}
                                                 />
                                             </div>
                                         </div>

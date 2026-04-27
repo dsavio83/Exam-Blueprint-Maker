@@ -43,7 +43,13 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
     const [paperTypes, setPaperTypes] = useState<QuestionPaperType[]>([]);
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
+    const [isSaving, setIsSaving] = useState(false);
     const printRef = useRef<HTMLDivElement>(null);
+    const blueprintRef = useRef<Blueprint | null>(null);
+
+    useEffect(() => {
+        blueprintRef.current = viewingBlueprint;
+    }, [viewingBlueprint]);
 
     useEffect(() => {
         const load = async () => {
@@ -73,9 +79,15 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     };
 
     const handleSaveBlueprint = async () => {
-        if (!viewingBlueprint) return;
-        await saveBlueprint(viewingBlueprint);
-        Swal.fire("Saved", "Blueprint saved successfully!", "success");
+        const latestBlueprint = blueprintRef.current;
+        if (!latestBlueprint) return;
+        setIsSaving(true);
+        try {
+            await saveBlueprint(latestBlueprint);
+            Swal.fire("Saved", "Blueprint saved successfully!", "success");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const updateItem = (updatedItem: BlueprintItem) => {
@@ -88,9 +100,26 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 
     const updateItemField = (id: string, field: keyof BlueprintItem, val: any) => {
         if (!viewingBlueprint) return;
-        const newItems = viewingBlueprint.items.map(item =>
-            item.id === id ? { ...item, [field]: val } : item
-        );
+        const newItems = viewingBlueprint.items.map(item => {
+            if (item.id !== id) return item;
+            const updated = { ...item, [field]: val };
+            if (field === 'questionCount') {
+                updated.totalMarks = updated.marksPerQuestion * (Number(val) || 0);
+            }
+            if (updated.hasInternalChoice) {
+                updated.unitIdB = updated.unitId;
+                updated.subUnitIdB = updated.subUnitIdB || updated.subUnitId;
+                updated.knowledgeLevelB = updated.knowledgeLevel;
+                updated.itemFormatB = updated.itemFormatB || updated.itemFormat;
+            } else {
+                updated.unitIdB = undefined;
+                updated.subUnitIdB = undefined;
+                updated.knowledgeLevelB = undefined;
+                updated.cognitiveProcessB = undefined;
+                updated.itemFormatB = undefined;
+            }
+            return updated;
+        });
         setViewingBlueprint({ ...viewingBlueprint, items: newItems });
     };
 
@@ -266,7 +295,11 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     marksPerQuestion: newSection.marks,
                     totalMarks: newSection.marks * item.questionCount,
                     itemFormat: getDefaultFormat(newSection.marks),
-                    knowledgeLevel: getDefaultKnowledge(newSection.marks)
+                    knowledgeLevel: getDefaultKnowledge(newSection.marks),
+                    unitIdB: item.hasInternalChoice ? newUnitId : undefined,
+                    subUnitIdB: item.hasInternalChoice ? (item.subUnitIdB || newSubUnitId || newUnit.subUnits[0]?.id || 'unknown') : undefined,
+                    knowledgeLevelB: item.hasInternalChoice ? getDefaultKnowledge(newSection.marks) : undefined,
+                    itemFormatB: item.hasInternalChoice ? getDefaultFormat(newSection.marks) : undefined,
                 };
             }
             return item;
@@ -275,7 +308,8 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
     };
 
     const handleRegeneratePattern = () => {
-        if (!viewingBlueprint || !curriculum) return;
+        const latestBlueprint = blueprintRef.current;
+        if (!latestBlueprint || !curriculum) return;
         
         Swal.fire({
             title: "Regenerate Pattern?",
@@ -292,8 +326,8 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     Swal.fire("Error", "Database not initialized. Please refresh.", "error");
                     return;
                 }
-                const newItems = generateBlueprintTemplate(db, curriculum, viewingBlueprint.examTerm, viewingBlueprint.questionPaperTypeId);
-                setViewingBlueprint({ ...viewingBlueprint, items: newItems, isConfirmed: false });
+                const newItems = generateBlueprintTemplate(db, curriculum, latestBlueprint.examTerm, latestBlueprint.questionPaperTypeId);
+                setViewingBlueprint({ ...latestBlueprint, items: newItems, isConfirmed: false });
                 Swal.fire("Regenerated", "A new pattern has been generated.", "success");
             }
         });
@@ -346,6 +380,7 @@ const AdminPortal = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                     onDownloadWord={(type) => handleDownloadWord(type as any)}
                     onUpdateReportSettings={(s, p) => setViewingBlueprint(prev => prev ? { ...prev, reportSettings: s, perReportSettings: p } : null)}
                     onSaveSettings={handleSaveReportSettings}
+                    isSaving={isSaving}
                 />
             );
         }

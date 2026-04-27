@@ -19,6 +19,8 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
     // Get current tab from URL
     const queryParams = new URLSearchParams(window.location.search);
     const currentTab = queryParams.get('tab') || 'report1';
+    const renderMode = queryParams.get('mode') || 'admin';
+    const showUserDraftWatermark = renderMode === 'user' && currentTab.startsWith('report');
 
     useEffect(() => {
         const loadData = async () => {
@@ -188,6 +190,8 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
     });
 
     const orderedItems = sortItems(blueprint.items);
+    const derivedTotalItems = blueprint.items.reduce((sum, item) => sum + getItemQuestionCount(item), 0);
+    const derivedTotalMarks = blueprint.items.reduce((sum, item) => sum + getItemTotalScore(item), 0);
 
     const renderReportHeader = () => (
         <div className="mb-4 text-center font-serif">
@@ -204,6 +208,14 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
                 <div className="flex"><span className="w-24">Year</span><span className="mx-2">: {blueprint.academicYear || '2026-27'}</span></div>
             </div>
         </div>
+    );
+
+    const renderDraftWatermark = () => (
+        showUserDraftWatermark ? (
+            <div className="draft-watermark">
+                <div className="draft-watermark-text">Draft</div>
+            </div>
+        ) : null
     );
 
     const renderAnalysisTableHeader = (firstCol: string | null) => (
@@ -557,21 +569,23 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
             
             return (
                 <div key={pageIdx} className="page landscape relative font-serif">
-                    {pageIdx === 0 ? renderReportHeader() : (
-                        <div className="mb-4 text-center border-b-2 border-black pb-2">
-                            <h1 className="text-2xl font-bold text-black border-b border-black inline-block px-10 pb-1">Proforma for Analysing Question Paper</h1>
-                            <div className="text-lg font-bold mt-1">Topic / Sub Topic wise Analysis (Continued)</div>
+                    {renderDraftWatermark()}
+                    <div className="page-content">
+                        {pageIdx === 0 ? renderReportHeader() : (
+                            <div className="mb-4 text-center border-b-2 border-black pb-2">
+                                <h1 className="text-2xl font-bold text-black border-b border-black inline-block px-10 pb-1">Proforma for Analysing Question Paper</h1>
+                                <div className="text-lg font-bold mt-1">Topic / Sub Topic wise Analysis (Continued)</div>
+                            </div>
+                        )}
+                        
+                        <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">
+                            Part – II : Unit-wise Analysis
                         </div>
-                    )}
-                    
-                    <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">
-                        Part – II : Unit-wise Analysis
-                    </div>
 
-                    <table className="border-collapse border-2 border-black text-[8pt] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
-                        {renderAnalysisColGroup(false)}
-                        {renderAnalysisTableHeader(null)}
-                        <tbody>
+                        <table className="border-collapse border-2 border-black text-[8pt] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
+                            {renderAnalysisColGroup(false)}
+                            {renderAnalysisTableHeader(null)}
+                            <tbody>
                             {pageRows.map((row) => (
                                 <React.Fragment key={row.id}>
                                     {row.subUnitsStats.map((su, suIdx) => (
@@ -592,20 +606,42 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
                                         </tr>
                                     ))}
                                     <tr className="bg-gray-100 print-bg-gray">
-                                        <td colSpan={3} className="border border-black px-[2px] py-[1.5px] text-[9pt] text-black font-bold">
+                                        <td colSpan={3} className="border border-black px-[2px] py-[4px] text-[9pt] text-black font-bold whitespace-nowrap leading-[1.15] align-middle">
                                             {row.hasOptions ? `Options / Choice Questions (${row.optionCount})` : 'Options / Choice Questions'}
                                         </td>
-                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray">{row.optionStats.cp[def.key].count ? <>{row.optionStats.cp[def.key].count}({formatMark(row.optionStats.cp[def.key].score)})</> : ''}</td>)}
-                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray">{row.optionStats.levels[def.key].count ? <>{row.optionStats.levels[def.key].count}({formatMark(row.optionStats.levels[def.key].score)})</> : ''}</td>)}
-                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[1.5px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray">{row.optionStats.formats[def.key].count ? <>{row.optionStats.formats[def.key].count}({formatMark(row.optionStats.formats[def.key].score)})</> : ''}</td>)}
-                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray">{row.hasOptions ? row.optionCount : ''}</td>
-                                        <td className="border border-black px-[1px] py-[1.5px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray">{row.hasOptions ? formatMark(row.optionScore) : ''}</td>
-                                        <td className="border border-black px-[1px] py-[1.5px] bg-gray-100 print-bg-gray"></td>
+                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray leading-[1.15] align-middle">{row.optionStats.cp[def.key].count ? <>{row.optionStats.cp[def.key].count}({formatMark(row.optionStats.cp[def.key].score)})</> : ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray leading-[1.15] align-middle">{row.optionStats.levels[def.key].count ? <>{row.optionStats.levels[def.key].count}({formatMark(row.optionStats.levels[def.key].score)})</> : ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray leading-[1.15] align-middle">{row.optionStats.formats[def.key].count ? <>{row.optionStats.formats[def.key].count}({formatMark(row.optionStats.formats[def.key].score)})</> : ''}</td>)}
+                                        <td className="border border-black px-[1px] py-[4px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray leading-[1.15] align-middle">{row.hasOptions ? row.optionCount : ''}</td>
+                                        <td className="border border-black px-[1px] py-[4px] text-center text-[9pt] text-black font-bold bg-gray-100 print-bg-gray leading-[1.15] align-middle">{row.hasOptions ? formatMark(row.optionScore) : ''}</td>
+                                        <td className="border border-black px-[1px] py-[4px] bg-gray-100 print-bg-gray leading-[1.15] align-middle"></td>
                                     </tr>
                                 </React.Fragment>
                             ))}
-                        </tbody>
-                    </table>
+                            {pageIdx === totalPages - 1 && (
+                                <>
+                                    <tr className="bg-gray-100 print-bg-gray font-black">
+                                        <td colSpan={3} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[10pt] text-black">TOTAL ITEM</td>
+                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{grandTotals.cp[def.key].count || ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{grandTotals.levels[def.key].count || ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{grandTotals.formats[def.key].count || ''}</td>)}
+                                        <td className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{derivedTotalItems}</td>
+                                        <td className="border border-black bg-black"></td>
+                                        <td rowSpan={2} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black align-middle">{totalExamMinutes}</td>
+                                    </tr>
+                                    <tr className="bg-gray-100 print-bg-gray font-black">
+                                        <td colSpan={3} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[10pt] text-black">TOTAL SCORE</td>
+                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
+                                        <td className="border border-black bg-black"></td>
+                                        <td className="border border-black px-[1px] py-[6px] text-center text-[10pt] text-black font-black">{formatMark(derivedTotalMarks)}</td>
+                                    </tr>
+                                </>
+                            )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             );
         }) : null;
@@ -615,6 +651,10 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
     const renderReport3Content = () => {
         const itemsPerPage = 15;
         const totalPages = Math.ceil(orderedItems.length / itemsPerPage);
+        const grandTotals = createStats();
+        orderedItems.forEach(item => {
+            addToStats(grandTotals, item.cognitiveProcess, item.knowledgeLevel, item.itemFormat, getItemTotalScore(item), getItemQuestionCount(item));
+        });
         
         return orderedItems.length > 0 ? Array.from({ length: totalPages }).map((_, pageIdx) => {
             const startIdx = pageIdx * itemsPerPage;
@@ -623,47 +663,85 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
             
             return (
                 <div key={pageIdx} className="page landscape relative font-serif">
-                    {pageIdx === 0 ? renderReportHeader() : (
-                        <div className="mb-4 text-center border-b-2 border-black pb-2">
-                            <h1 className="text-2xl font-bold text-black border-b border-black inline-block px-10 pb-1">Proforma for Analysing Question Paper</h1>
-                            <div className="text-lg font-bold mt-1">Topic / Sub Topic wise Analysis (Continued)</div>
+                    {renderDraftWatermark()}
+                    <div className="page-content">
+                        {pageIdx === 0 ? renderReportHeader() : (
+                            <div className="mb-4 text-center border-b-2 border-black pb-2">
+                                <h1 className="text-2xl font-bold text-black border-b border-black inline-block px-10 pb-1">Proforma for Analysing Question Paper</h1>
+                                <div className="text-lg font-bold mt-1">Topic / Sub Topic wise Analysis (Continued)</div>
+                            </div>
+                        )}
+
+                        <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">
+                            Part – III : Item-wise Analysis
                         </div>
-                    )}
 
-                    <div className="text-center text-xl font-bold text-black mb-2 uppercase tracking-tight border-b border-black/50 pb-1 inline-block w-full">
-                        Part – III : Item-wise Analysis
-                    </div>
-
-                    <table className="border-collapse border-2 border-black text-[8pt] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
-                        {renderAnalysisColGroup(true)}
-                        {renderAnalysisTableHeader("Item / Q. No")}
-                        <tbody>
-                            {pageItems.map((item, idx) => {
+                        <table className="border-collapse border-2 border-black text-[8pt] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
+                            {renderAnalysisColGroup(true)}
+                            {renderAnalysisTableHeader("Item / Q. No")}
+                            <tbody>
+                            {pageItems.flatMap((item, idx) => {
                                 const unit = curriculum.units.find(u => u.id === item.unitId);
                                 const subUnit = unit?.subUnits.find(s => s.id === item.subUnitId);
-                                const normalizedCP = normalizeCPValue(item.cognitiveProcess as string);
-                                const normalizedLevel = normalizeLevelValue(item.knowledgeLevel as string);
-                                const normalizedFormat = normalizeFormatValue(item.itemFormat as string);
                                 const rowScore = getItemTotalScore(item);
                                 const questionCount = getItemQuestionCount(item);
-                                
-                                return (
-                                    <tr key={item.id} className="bg-white">
-                                        <td className="border border-black px-[2px] py-[2px] text-center text-[8pt] font-bold">{startIdx + idx + 1}{item.hasInternalChoice ? ' (அ/ஆ)' : ''}</td>
+                                const rows = [
+                                    {
+                                        key: `${item.id}-A`,
+                                        qNo: `${startIdx + idx + 1}${item.hasInternalChoice ? ' (அ)' : ''}`,
+                                        cognitiveProcess: normalizeCPValue(item.cognitiveProcess as string),
+                                        knowledgeLevel: normalizeLevelValue(item.knowledgeLevel as string),
+                                        itemFormat: normalizeFormatValue(item.itemFormat as string),
+                                    }
+                                ];
+                                if (item.hasInternalChoice) {
+                                    rows.push({
+                                        key: `${item.id}-B`,
+                                        qNo: `${startIdx + idx + 1} (ஆ)`,
+                                        cognitiveProcess: normalizeCPValue((item.cognitiveProcessB || item.cognitiveProcess) as string),
+                                        knowledgeLevel: normalizeLevelValue((item.knowledgeLevelB || item.knowledgeLevel) as string),
+                                        itemFormat: normalizeFormatValue((item.itemFormatB || item.itemFormat) as string),
+                                    });
+                                }
+                                return rows.map(row => (
+                                    <tr key={row.key} className={row.key.endsWith('-B') ? 'bg-gray-50' : 'bg-white'}>
+                                        <td className="border border-black px-[2px] py-[2px] text-center text-[8pt] font-bold">{row.qNo}</td>
                                         <td className="border border-black px-[3px] py-[2px] text-[8pt] font-semibold">{renderMixedText(unit ? `${unit.unitNumber}. ${unit.name}` : '-')}</td>
                                         <td className="border border-black px-[3px] py-[2px] text-[7.5pt]">{renderMixedText(unit?.learningOutcomes || '-')}</td>
                                         <td className="border border-black px-[3px] py-[2px] text-[8pt]">{renderMixedText(subUnit?.name)}</td>
-                                        {cpDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[8pt] text-black ${normalizedCP === def.value ? "font-bold" : ""}`}>{normalizedCP === def.value ? <>{questionCount}({formatMark(rowScore)})</> : ''}</td>)}
-                                        {levelDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[8pt] text-black ${normalizedLevel === def.value ? "font-bold" : ""}`}>{normalizedLevel === def.value ? <>{questionCount}({formatMark(rowScore)})</> : ''}</td>)}
-                                        {formatDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[8pt] text-black ${normalizedFormat === def.value ? "font-bold" : ""}`}>{normalizedFormat === def.value ? <>{questionCount}({formatMark(rowScore)})</> : ''}</td>)}
+                                        {cpDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[8pt] text-black ${row.cognitiveProcess === def.value ? "font-bold" : ""}`}>{row.cognitiveProcess === def.value ? <>{questionCount}({formatMark(rowScore)})</> : ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[8pt] text-black ${row.knowledgeLevel === def.value ? "font-bold" : ""}`}>{row.knowledgeLevel === def.value ? <>{questionCount}({formatMark(rowScore)})</> : ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className={`border border-black px-[1px] py-[2px] text-center text-[8pt] text-black ${row.itemFormat === def.value ? "font-bold" : ""}`}>{row.itemFormat === def.value ? <>{questionCount}({formatMark(rowScore)})</> : ''}</td>)}
                                         <td className="border border-black px-[1px] py-[2px] text-center text-[8pt] font-bold text-black">{questionCount}</td>
                                         <td className="border border-black px-[1px] py-[2px] text-center text-[8pt] font-bold text-black">{formatMark(rowScore)}</td>
                                         <td className="border border-black px-[1px] py-[2px] text-center text-[8pt] font-bold text-black">{getDisplayTime(item)}</td>
                                     </tr>
-                                );
+                                ));
                             })}
-                        </tbody>
-                    </table>
+                            {pageIdx === totalPages - 1 && (
+                                <>
+                                    <tr className="bg-gray-100 print-bg-gray font-black">
+                                        <td colSpan={4} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[9pt] text-black">TOTAL ITEM</td>
+                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{grandTotals.cp[def.key].count || ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{grandTotals.levels[def.key].count || ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{grandTotals.formats[def.key].count || ''}</td>)}
+                                        <td className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{derivedTotalItems}</td>
+                                        <td className="border border-black bg-black"></td>
+                                        <td rowSpan={2} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black align-middle">{totalExamMinutes}</td>
+                                    </tr>
+                                    <tr className="bg-gray-100 print-bg-gray font-black">
+                                        <td colSpan={4} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[9pt] text-black">TOTAL SCORE</td>
+                                        {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
+                                        {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
+                                        {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
+                                        <td className="border border-black bg-black"></td>
+                                        <td className="border border-black px-[1px] py-[6px] text-center text-[9pt] text-black font-black">{formatMark(derivedTotalMarks)}</td>
+                                    </tr>
+                                </>
+                            )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             );
         }) : null;
@@ -789,6 +867,30 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
                 }
                 .page.portrait { width: 210mm; min-height: 297mm; }
                 .page.landscape { width: 297mm; min-height: 210mm; }
+                .draft-watermark {
+                    position: absolute;
+                    inset: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    pointer-events: none;
+                    user-select: none;
+                    z-index: 0;
+                }
+                .draft-watermark-text {
+                    transform: rotate(-32deg);
+                    font-family: 'Times New Roman', serif;
+                    font-size: 92pt;
+                    font-weight: 700;
+                    letter-spacing: 0.32em;
+                    color: rgba(185, 28, 28, 0.12);
+                    text-transform: uppercase;
+                    white-space: nowrap;
+                }
+                .page-content {
+                    position: relative;
+                    z-index: 1;
+                }
                 
                 table { border-collapse: collapse; width: 99%; margin: 0 auto 0 0; table-layout: fixed; }
                 th, td { border: 0.3mm solid black; word-break: break-word; vertical-align: middle; color: black !important; }
@@ -809,10 +911,12 @@ const PrintView: React.FC<{ id: string }> = ({ id }) => {
             {currentTab === 'report1' && (
                 <div className="report-container portrait bg-white mx-auto shadow-lg" style={{ width: '210mm', padding: '0mm' }}>
                     <div className="page portrait">
-                        {renderReport1Page1Content()}
+                        {showUserDraftWatermark && <div className="draft-watermark"><div className="draft-watermark-text">Draft</div></div>}
+                        <div className="page-content">{renderReport1Page1Content()}</div>
                     </div>
                     <div className="page portrait page-break">
-                        {renderReport1Page2Content()}
+                        {showUserDraftWatermark && <div className="draft-watermark"><div className="draft-watermark-text">Draft</div></div>}
+                        <div className="page-content">{renderReport1Page2Content()}</div>
                     </div>
                 </div>
             )}
