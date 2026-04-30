@@ -65,7 +65,7 @@ const connectDb = async () => {
   
   try {
     const conn = await mongoose.connect(MONGO_URI, {
-      bufferCommands: false, // Disable buffering for faster fail-fast in serverless
+      bufferCommands: true, // Re-enable buffering to prevent "Cannot call find() before connection" errors
     });
     cachedConnection = conn;
     console.log('Connected to MongoDB');
@@ -89,7 +89,26 @@ if (!JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') process.exit(1);
 }
 
-const puppeteer = require('puppeteer');
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
+
+const getBrowser = async () => {
+  if (process.env.VERCEL) {
+    return await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
+    });
+  }
+  // Local development
+  return await require('puppeteer').launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+};
+
 const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel } = require('docx');
 
 // --- Helpers ---
@@ -143,7 +162,12 @@ const validateBaseUrl = (url) => {
   if (!url) return true;
   try {
     const parsed = new URL(url);
-    const allowedHosts = ['localhost', '127.0.0.1', 'blueprint-pro.vercel.app']; // Add production domain
+    const allowedHosts = [
+      'localhost', 
+      '127.0.0.1', 
+      'blueprint-pro.vercel.app', 
+      'blueprint-maker26.vercel.app' // User's current domain
+    ];
     return allowedHosts.includes(parsed.hostname);
   } catch (e) { return false; }
 };
@@ -487,7 +511,7 @@ app.post('/export/pdf', auth, async (req, res) => {
     const bp = await Blueprint.findOne({ id });
     if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
     
-    const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+    const browser = await getBrowser();
     const page = await browser.newPage();
 
     // Set auth token in localStorage before navigation
