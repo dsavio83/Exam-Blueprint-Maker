@@ -347,7 +347,14 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end gap-1">
-                                        <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-black uppercase border border-blue-100">{bp.setId || 'SET A'}</span>
+                                        <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 text-[9px] font-black uppercase border border-purple-100">
+                                            {(() => {
+                                                const s = bp.setId || 'A';
+                                                if (s.startsWith('SET')) return s;
+                                                if (s === 'GENERAL') return 'GENERAL SET';
+                                                return `SET ${s}`;
+                                            })()}
+                                        </span>
                                         <button
                                             onClick={() => setSelectedShareBp(bp.id)}
                                             className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold transition-colors ${bp.sharedWith?.length ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'}`}
@@ -364,14 +371,18 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
 
                                 <div className="flex items-center justify-between border-t border-gray-50 pt-3">
                                     <div className="flex flex-col gap-1 w-full overflow-hidden">
-                                        {group.map(b => (
-                                            <div key={b.id} className="flex items-center gap-2">
-                                                <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[8px]">
-                                                    <UserIcon size={10} />
+                                        {group.map(b => {
+                                            const user = users.find(u => u.id === b.ownerId);
+                                            if (!user || user.role === 'ADMIN') return null;
+                                            return (
+                                                <div key={b.id} className="flex items-center gap-2">
+                                                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[8px]">
+                                                        <UserIcon size={10} />
+                                                    </div>
+                                                    <div className="text-[10px] font-bold text-gray-800 truncate">{user.name}</div>
                                                 </div>
-                                                <div className="text-[10px] font-bold text-gray-800 truncate">{getUserName(b.ownerId)}</div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                         <div className="text-[9px] text-gray-400 flex items-center gap-1 mt-1">
                                             <Calendar size={8} /> {new Date(bp.createdAt).toLocaleDateString()}
                                         </div>
@@ -437,7 +448,14 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                                     <div className="flex flex-col gap-1 overflow-hidden">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-black text-blue-700 text-sm uppercase tracking-tight">Class {bp.classLevel}</span>
-                                                            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-black uppercase border border-blue-100">{bp.setId || 'SET A'}</span>
+                                                            <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-600 text-[9px] font-black uppercase border border-purple-100">
+                                                                {(() => {
+                                                                    const s = bp.setId || 'A';
+                                                                    if (s.startsWith('SET')) return s;
+                                                                    if (s === 'GENERAL') return 'GENERAL SET';
+                                                                    return `SET ${s}`;
+                                                                })()}
+                                                            </span>
                                                         </div>
                                                         <div className="font-black text-gray-900 text-xs uppercase truncate" title={bp.subject}>{bp.subject}</div>
                                                         <div className="flex flex-col gap-1 mt-0.5">
@@ -451,19 +469,33 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                             </td>
                                             <td className="px-6 py-5">
                                                 <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
-                                                    {group.map(b => (
-                                                        <div key={b.id} className="flex items-center gap-2">
-                                                            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors shrink-0">
-                                                                <UserIcon size={12} />
-                                                            </div>
-                                                            <div className="overflow-hidden">
-                                                                <div className="text-xs font-bold text-gray-800 truncate">{getUserName(b.ownerId)}</div>
-                                                                <div className="text-[8px] text-gray-400 flex items-center gap-1">
-                                                                    <Calendar size={8} /> {new Date(b.createdAt).toLocaleDateString()}
+                                                    {(() => {
+                                                        const teacherBlueprints = group.filter(b => {
+                                                            const u = users.find(user => user.id === b.ownerId);
+                                                            return u && u.role !== 'ADMIN';
+                                                        });
+                                                        
+                                                        if (teacherBlueprints.length === 0) {
+                                                            return <span className="text-[10px] text-gray-400 italic font-medium">No Teacher Assigned</span>;
+                                                        }
+
+                                                        return teacherBlueprints.map(b => {
+                                                            const user = users.find(u => u.id === b.ownerId);
+                                                            return (
+                                                                <div key={b.id} className="flex items-center gap-2">
+                                                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors shrink-0">
+                                                                        <UserIcon size={12} />
+                                                                    </div>
+                                                                    <div className="overflow-hidden">
+                                                                        <div className="text-xs font-bold text-gray-800 truncate">{user?.name}</div>
+                                                                        <div className="text-[8px] text-gray-400 flex items-center gap-1">
+                                                                            <Calendar size={8} /> {new Date(b.createdAt).toLocaleDateString()}
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                            );
+                                                        });
+                                                    })()}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5">
@@ -477,35 +509,39 @@ const AdminQuestionPaperManager = ({ onEditBlueprint }: AdminQuestionPaperManage
                                             </td>
                                             <td className="px-6 py-5">
                                                 <div className="flex flex-col items-center gap-1.5">
-                                                    {group.map(b => (
-                                                        <div key={b.id} className="w-full flex flex-col gap-1 mb-2 last:mb-0 border-b border-gray-50 pb-2 last:border-0">
-                                                            {b.isConfirmed ? (
-                                                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-green-100 text-green-700 gap-1 uppercase w-full justify-center tracking-tighter">
-                                                                    <CheckCircle size={10} /> {getUserName(b.ownerId)}: Confirmed
-                                                                </span>
-                                                            ) : (
-                                                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-amber-100 text-amber-700 gap-1 uppercase w-full justify-center tracking-tighter">
-                                                                    <Clock size={10} /> {getUserName(b.ownerId)}: Draft
-                                                                </span>
-                                                            )}
-                                                            <div className="flex gap-1 w-full">
-                                                                {b.isLocked ? (
-                                                                    <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-gray-800 text-white gap-1 uppercase justify-center"><Lock size={8} /> Locked</span>
+                                                    {group.map(b => {
+                                                        const user = users.find(u => u.id === b.ownerId);
+                                                        if (!user || user.role === 'ADMIN') return null;
+                                                        return (
+                                                            <div key={b.id} className="w-full flex flex-col gap-1 mb-2 last:mb-0 border-b border-gray-50 pb-2 last:border-0">
+                                                                {b.isConfirmed ? (
+                                                                    <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-green-100 text-green-700 gap-1 uppercase w-full justify-center tracking-tighter">
+                                                                        <CheckCircle size={10} /> {user.name}: Confirmed
+                                                                    </span>
                                                                 ) : (
-                                                                    <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-blue-50 text-blue-600 gap-1 uppercase justify-center"><Unlock size={8} /> Unlocked</span>
+                                                                    <span className="inline-flex items-center px-2 py-1 rounded-lg text-[9px] font-black bg-amber-100 text-amber-700 gap-1 uppercase w-full justify-center tracking-tighter">
+                                                                        <Clock size={10} /> {user.name}: Draft
+                                                                    </span>
                                                                 )}
+                                                                <div className="flex gap-1 w-full">
+                                                                    {b.isLocked ? (
+                                                                        <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-gray-800 text-white gap-1 uppercase justify-center"><Lock size={8} /> Locked</span>
+                                                                    ) : (
+                                                                        <span className="flex-1 inline-flex items-center py-0.5 rounded-md text-[8px] font-black bg-blue-50 text-blue-600 gap-1 uppercase justify-center"><Unlock size={8} /> Unlocked</span>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-5">
-                                                <div className="grid grid-cols-5 gap-1 max-w-[160px] mx-auto">
-                                                    <button onClick={() => onEditBlueprint(bp)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors flex justify-center" title="View/Edit"><Edit2 size={18} /></button>
-                                                    <button onClick={() => handleToggleLock(ids)} className={`p-2 rounded-xl transition-colors flex justify-center ${anyLocked ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Lock/Unlock">{anyLocked ? <Lock size={18} /> : <Unlock size={18} />}</button>
-                                                    <button onClick={() => handleToggleHidden(ids)} className={`p-2 rounded-xl transition-colors flex justify-center ${anyHidden ? 'text-gray-400 hover:bg-gray-100' : 'text-blue-600 hover:bg-blue-50'}`} title="Show/Hide">{anyHidden ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                                                    <button onClick={() => handleResetConfirmation(ids)} className={`p-2 rounded-xl transition-colors flex justify-center ${anyConfirmed ? 'text-orange-600 hover:bg-orange-50' : 'text-gray-300 pointer-events-none'}`} title="Reset Confirmation"><RotateCcw size={18} /></button>
-                                                    <button onClick={() => handleDelete(ids)} className="p-2 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors flex justify-center" title="Delete"><Trash2 size={18} /></button>
+                                            <td className="px-6 py-5 !p-4">
+                                                <div className="flex items-center justify-center gap-1 sm:gap-2 min-w-[180px]">
+                                                    <button onClick={() => onEditBlueprint(bp)} className="w-9 h-9 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-xl transition-colors shrink-0" title="View/Edit"><Edit2 size={18} /></button>
+                                                    <button onClick={() => handleToggleLock(ids)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors shrink-0 ${anyLocked ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Lock/Unlock">{anyLocked ? <Lock size={18} /> : <Unlock size={18} />}</button>
+                                                    <button onClick={() => handleToggleHidden(ids)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors shrink-0 ${anyHidden ? 'text-gray-400 hover:bg-gray-100' : 'text-blue-600 hover:bg-blue-50'}`} title="Show/Hide">{anyHidden ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                                                    <button onClick={() => handleResetConfirmation(ids)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors shrink-0 ${anyConfirmed ? 'text-orange-600 hover:bg-orange-50' : 'text-gray-300 opacity-40 pointer-events-none'}`} title="Reset Confirmation"><RotateCcw size={18} /></button>
+                                                    <button onClick={() => handleDelete(ids)} className="w-9 h-9 flex items-center justify-center text-red-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors shrink-0" title="Delete"><Trash2 size={18} /></button>
                                                 </div>
                                             </td>
                                         </tr>

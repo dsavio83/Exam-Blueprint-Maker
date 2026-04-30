@@ -88,9 +88,9 @@ const htmlToDocxElements = (html: string) => {
                 });
                 
                 let alignment = AlignmentType.LEFT;
-                if (el.style.textAlign === 'center') alignment = AlignmentType.CENTER;
-                if (el.style.textAlign === 'right') alignment = AlignmentType.RIGHT;
-                if (el.style.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED;
+                if (el.style.textAlign === 'center') alignment = AlignmentType.CENTER as any;
+                else if (el.style.textAlign === 'right') alignment = AlignmentType.RIGHT as any;
+                else if (el.style.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED as any;
 
                 return [new Paragraph({
                     alignment,

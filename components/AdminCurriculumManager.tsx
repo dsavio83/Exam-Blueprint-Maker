@@ -19,7 +19,13 @@ const AdminCurriculumManager = () => {
     useEffect(() => {
         const load = async () => {
             const data = await getCurriculum(selectedClass, selectedSubject);
-            setCurriculum(data || { classLevel: selectedClass, subject: selectedSubject, units: [] });
+            setCurriculum(data || { 
+                id: `curr_${Date.now()}`, 
+                name: `${selectedSubject} - ${selectedClass}`, 
+                classLevel: selectedClass, 
+                subject: selectedSubject, 
+                units: [] 
+            });
         };
         load();
     }, [selectedClass, selectedSubject]);

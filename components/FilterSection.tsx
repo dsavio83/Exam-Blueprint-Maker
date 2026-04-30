@@ -1,9 +1,9 @@
 
 import React from 'react';
-import { ClassGrade, PaperType } from '../types';
+import { ExtendedClassLevel, PaperType } from '../types';
 
 interface FilterSectionProps {
-  classes: ClassGrade[];
+  classes: ExtendedClassLevel[];
   paperTypes: PaperType[];
   selectedClassId: string;
   setSelectedClassId: (id: string) => void;

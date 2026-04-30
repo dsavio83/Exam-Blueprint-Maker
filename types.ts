@@ -65,6 +65,12 @@ export interface CognitiveLevel {
   color?: string;
 }
 
+export enum DifficultyLevel {
+  EASY = 'Easy',
+  MEDIUM = 'Medium',
+  HARD = 'Hard'
+}
+
 export enum ItemFormat {
   SR1 = 'SR1 (MCI)', 
   SR2 = 'SR2 (MI)',  
@@ -79,6 +85,13 @@ export interface ItemFormatOption {
   name: string;
   type: string;
   abbreviation: string;
+}
+
+// Interface for components that treat ClassLevel as an object (SettingsManager, etc.)
+export interface ExtendedClassLevel {
+  id: string;
+  name: string;
+  subjects: Curriculum[];
 }
 
 export enum QuestionType {
@@ -99,6 +112,7 @@ export enum SchoolType {
 export interface SubUnit {
   id: string;
   name: string;
+  learningObjective?: string; // Added for compatibility
 }
 
 export interface Unit {
@@ -115,6 +129,8 @@ export interface AnswerMark {
 }
 
 export interface Curriculum {
+  id: string; // Added for UI management
+  name: string; // Added for UI management
   classLevel: ClassLevel;
   subject: SubjectType;
   units: Unit[];
@@ -176,6 +192,7 @@ export interface QuestionPatternSection {
   id: string;
   marks: number;
   count: number;
+  maxQuestions?: number; // Added for compatibility with AnalysisReport
   instruction?: string; // Direction for the user (e.g., 'Answer any 5')
   massViewHeader?: string; // Optional header for Mass View
   optionCount?: number; // Number of questions in this section that should have internal choice
@@ -188,6 +205,7 @@ export interface QuestionPaperType {
   totalMarks: number; // Computed from sections
   description: string;
   sections: QuestionPatternSection[];
+  questionTypes?: QuestionPatternSection[]; // Alias for compatibility
 }
 
 export type PaperType = QuestionPaperType;
@@ -217,6 +235,7 @@ export interface Blueprint {
   totalMarks: number;
   items: BlueprintItem[];
   createdAt: string;
+  updatedAt?: string;
   setId?: string;
   academicYear?: string;
   ownerId?: string; // User ID of the creator
@@ -228,6 +247,8 @@ export interface Blueprint {
   perReportSettings?: Record<string, ReportSettings>; // Per report (report1, report2, etc.)
   isAdminAssigned?: boolean; // New field to track if assigned by admin
   massViewHeader?: string; // Content for the consolidated editor
+  examType?: string; // Added for compatibility
+  maxScore?: number; // Added for compatibility
 }
 
 export type SavedBlueprint = Blueprint;
@@ -248,6 +269,7 @@ export interface User {
   role: Role;
   name: string;
   fullName?: string; // Added for compatibility
+  status?: 'active' | 'blocked'; // Added status field
   
   // Profile fields
   pen?: string;

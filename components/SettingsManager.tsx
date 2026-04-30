@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import Swal from 'sweetalert2';
-import { ClassGrade, CognitiveLevel, DifficultyLevel, PaperType, QuestionType, ItemFormat } from '../types';
+import { ExtendedClassLevel, CognitiveLevel, DifficultyLevel, PaperType, QuestionType, ItemFormat } from '../types';
 import { ITEM_FORMATS, COGNITIVE_PROCESSES, KNOWLEDGE_LEVELS } from '../constants';
 
 interface SettingsManagerProps {
   view: 'paper-types' | 'class-subject' | 'unit-subunit' | 'taxonomy';
-  classes: ClassGrade[];
+  classes: ExtendedClassLevel[];
   levels: CognitiveLevel[];
   difficultyLevels: DifficultyLevel[];
   paperTypes: PaperType[];
-  updateClasses: (c: ClassGrade[]) => void;
+  updateClasses: (c: ExtendedClassLevel[]) => void;
   updateLevels: (l: CognitiveLevel[]) => void;
   updateDifficulty: (d: DifficultyLevel[]) => void;
   updatePaperTypes: (pt: PaperType[]) => void;
@@ -61,8 +61,17 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const handleAddSubject = () => {
     if (!newSubjectName.trim() || !selectedClassId) return;
+    const currentClass = classes.find(c => c.id === selectedClassId);
+    if (!currentClass) return;
+
     updateClasses(classes.map(c => c.id === selectedClassId ? {
-      ...c, subjects: [...c.subjects, { id: `s_${Date.now()}`, name: newSubjectName.trim(), units: [] }]
+      ...c, subjects: [...c.subjects, { 
+        id: `s_${Date.now()}`, 
+        name: newSubjectName.trim(), 
+        units: [],
+        classLevel: currentClass.id as any,
+        subject: newSubjectName.trim() as any
+      }]
     } : c));
     setNewSubjectName('');
     Swal.fire("Added", "Subject added successfully", "success");
@@ -89,7 +98,13 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
     if (!newUnitName.trim() || !selectedClassId || !selectedSubjectId) return;
     updateClasses(classes.map(c => c.id === selectedClassId ? {
       ...c, subjects: c.subjects.map(s => s.id === selectedSubjectId ? {
-        ...s, units: [...s.units, { id: `u_${Date.now()}`, name: newUnitName.trim(), subUnits: [] }]
+        ...s, units: [...s.units, { 
+          id: `u_${Date.now()}`, 
+          name: newUnitName.trim(), 
+          subUnits: [], 
+          unitNumber: s.units.length + 1,
+          learningOutcomes: ''
+        }]
       } : s)
     } : c));
     setNewUnitName('');
@@ -120,7 +135,11 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
     updateClasses(classes.map(c => c.id === selectedClassId ? {
       ...c, subjects: c.subjects.map(s => s.id === selectedSubjectId ? {
         ...s, units: s.units.map(u => u.id === unitId ? {
-          ...u, subUnits: [...u.subUnits, { id: `sub_${Date.now()}`, name: newSubUnitName.trim(), learningObjective: newObjective || 'General Learning Objective' }]
+          ...u, subUnits: [...u.subUnits, { 
+            id: `sub_${Date.now()}`, 
+            name: newSubUnitName.trim(), 
+            learningObjective: newObjective || 'General Learning Objective' 
+          }]
         } : u)
       } : s)
     } : c));
@@ -141,7 +160,13 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const handleAddPaperType = () => {
     if (!newPaperTypeName.trim()) return;
-    updatePaperTypes([...paperTypes, { id: `pt_${Date.now()}`, name: newPaperTypeName, questionTypes: [] }]);
+    updatePaperTypes([...paperTypes, { 
+      id: `pt_${Date.now()}`, 
+      name: newPaperTypeName, 
+      sections: [],
+      totalMarks: 0,
+      description: ''
+    }]);
     setNewPaperTypeName('');
     Swal.fire("Created", "Pattern created successfully", "success");
   };
@@ -164,14 +189,19 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
   const handleAddQuestionType = (ptId: string) => {
     updatePaperTypes(paperTypes.map(pt => pt.id === ptId ? {
       ...pt,
-      questionTypes: [...pt.questionTypes, { id: `qt_${Date.now()}`, marks: newMarkValue, maxQuestions: newMaxQuestions }]
+      sections: [...pt.sections, { 
+        id: `qt_${Date.now()}`, 
+        marks: newMarkValue, 
+        count: newMaxQuestions,
+        maxQuestions: newMaxQuestions 
+      }]
     } : pt));
   };
 
   const handleDeleteQuestionType = (ptId: string, qtId: string) => {
     updatePaperTypes(paperTypes.map(pt => pt.id === ptId ? {
       ...pt,
-      questionTypes: pt.questionTypes.filter(q => q.id !== qtId)
+      sections: pt.sections.filter(q => q.id !== qtId)
     } : pt));
   };
 
@@ -321,7 +351,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  {pt.questionTypes.map(qt => (
+                  {pt.sections.map(qt => (
                     <div key={qt.id} className="flex justify-between items-center p-5 bg-indigo-50/50 rounded-3xl border border-indigo-50 group/item transition-all hover:bg-indigo-100">
                       <div className="flex flex-col">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Allocation</span>
@@ -333,7 +363,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({
                       </div>
                     </div>
                   ))}
-                  {pt.questionTypes.length === 0 && <div className="text-center py-6 text-slate-300 font-black uppercase text-[10px] tracking-widest italic">No Categories Defined</div>}
+                  {pt.sections.length === 0 && <div className="text-center py-6 text-slate-300 font-black uppercase text-[10px] tracking-widest italic">No Categories Defined</div>}
                 </div>
               </div>
             ))}

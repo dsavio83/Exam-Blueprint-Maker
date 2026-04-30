@@ -16,6 +16,8 @@ const {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// URL Normalization Middleware
 app.use((req, res, next) => {
   const catchAllPath =
     req.query?.['...path'] ??
@@ -49,26 +51,78 @@ app.use((req, res, next) => {
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 const PORT = process.env.PORT || 5001;
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
-const puppeteer = require('puppeteer');
-const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, VerticalAlign } = require('docx');
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// --- Export Helpers ---
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is missing.');
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+}
+
+const puppeteer = require('puppeteer');
+const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel } = require('docx');
+
+// --- Helpers ---
+const isDbReady = () => mongoose.connection.readyState === 1;
+const isAdminRole = (role) => String(role || '').toUpperCase() === 'ADMIN';
+
+const serviceUnavailable = (res) =>
+  res.status(503).json({ error: 'Database service is currently unavailable.' });
+
+const getEntityId = (value) => {
+  if (!value) return '';
+  // If it's a Mongoose document, use toObject to get the schema fields without virtuals shadowing them
+  if (value.toObject) {
+    const obj = value.toObject();
+    return String(obj.id || obj._id || '');
+  }
+  return String(value.id || value._id || '');
+};
+
+const normalizeUser = (user) => {
+  if (!user) return null;
+  const obj = user.toObject ? user.toObject() : user;
+  return {
+    ...obj,
+    id: String(obj.id || obj._id || '')
+  };
+};
+
+const normalizeBlueprint = (blueprint) => {
+  if (!blueprint) return null;
+  const obj = blueprint.toObject ? blueprint.toObject() : blueprint;
+  return {
+    ...obj,
+    id: String(obj.id || obj._id || '')
+  };
+};
+
+// Middleware to verify JWT
+const auth = (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET || 'dev_secret_only');
+    req.user = decoded;
+    next();
+  } catch (err) { res.status(401).json({ error: 'Invalid or expired token' }); }
+};
+
+// SSRF Protection for Puppeteer
+const validateBaseUrl = (url) => {
+  if (!url) return true;
+  try {
+    const parsed = new URL(url);
+    const allowedHosts = ['localhost', '127.0.0.1', 'blueprint-pro.vercel.app']; // Add production domain
+    return allowedHosts.includes(parsed.hostname);
+  } catch (e) { return false; }
+};
+
 async function createBlueprintDoc(bp, curriculum) {
   return new Document({
     sections: [{
-      properties: {
-        page: {
-          margin: { top: 720, right: 720, bottom: 720, left: 720 },
-        },
-      },
+      properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } },
       children: [
-        new Paragraph({
-          text: "Question Paper Design - HS",
-          heading: HeadingLevel.HEADING_1,
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-        }),
+        new Paragraph({ text: "Question Paper Design - HS", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER, spacing: { after: 200 } }),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
@@ -77,39 +131,6 @@ async function createBlueprintDoc(bp, curriculum) {
                 new TableCell({ children: [new Paragraph(`Class: ${bp.classLevel}`)] }),
                 new TableCell({ children: [new Paragraph(`Subject: ${bp.subject}`)] }),
               ]
-            }),
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph(`Set: ${bp.setId || 'A'}`)] }),
-                new TableCell({ children: [new Paragraph(`Term: ${bp.examTerm}`)] }),
-              ]
-            })
-          ]
-        }),
-        new Paragraph({ text: "", spacing: { before: 200 } }),
-        new Paragraph({
-          text: "I. Weightage to Content Area",
-          heading: HeadingLevel.HEADING_3,
-        }),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph({ text: "Sl. No", alignment: AlignmentType.CENTER })] }),
-                new TableCell({ children: [new Paragraph({ text: "Unit / Topic", alignment: AlignmentType.CENTER })] }),
-                new TableCell({ children: [new Paragraph({ text: "Score", alignment: AlignmentType.CENTER })] }),
-              ]
-            }),
-            ...(curriculum?.units || []).map((u, i) => {
-              const score = bp.items.filter(it => it.unitId === u.id).reduce((s, it) => s + (it.totalMarks || 0), 0);
-              return new TableRow({
-                children: [
-                  new TableCell({ children: [new Paragraph({ text: String(i + 1), alignment: AlignmentType.CENTER })] }),
-                  new TableCell({ children: [new Paragraph(u.name)] }),
-                  new TableCell({ children: [new Paragraph({ text: String(score), alignment: AlignmentType.CENTER })] }),
-                ]
-              });
             })
           ]
         })
@@ -118,642 +139,389 @@ async function createBlueprintDoc(bp, curriculum) {
   });
 }
 
-// Export Routes
-app.post('/export/docx', async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
-  try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const bp = await Blueprint.findOne({ id });
-    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
-    const curriculum = await Curriculum.findOne({ classLevel: bp.classLevel, subject: bp.subject });
-    const doc = await createBlueprintDoc(bp, curriculum);
-    const buffer = await Packer.toBuffer(doc);
-    res.contentType('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="Blueprint_${id}.docx"`);
-    res.send(buffer);
-  } catch (err) {
-    console.error('DOCX Export Error:', err);
-    res.status(500).json({ error: `DOCX Generation Failed: ${err.message}` });
-  }
-});
-
-app.post('/export/odt', async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
-
-  try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const bp = await Blueprint.findOne({ id });
-    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
-    const curriculum = await Curriculum.findOne({ classLevel: bp.classLevel, subject: bp.subject });
-    
-    const doc = await createBlueprintDoc(bp, curriculum);
-    const docxBuffer = await Packer.toBuffer(doc);
-
-    // Temp file paths
-    const tempDir = os.tmpdir();
-    const docxPath = path.join(tempDir, `temp_${id}.docx`);
-    const odtPath = path.join(tempDir, `temp_${id}.odt`);
-
-    fs.writeFileSync(docxPath, docxBuffer);
-
-    // Use LibreOffice to convert
-    const cmd = `soffice --headless --convert-to odt --outdir "${tempDir}" "${docxPath}"`;
-    
-    exec(cmd, (error, stdout, stderr) => {
-      if (error) {
-        console.error('LibreOffice Error:', error);
-        return res.status(500).json({ error: 'ODT Conversion Failed. Ensure LibreOffice is installed.' });
-      }
-
-      if (fs.existsSync(odtPath)) {
-        const odtBuffer = fs.readFileSync(odtPath);
-        res.contentType('application/vnd.oasis.opendocument.text');
-        res.setHeader('Content-Disposition', `attachment; filename="Blueprint_${id}.odt"`);
-        res.send(odtBuffer);
-        
-        // Cleanup
-        try { fs.unlinkSync(docxPath); fs.unlinkSync(odtPath); } catch (e) {}
-      } else {
-        res.status(500).json({ error: 'ODT file was not created by converter.' });
-      }
-    });
-
-  } catch (err) {
-    console.error('ODT Export Error:', err);
-    res.status(500).json({ error: `ODT Generation Failed: ${err.message}` });
-  }
-});
-// Export Routes
-app.post('/export/pdf', async (req, res) => {
-  const { id, baseUrl, tab, mode } = req.body;
-  if (!id) return res.status(400).json({ error: 'Blueprint ID is required' });
-
-  try {
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-
-    // Construct the print URL with tab filter and rendering mode
-    const query = new URLSearchParams();
-    if (tab) query.set('tab', tab);
-    if (mode) query.set('mode', mode);
-    const queryString = query.toString();
-    const printUrl = `${baseUrl || 'http://localhost:5173'}/print-view/${id}${queryString ? `?${queryString}` : ''}`;
-    console.log('Puppeteer navigating to:', printUrl);
-
-    await page.goto(printUrl, { waitUntil: 'networkidle0', timeout: 60000 });
-    
-    const isLandscape = tab === 'report2' || tab === 'report3';
-    await page.setViewport({ 
-      width: isLandscape ? 1123 : 794, 
-      height: isLandscape ? 794 : 1123, 
-      deviceScaleFactor: 2 
-    });
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      landscape: isLandscape,
-      printBackground: true,
-      preferCSSPageSize: true,
-      displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
-      footerTemplate: `
-        <div style="width:100%; text-align:center; font-size:10px; font-family: 'Times New Roman', serif; color: #555; padding-bottom: 5px;">
-          Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-        </div>
-      `,
-      margin: {
-        top: '15mm',
-        bottom: '20mm',
-        left: '15mm',
-        right: '15mm'
-      }
-    });
-
-    await browser.close();
-
-    res.contentType('application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="Blueprint_${id}.pdf"`);
-    res.send(pdf);
-  } catch (err) {
-    console.error('PDF Export Error:', err);
-    res.status(500).json({ error: `PDF Generation Failed: ${err.message}` });
-  }
-});
-
-let dbConnectionError = '';
-let dbConnectionState = 'idle';
-const markConnectionError = (message) => { dbConnectionError = message; };
-const clearConnectionError = () => { dbConnectionError = ''; };
-const isDbReady = () => mongoose.connection.readyState === 1;
-const isAdminRole = (role) => String(role || '').toLowerCase() === 'admin';
-const dbUnavailableMessage = () => {
-  if (!MONGO_URI) {
-    return 'MongoDB connection string is not configured on the server.';
-  }
-  if (dbConnectionState === 'connecting') {
-    return 'MongoDB connection is still initializing. Retry in a few seconds.';
-  }
-  return dbConnectionError || 'MongoDB is not connected. Retry after the database connection is restored.';
-};
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let mongoConnectPromise = null;
-const connectToMongo = async () => {
-  if (!MONGO_URI) {
-    dbConnectionState = 'error';
-    markConnectionError('MongoDB connection string is not configured on the server.');
-    return null;
-  }
-  if (isDbReady()) {
-    dbConnectionState = 'connected';
-    clearConnectionError();
-    return mongoose.connection;
-  }
-  if (mongoConnectPromise) {
-    return mongoConnectPromise;
-  }
-
-  dbConnectionState = 'connecting';
-  mongoConnectPromise = mongoose.connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 5000
-  })
-    .then((connection) => {
-      console.log('Connected to MongoDB');
-      dbConnectionState = 'connected';
-      clearConnectionError();
-      return connection;
-    })
-    .catch((err) => {
-      console.error('MongoDB connection error:', err.message);
-      dbConnectionState = 'error';
-      markConnectionError(err.message);
-      throw err;
-    })
-    .finally(() => {
-      mongoConnectPromise = null;
-    });
-
-  return mongoConnectPromise;
-};
-const ensureDbReady = async () => {
-  if (isDbReady()) return true;
-  try {
-    await Promise.race([
-      connectToMongo(),
-      wait(6500)
-    ]);
-  } catch (_) {
-    // The exact failure reason is stored in dbConnectionError.
-  }
-  return isDbReady();
-};
-
-if (MONGO_URI) {
-  connectToMongo().catch(() => { });
-  mongoose.connection.on('error', (err) => {
-    console.error('MongoDB runtime error:', err.message);
-    dbConnectionState = 'error';
-    markConnectionError(err.message);
-  });
-  mongoose.connection.on('disconnected', () => {
-    console.warn('MongoDB disconnected.');
-    if (!dbConnectionError) {
-      markConnectionError('MongoDB disconnected.');
-    }
-    if (!isDbReady()) {
-      dbConnectionState = 'error';
-    }
-  });
-} else {
-  console.warn('MONGO_URI is not configured.');
-  dbConnectionState = 'error';
-  markConnectionError('MongoDB connection string is not configured.');
-}
-const getEntityId = (value) => {
-  if (!value) return '';
-  return String(value.id || value._id || '');
-};
-const idsMatch = (left, right) => {
-  const a = String(left || '');
-  const b = String(right || '');
-  return !!a && !!b && a === b;
-};
-const toSafeUser = (user) => ({
-  id: getEntityId(user),
-  username: user.username,
-  role: user.role,
-  name: user.name,
-  email: user.email
-});
-const normalizeUser = (user) => ({
-  ...(user?.toObject ? user.toObject() : user),
-  id: getEntityId(user)
-});
-const normalizeBlueprint = (blueprint) => ({
-  ...(blueprint?.toObject ? blueprint.toObject() : blueprint),
-  id: getEntityId(blueprint),
-  ownerId: String(blueprint?.ownerId || '')
-});
-const normalizeShare = (share) => ({
-  ...(share?.toObject ? share.toObject() : share),
-  id: getEntityId(share),
-  blueprintId: String(share?.blueprintId || ''),
-  ownerId: String(share?.ownerId || ''),
-  sharedWithUserId: String(share?.sharedWithUserId || '')
-});
-
-const serviceUnavailable = (res) =>
-  res.status(503).json({ error: dbUnavailableMessage() });
-
-// Middleware to verify JWT
-const auth = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'No token, authorization denied' });
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) { res.status(401).json({ error: 'Token is not valid' }); }
-};
-
-// --- APIs (Total: 12 Route Registrations) ---
-
-// 1. GET /init - Fetch all initial data
-app.get('/init', async (req, res) => {
-  try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-
-    const [users, curriculums, examConfigs, paperTypes, discourses, settings] = await Promise.all([
-      User.find(), Curriculum.find(), ExamConfig.find(),
-      PaperType.find(), Discourse.find(), SystemSettings.findOne()
-    ]);
-
-    const blueprints = await Blueprint.find();
-    const sharedBlueprints = await SharedBlueprint.find();
-
-    res.json({
-      users: users.map(normalizeUser),
-      curriculums,
-      examConfigs,
-      blueprints: blueprints.map(normalizeBlueprint),
-      questionPaperTypes: paperTypes,
-      discourses,
-      sharedBlueprints: sharedBlueprints.map(normalizeShare),
-      settings
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// 2. POST /login - JWT Authentication
+// 1. Auth & User Routes
 app.post('/login', async (req, res) => {
   try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-
-    const username = String(req.body?.username || '').trim();
-    const password = String(req.body?.password || '');
-
-    if (!username || !password) {
-      console.log('Login attempt failed: Username or password missing');
-      return res.status(400).json({ error: 'Username and password are required' });
+    if (!isDbReady()) return serviceUnavailable(res);
+    const { username, password } = req.body;
+    const user = await User.findOne({ username: new RegExp(`^${username}$`, 'i') });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
-
-    const user = await User.findOne({ username: new RegExp(`^${username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
-    if (!user) {
-      console.log(`Login attempt failed: User "${username}" not found`);
-      return res.status(400).json({ error: `User "${username}" not found` });
-    }
-
-    const storedPassword = user.password || '';
-    const isMatch = await bcrypt.compare(password, storedPassword).catch(() => false);
-
-    if (!isMatch) {
-      console.log(`Login attempt failed: Incorrect password for "${username}"`);
-      return res.status(400).json({ error: 'Incorrect password' });
-    }
-
-    console.log(`Login successful for user: ${username}`);
-    const normalizedUserId = getEntityId(user);
-    const token = jwt.sign({ id: normalizedUserId, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    const userId = getEntityId(user);
+    const token = jwt.sign({ id: userId, role: user.role }, JWT_SECRET || 'dev_secret_only', { expiresIn: '24h' });
     res.json({ token, user: normalizeUser(user) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2.05 GET /profile - Get current user (for validation)
-app.get('/profile', auth, async (req, res) => {
-  try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const userId = req.user.id;
-    const query = { $or: [{ id: userId }] };
-    if (mongoose.Types.ObjectId.isValid(userId)) query.$or.push({ _id: userId });
+app.route('/profile')
+  .get(auth, async (req, res) => {
+    try {
+      const user = await User.findOne({ id: req.user.id }, { password: 0 });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      res.json(normalizeUser(user));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  })
+  .put(auth, async (req, res) => {
+    try {
+      const { password, ...updateData } = req.body;
+      if (password) {
+        updateData.password = await bcrypt.hash(password, 10);
+      }
+      const user = await User.findOneAndUpdate({ id: req.user.id }, updateData, { new: true });
+      res.json(normalizeUser(user));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
 
-    const user = await User.findOne(query, { password: 0 });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(normalizeUser(user));
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// 2.1 PUT /profile - Update user profile
-app.put('/profile', auth, async (req, res) => {
-  try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const userId = req.user.id;
-    const updates = req.body;
-
-    console.log(`Updating profile for user ID: ${userId}`);
-
-    // Security: Prevent sensitive field changes
-    delete updates.role;
-    delete updates.username;
-    delete updates.password;
-    delete updates.id;
-    delete updates._id;
-
-    // Use a robust query that handles both custom id and MongoDB _id
-    const query = { $or: [{ id: userId }] };
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      query.$or.push({ _id: userId });
-    }
-
-    const user = await User.findOneAndUpdate(
-      query,
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
-
-    if (!user) {
-      console.warn(`User not found for update: ${userId}`);
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    console.log(`Profile updated successfully for user: ${user.username}`);
-    res.json(normalizeUser(user));
-  } catch (err) {
-    console.error('Profile update error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 3. /users - User Management
 app.route('/users')
   .get(auth, async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-
-    if (isAdminRole(req.user.role)) {
-      return res.json((await User.find()).map(normalizeUser));
-    }
-
-    const users = await User.find({}, { id: 1, username: 1, role: 1, name: 1, email: 1, _id: 0 });
-    return res.json(users.map(normalizeUser).filter((user) => !isAdminRole(user.role)));
+    try {
+      const users = await User.find({}, { password: 0 });
+      res.json(users.map(normalizeUser));
+    } catch (err) { res.status(500).json({ error: err.message }); }
   })
   .post(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    
     try {
-      const users = Array.isArray(req.body) ? req.body : req.body.users;
-      if (!users || !Array.isArray(users)) {
-        return res.status(400).json({ error: 'Invalid user data provided' });
-      }
-
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      const { users } = req.body;
       for (const u of users) {
-        const updateData = { ...u };
-        
-        // Handle password hashing if provided and not already hashed
-        if (updateData.password && updateData.password.trim() !== '') {
-          // Only hash if it doesn't look like a bcrypt hash
-          if (!updateData.password.match(/^\$2[ayb]\$.{56}$/)) {
-            updateData.password = await bcrypt.hash(updateData.password, 10);
-          }
-        } else {
-          // If password is empty/null, don't update it
-          delete updateData.password;
+        if (u.password && !u.password.startsWith('$2a$')) {
+          u.password = await bcrypt.hash(u.password, 10);
         }
-
-        // Clean up fields that shouldn't be in the DB
-        delete updateData._id;
-
-        // Ensure we have an ID to match
-        if (!updateData.id) continue;
-
-        await User.findOneAndUpdate(
-          { id: updateData.id }, 
-          { $set: updateData }, 
-          { upsert: true, new: true, runValidators: true }
-        );
+        await User.findOneAndUpdate({ id: u.id }, u, { upsert: true });
       }
       res.json({ success: true });
-    } catch (err) {
-      console.error('Save users error:', err);
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   })
   .delete(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
     try {
-      const { id } = req.query;
-      if (!id) return res.status(400).json({ error: 'User ID is required' });
-
-      // Support both custom id and MongoDB _id
-      const query = { $or: [{ id }] };
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        query.$or.push({ _id: id });
-      }
-
-      await User.deleteOne(query);
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      await User.deleteOne({ id: req.query.id });
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-// 4. /curriculums - Curriculum Management
-app.route('/curriculums')
-  .get(async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    res.json(await Curriculum.find());
-  })
-  .post(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
-    await Curriculum.findOneAndUpdate({ classLevel: req.body.classLevel, subject: req.body.subject }, req.body, { upsert: true });
-    res.json({ success: true });
-  });
-
-// 5. /exam-configs - Exam Configuration
-app.route('/exam-configs')
-  .get(async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    res.json(await ExamConfig.find());
-  })
-  .post(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
-    await ExamConfig.deleteMany({});
-    await ExamConfig.insertMany(req.body.configs);
-    res.json({ success: true });
-  });
-
-// 6. /paper-types - Paper Type Management
-app.route('/paper-types')
-  .get(async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    res.json(await PaperType.find());
-  })
-  .post(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
-    await PaperType.deleteMany({});
-    await PaperType.insertMany(req.body.types);
-    res.json({ success: true });
-  });
-
-// 7. /discourses - Discourse Management
-app.route('/discourses')
-  .get(async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    res.json(await Discourse.find());
-  })
-  .post(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
-    await Discourse.deleteMany({});
-    await Discourse.insertMany(req.body.discourses);
-    res.json({ success: true });
-  });
-
-// 8. /settings - System Settings
-app.route('/settings')
-  .get(async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const settings = await SystemSettings.findOne();
-    if (!settings) return res.status(404).json({ error: 'System settings were not found in MongoDB.' });
-    res.json(settings);
-  })
-  .post(auth, async (req, res) => {
-    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
-    if (!isDbReady()) return serviceUnavailable(res);
-    await SystemSettings.findOneAndUpdate({}, req.body, { upsert: true });
-    res.json({ success: true });
-  });
-
-// 9. /blueprints - Blueprint Creation
-app.post('/blueprints', auth, async (req, res) => {
+// 2. Blueprint Routes
+app.get('/blueprints/all', auth, async (req, res) => {
   try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    await Blueprint.findOneAndUpdate({ id: req.body.id }, req.body, { upsert: true });
-    res.json({ success: true });
+    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+    // Optimize: Exclude large 'items' and 'massViewHeader' fields for listing
+    const bps = await Blueprint.find({}, { items: 0, massViewHeader: 0 });
+    res.json(bps.map(normalizeBlueprint));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 10. /blueprints/:id - Blueprint Retrieval & Deletion
-app.get('/blueprints/single/:id', async (req, res) => {
+app.get('/blueprints/single/:id', auth, async (req, res) => {
   try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
     const bp = await Blueprint.findOne({ id: req.params.id });
     if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    
+    const isOwner = bp.ownerId === req.user.id;
+    const isAdmin = isAdminRole(req.user.role);
+    const isShared = await SharedBlueprint.exists({ blueprintId: bp.id, sharedWithUserId: req.user.id });
+
+    if (!isOwner && !isAdmin && !isShared) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     res.json(normalizeBlueprint(bp));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.route('/blueprints/:id')
+app.get('/blueprints/:userId', auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { type } = req.query;
+    
+    if (userId !== req.user.id && !isAdminRole(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    let bps;
+    if (type === 'shared') {
+      const sharedRefs = await SharedBlueprint.find({ sharedWithUserId: userId });
+      const bpIds = sharedRefs.map(s => s.blueprintId);
+      bps = await Blueprint.find({ id: { $in: bpIds } }, { items: 0, massViewHeader: 0 });
+    } else {
+      bps = await Blueprint.find({ ownerId: userId }, { items: 0, massViewHeader: 0 });
+    }
+    res.json(bps.map(normalizeBlueprint));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.route('/blueprints')
   .get(auth, async (req, res) => {
     try {
-      if (!(await ensureDbReady())) return serviceUnavailable(res);
-
-      const { type } = req.query;
-      if (type === 'shared') {
-        const shares = await SharedBlueprint.find({ sharedWithUserId: req.params.id });
-        const shareIds = shares.map((s) => String(s.blueprintId));
-        return res.json((await Blueprint.find()).map(normalizeBlueprint).filter((bp) => shareIds.includes(String(bp.id))));
-      }
-      if (isAdminRole(req.user.role) && req.params.id === 'all') {
-        return res.json((await Blueprint.find()).map(normalizeBlueprint));
-      }
-      const allBlueprints = (await Blueprint.find()).map(normalizeBlueprint);
-      res.json(allBlueprints.filter((bp) => idsMatch(bp.ownerId, req.params.id)));
+      const query = isAdminRole(req.user.role) ? {} : { ownerId: req.user.id };
+      const bps = await Blueprint.find(query);
+      res.json(bps.map(normalizeBlueprint));
     } catch (err) { res.status(500).json({ error: err.message }); }
   })
-  .delete(auth, async (req, res) => {
+  .post(auth, async (req, res) => {
     try {
-      if (!(await ensureDbReady())) return serviceUnavailable(res);
-      await Blueprint.deleteOne({ id: req.params.id });
-      await SharedBlueprint.deleteMany({ blueprintId: req.params.id });
+      const isAdmin = isAdminRole(req.user.role);
+      const data = { ...req.body };
+      
+      // Force ownerId only for non-admins
+      if (!isAdmin) {
+        data.ownerId = req.user.id;
+      } else if (!data.ownerId) {
+        // Fallback for admins if not specified
+        data.ownerId = req.user.id;
+      }
+
+      if (data.id) {
+        const existing = await Blueprint.findOne({ id: data.id });
+        if (existing && existing.ownerId !== req.user.id && !isAdmin) {
+          return res.status(403).json({ error: 'Not authorized' });
+        }
+      }
+      const bp = await Blueprint.findOneAndUpdate({ id: data.id }, data, { upsert: true, new: true });
+      res.json(normalizeBlueprint(bp));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+app.delete('/blueprints/:id', auth, async (req, res) => {
+  try {
+    const bp = await Blueprint.findOne({ id: req.params.id });
+    if (!bp) return res.status(404).json({ error: 'Not found' });
+    if (bp.ownerId !== req.user.id && !isAdminRole(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    await Blueprint.deleteOne({ id: req.params.id });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 3. Curriculum, Config & Settings Routes
+app.route('/curriculums')
+  .get(async (req, res) => {
+    try { res.json(await Curriculum.find()); } catch (err) { res.status(500).json({ error: err.message }); }
+  })
+  .post(auth, async (req, res) => {
+    try {
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      const data = req.body;
+      const result = await Curriculum.findOneAndUpdate(
+        { classLevel: data.classLevel, subject: data.subject },
+        data,
+        { upsert: true, new: true }
+      );
+      res.json(result);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+app.route('/exam-configs')
+  .get(async (req, res) => {
+    try { res.json(await ExamConfig.find()); } catch (err) { res.status(500).json({ error: err.message }); }
+  })
+  .post(auth, async (req, res) => {
+    try {
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      const { configs } = req.body;
+      for (const c of configs) {
+        await ExamConfig.findOneAndUpdate({ id: c.id }, c, { upsert: true });
+      }
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-// 11. /share - Sharing System
-app.route(['/share', '/share/:bId', '/share/:bId/:uId'])
-  .get(auth, async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const shares = await SharedBlueprint.find({ blueprintId: req.params.bId });
-    const shareUserIds = shares.map((s) => String(s.sharedWithUserId));
-    res.json((await User.find()).map(normalizeUser).filter((user) => shareUserIds.includes(String(user.id))));
+app.route('/settings')
+  .get(async (req, res) => {
+    try {
+      let settings = await SystemSettings.findOne();
+      if (!settings) settings = await SystemSettings.create({ cognitiveProcesses: [], knowledgeLevels: [], itemFormats: [] });
+      res.json(settings);
+    } catch (err) { res.status(500).json({ error: err.message }); }
   })
   .post(auth, async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const s = req.body;
-    await SharedBlueprint.findOneAndUpdate({ blueprintId: s.blueprintId, sharedWithUserId: s.sharedWithUserId }, s, { upsert: true });
-    await Blueprint.findOneAndUpdate({ id: s.blueprintId }, { $addToSet: { sharedWith: s.sharedWithUserId } });
-    res.json({ success: true });
+    try {
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      const settings = await SystemSettings.findOneAndUpdate({}, req.body, { upsert: true, new: true });
+      res.json(settings);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+app.route('/paper-types')
+  .get(async (req, res) => {
+    try { res.json(await PaperType.find()); } catch (err) { res.status(500).json({ error: err.message }); }
   })
-  .delete(auth, async (req, res) => {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    res.json({ success: true });
+  .post(auth, async (req, res) => {
+    try {
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      const { types } = req.body;
+      for (const t of types) {
+        await PaperType.findOneAndUpdate({ id: t.id }, t, { upsert: true });
+      }
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-// 12. /health - System Health
-app.get('/health', (req, res) => {
-  const healthy = isDbReady();
-  return res.status(healthy ? 200 : 503).json({
-    status: healthy ? 'ok' : 'error',
-    database: healthy ? 'connected' : 'disconnected',
-    state: dbConnectionState,
-    error: healthy ? null : dbUnavailableMessage(),
-    time: new Date()
+app.route('/discourses')
+  .get(async (req, res) => {
+    try { res.json(await Discourse.find()); } catch (err) { res.status(500).json({ error: err.message }); }
+  })
+  .post(auth, async (req, res) => {
+    try {
+      if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+      const { discourses } = req.body;
+      for (const d of discourses) {
+        await Discourse.findOneAndUpdate({ id: d.id }, d, { upsert: true });
+      }
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
-});
 
-// EMERGENCY: Admin password reset route (visit /api/reset-admin to use)
-app.get('/reset-admin', async (req, res) => {
+// 4. Sharing Routes
+app.post('/share', auth, async (req, res) => {
   try {
-    if (!(await ensureDbReady())) return serviceUnavailable(res);
-    const hashedPassword = await bcrypt.hash('admin', 10);
-    await User.findOneAndUpdate(
-      { username: 'admin' },
-      { password: hashedPassword, role: 'ADMIN', name: 'System Administrator' },
-      { upsert: true }
-    );
-    res.send('Admin password has been reset to "admin". Please delete this route after use for security.');
-  } catch (err) { res.status(500).send(err.message); }
+    const data = req.body;
+    const result = await SharedBlueprint.findOneAndUpdate({ blueprintId: data.blueprintId, sharedWithUserId: data.sharedWithUserId }, data, { upsert: true, new: true });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+app.get('/share/:blueprintId', auth, async (req, res) => {
+  try {
+    const shares = await SharedBlueprint.find({ blueprintId: req.params.blueprintId });
+    const userIds = shares.map(s => s.sharedWithUserId);
+    const users = await User.find({ id: { $in: userIds } }, { password: 0 });
+    res.json(users.map(normalizeUser));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/share/:blueprintId/:userId', auth, async (req, res) => {
+  try {
+    await SharedBlueprint.deleteOne({ blueprintId: req.params.blueprintId, sharedWithUserId: req.params.userId });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/heartbeat', auth, async (req, res) => {
+  try {
+    await User.findOneAndUpdate({ id: req.user.id }, { lastActive: new Date() });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/live-users', auth, async (req, res) => {
+  try {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const users = await User.find({ lastActive: { $gte: fiveMinutesAgo } }, { password: 0 });
+    res.json(users.map(normalizeUser));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 5. Init Route
+app.get('/init', async (req, res) => {
+  try {
+    if (!isDbReady()) return serviceUnavailable(res);
+    const [curriculums, users, examConfigs, settings, blueprints, questionPaperTypes, discourses, sharedBlueprints] = await Promise.all([
+      Curriculum.find(),
+      User.find({}, { password: 0 }),
+      ExamConfig.find(),
+      SystemSettings.findOne().then(s => s || SystemSettings.create({ cognitiveProcesses: [], knowledgeLevels: [], itemFormats: [] })),
+      Blueprint.find(),
+      PaperType.find(),
+      Discourse.find(),
+      SharedBlueprint.find()
+    ]);
+
+    res.json({
+      curriculums,
+      users: users.map(normalizeUser),
+      examConfigs,
+      settings,
+      blueprints: blueprints.map(normalizeBlueprint),
+      questionPaperTypes,
+      discourses,
+      sharedBlueprints
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/blueprints/all', auth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.user.role)) return res.status(403).json({ error: 'Admin only' });
+    const bps = await Blueprint.find();
+    res.json(bps.map(normalizeBlueprint));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 6. Export Routes (Secured)
+app.post('/export/pdf', auth, async (req, res) => {
+  const { id, baseUrl, tab, mode } = req.body;
+  if (!validateBaseUrl(baseUrl)) return res.status(400).json({ error: 'Invalid base URL provided' });
+
+  try {
+    const bp = await Blueprint.findOne({ id });
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found' });
+    
+    const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+
+    // Set auth token in localStorage before navigation
+    // Need to be on the origin to set localStorage
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      await page.evaluate((t) => {
+        localStorage.setItem('blueprint_token', t);
+      }, token);
+    }
+
+    const query = new URLSearchParams({ tab: tab || 'report1', mode: mode || 'admin' });
+    const printUrl = `${baseUrl}/print-view/${id}?${query.toString()}`;
+    
+    await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForSelector('.print-root', { timeout: 60000 });
+    const pdf = await page.pdf({ 
+      preferCSSPageSize: true,
+      printBackground: false,
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate: `
+        <div style="font-size: 10px; text-align: center; width: 100%; color: #000; font-family: 'Times New Roman', serif; padding-bottom: 5mm;">
+          <span class="pageNumber"></span>
+        </div>
+      `,
+      margin: {
+        top: '0mm', // CSS @page handles margins
+        bottom: '0mm',
+        left: '0mm',
+        right: '0mm'
+      }
+    });
+    await browser.close();
+
+    res.contentType('application/pdf');
+    res.send(pdf);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 4. System Admin Routes
+app.get('/health', (req, res) => {
+  res.json({ status: isDbReady() ? 'ok' : 'error', time: new Date() });
+});
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Blueprint API is running' });
+});
+
+// Cleanup: Removed insecure /reset-admin route
 
 module.exports = app;
 
 if (require.main === module) {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
-    console.log('Press Ctrl+C to stop the server');
   });
-
-  server.on('error', (err) => {
-    console.error('Server failed to start:', err.message);
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is already in use. Try using a different port.`);
-    }
-  });
-
-  process.on('SIGINT', () => {
-    console.log('Shutting down server...');
-    server.close(() => {
-      console.log('Server shut down.');
-      process.exit(0);
-    });
-  });
-
-  // Keep-alive just in case
-  setInterval(() => { }, 60000);
+  
+  const connectToMongo = async () => {
+    if (!MONGO_URI) return console.error('MONGO_URI missing');
+    try {
+      await mongoose.connect(MONGO_URI);
+      console.log('Connected to MongoDB');
+    } catch (err) { console.error('MongoDB error:', err.message); }
+  };
+  connectToMongo();
 }

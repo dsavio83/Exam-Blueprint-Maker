@@ -1,11 +1,14 @@
 const mongoose = require('mongoose');
 
+// Helper to disable strict:false and ensure data integrity
+const schemaOptions = { strict: true, timestamps: true };
+
 const userSchema = new mongoose.Schema({
-  id: String,
-  username: { type: String, unique: true },
+  id: { type: String, required: true, unique: true },
+  username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: String,
-  name: String,
+  role: { type: String, enum: ['ADMIN', 'USER'], default: 'USER' },
+  name: { type: String, required: true },
   email: String,
   phoneNumber: String,
   pen: String,
@@ -16,6 +19,7 @@ const userSchema = new mongoose.Schema({
   experience: String,
   schoolName: String,
   schoolCode: String,
+  status: { type: String, enum: ['active', 'blocked'], default: 'active' },
   district: String,
   educationalDistrict: String,
   subdistrict: String,
@@ -27,25 +31,32 @@ const userSchema = new mongoose.Schema({
   basicPay: Number,
   staffId: String,
   brcName: String,
-  schoolType: String
-}, { strict: false });
+  schoolType: String,
+  lastActive: Date
+}, schemaOptions);
 
 const curriculumSchema = new mongoose.Schema({
-  classLevel: mongoose.Schema.Types.Mixed,
-  subject: String,
-  units: Array
-}, { strict: false });
+  classLevel: { type: mongoose.Schema.Types.Mixed, required: true },
+  subject: { type: String, required: true },
+  units: [{
+    id: String,
+    unitNumber: Number,
+    name: String,
+    subUnits: Array,
+    learningOutcomes: String
+  }]
+}, schemaOptions);
 
 const examConfigSchema = new mongoose.Schema({
-  id: String,
+  id: { type: String, required: true, unique: true },
   classLevel: mongoose.Schema.Types.Mixed,
   subject: String,
   term: String,
   weightages: Array
-}, { strict: false });
+}, schemaOptions);
 
 const blueprintSchema = new mongoose.Schema({
-  id: { type: String, unique: true },
+  id: { type: String, required: true, unique: true },
   examTerm: String,
   classLevel: mongoose.Schema.Types.Mixed,
   subject: String,
@@ -56,46 +67,47 @@ const blueprintSchema = new mongoose.Schema({
   createdAt: String,
   setId: String,
   academicYear: String,
-  ownerId: String,
+  ownerId: { type: String, required: true },
   sharedWith: [String],
-  isLocked: Boolean,
-  isHidden: Boolean,
-  isConfirmed: Boolean,
-  isAdminAssigned: Boolean
-}, { strict: false });
+  isLocked: { type: Boolean, default: false },
+  isHidden: { type: Boolean, default: false },
+  isConfirmed: { type: Boolean, default: false },
+  isAdminAssigned: { type: Boolean, default: false },
+  massViewHeader: String
+}, schemaOptions);
 
 const paperTypeSchema = new mongoose.Schema({
-  id: String,
+  id: { type: String, required: true, unique: true },
   name: String,
   totalMarks: Number,
   description: String,
   sections: Array
-}, { strict: false });
+}, schemaOptions);
 
 const discourseSchema = new mongoose.Schema({
-  id: String,
+  id: { type: String, required: true, unique: true },
   subject: String,
   marks: Number,
   name: String,
   description: String,
   cognitiveProcess: String,
   rubrics: Array
-}, { strict: false });
+}, schemaOptions);
 
 const systemSettingsSchema = new mongoose.Schema({
   cognitiveProcesses: Array,
   knowledgeLevels: Array,
   itemFormats: Array
-}, { strict: false });
+}, schemaOptions);
 
 const sharedBlueprintSchema = new mongoose.Schema({
-  id: String,
+  id: { type: String, required: true, unique: true },
   blueprintId: String,
   ownerId: String,
   sharedWithUserId: String,
   sharedAt: String,
   canEdit: Boolean
-}, { strict: false });
+}, schemaOptions);
 
 module.exports = {
   User: mongoose.model('User', userSchema),

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Role, User } from './types';
-import { initDB, logout, validateSession } from './services/db';
+import { initDB, logout, validateSession, heartbeat } from './services/db';
 import { RefreshCw } from 'lucide-react';
 import Login from './components/Login';
 import AdminPortal from './components/AdminPortal';
@@ -16,6 +16,20 @@ const App = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [initialized, setInitialized] = useState(false);
     const [initError, setInitError] = useState('');
+
+    // Heartbeat to track live users
+    useEffect(() => {
+        if (!currentUser) return;
+
+        // Send heartbeat immediately on mount/login
+        heartbeat();
+
+        const interval = setInterval(() => {
+            heartbeat();
+        }, 30000); // Every 30 seconds
+
+        return () => clearInterval(interval);
+    }, [currentUser]);
 
     // Initialize database connectivity and check for saved session
     useEffect(() => {

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
-    Trash2, Plus, Edit2, Eye, EyeOff
+    Trash2, Plus, Edit2, Eye, EyeOff, Shield, ShieldOff
 } from 'lucide-react';
 import {
     User, Role
@@ -21,7 +21,12 @@ const AdminUserManager = () => {
         password: '',
         name: '',
         email: '',
-        role: Role.USER
+        pen: '',
+        schoolName: '',
+        schoolCode: '',
+        basicPay: 0,
+        role: Role.USER,
+        status: 'active'
     });
 
     useEffect(() => {
@@ -50,7 +55,8 @@ const AdminUserManager = () => {
             }
             userToSave = {
                 ...formData as User,
-                id: Math.random().toString(36).substr(2, 9)
+                id: Math.random().toString(36).substr(2, 9),
+                status: formData.status || 'active'
             };
         }
 
@@ -66,7 +72,7 @@ const AdminUserManager = () => {
             getUsers().then(setUserList);
             setIsFormOpen(false);
             setEditingUser(null);
-            setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
+            setFormData({ username: '', password: '', name: '', email: '', pen: '', schoolName: '', schoolCode: '', basicPay: 0, role: Role.USER, status: 'active' });
         }).catch(err => {
             console.error("Save users error:", err);
             Swal.fire("Error", "Failed to save user.", "error");
@@ -76,8 +82,27 @@ const AdminUserManager = () => {
 
     const handleEdit = (user: User) => {
         setEditingUser(user);
-        setFormData({ ...user, password: '' });
+        setFormData({ ...user, password: '', status: user.status || 'active' });
         setIsFormOpen(true);
+    };
+
+    const toggleStatus = (user: User) => {
+        const newStatus: 'active' | 'blocked' = user.status === 'blocked' ? 'active' : 'blocked';
+        const updatedUser = { ...user, status: newStatus };
+        
+        saveUsers([updatedUser]).then(() => {
+            Swal.fire({
+                title: "Updated!",
+                text: `User is now ${newStatus}.`,
+                icon: "success",
+                timer: 1500,
+                showConfirmButton: false
+            });
+            getUsers().then(setUserList);
+        }).catch(err => {
+            console.error("Toggle status error:", err);
+            Swal.fire("Error", "Failed to update status.", "error");
+        });
     };
 
     const handleDelete = (id: string) => {
@@ -95,7 +120,7 @@ const AdminUserManager = () => {
                 deleteUser(id).then(() => {
                     Swal.fire({
                         title: "Deleted!",
-                        text: "User has been removed.",
+                        text: "User has been removed from system.",
                         icon: "success",
                         confirmButtonColor: "#2563eb"
                     });
@@ -119,7 +144,7 @@ const AdminUserManager = () => {
                 <button
                     onClick={() => {
                         setEditingUser(null);
-                        setFormData({ username: '', password: '', name: '', email: '', role: Role.USER });
+                        setFormData({ username: '', password: '', name: '', email: '', pen: '', schoolName: '', schoolCode: '', basicPay: 0, role: Role.USER });
                         setIsFormOpen(true);
                     }}
                     className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 active:scale-95"
@@ -151,6 +176,15 @@ const AdminUserManager = () => {
                                 />
                             </div>
                             <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">PEN Number (Optional)</label>
+                                <input
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-blue-600"
+                                    value={formData.pen || ''}
+                                    onChange={e => setFormData({ ...formData, pen: e.target.value })}
+                                    placeholder="Enter PEN number"
+                                />
+                            </div>
+                            <div className="space-y-2">
                                 <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
                                 <input
                                     className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-medium text-gray-600"
@@ -158,6 +192,34 @@ const AdminUserManager = () => {
                                     value={formData.email || ''}
                                     onChange={e => setFormData({ ...formData, email: e.target.value })}
                                     placeholder="email@example.com"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">School Name</label>
+                                <input
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-gray-700"
+                                    value={formData.schoolName || ''}
+                                    onChange={e => setFormData({ ...formData, schoolName: e.target.value })}
+                                    placeholder="Enter school name"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">School Code</label>
+                                <input
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-gray-700"
+                                    value={formData.schoolCode || ''}
+                                    onChange={e => setFormData({ ...formData, schoolCode: e.target.value })}
+                                    placeholder="Enter school code"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Basic Pay</label>
+                                <input
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-gray-700"
+                                    type="number"
+                                    value={formData.basicPay || ''}
+                                    onChange={e => setFormData({ ...formData, basicPay: Number(e.target.value) })}
+                                    placeholder="Enter basic pay"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -201,7 +263,18 @@ const AdminUserManager = () => {
                                     onChange={e => setFormData({ ...formData, role: e.target.value as Role })}
                                 >
                                     <option value={Role.ADMIN}>Administrator (Full Access)</option>
-                                    <option value={Role.USER}>Standard User (Limited Access)</option>
+                                    <option value={Role.USER}>Standard User (Teacher)</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Account Status *</label>
+                                <select
+                                    className="w-full text-sm border border-gray-100 rounded-2xl p-4 bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-200 outline-none transition-all font-bold text-gray-700 cursor-pointer appearance-none"
+                                    value={formData.status}
+                                    onChange={e => setFormData({ ...formData, status: e.target.value as 'active' | 'blocked' })}
+                                >
+                                    <option value="active">Active (Full Access)</option>
+                                    <option value="blocked">Blocked (No Access)</option>
                                 </select>
                             </div>
                         </div>
@@ -234,6 +307,7 @@ const AdminUserManager = () => {
                                 <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest">User Details</th>
                                 <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest">Username</th>
                                 <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest">Role</th>
+                                <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest text-center">Status</th>
                                 <th className="p-5 font-black text-[10px] text-gray-400 uppercase tracking-widest text-right">Actions</th>
                             </tr>
                         </thead>
@@ -257,8 +331,22 @@ const AdminUserManager = () => {
                                             {u.role}
                                         </span>
                                     </td>
+                                    <td className="p-5 text-center">
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${u.status === 'blocked' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                            {u.status || 'active'}
+                                        </span>
+                                    </td>
                                     <td className="p-5">
                                         <div className="flex justify-end gap-2">
+                                            {u.username !== 'admin' && (
+                                                <button 
+                                                    onClick={() => toggleStatus(u)} 
+                                                    className={`p-2 rounded-xl transition-all ${u.status === 'blocked' ? 'text-green-400 hover:text-green-600 hover:bg-green-50' : 'text-orange-400 hover:text-orange-600 hover:bg-orange-50'}`} 
+                                                    title={u.status === 'blocked' ? "Activate User" : "Block User"}
+                                                >
+                                                    {u.status === 'blocked' ? <Shield size={18} /> : <ShieldOff size={18} />}
+                                                </button>
+                                            )}
                                             <button onClick={() => handleEdit(u)} className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit User">
                                                 <Edit2 size={18} />
                                             </button>
@@ -289,9 +377,14 @@ const AdminUserManager = () => {
                                         <div className="text-[11px] text-gray-400">{u.email || 'No email provided'}</div>
                                     </div>
                                 </div>
-                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-                                    {u.role}
-                                </span>
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                        {u.role}
+                                    </span>
+                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${u.status === 'blocked' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                        {u.status || 'active'}
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="flex justify-between items-center pt-2">
@@ -300,6 +393,14 @@ const AdminUserManager = () => {
                                     <span className="font-mono text-sm font-bold text-gray-500">{u.username}</span>
                                 </div>
                                 <div className="flex gap-2">
+                                    {u.username !== 'admin' && (
+                                        <button 
+                                            onClick={() => toggleStatus(u)} 
+                                            className={`p-2.5 rounded-xl ${u.status === 'blocked' ? 'text-green-500 bg-green-50' : 'text-orange-500 bg-orange-50'}`}
+                                        >
+                                            {u.status === 'blocked' ? <Shield size={18} /> : <ShieldOff size={18} />}
+                                        </button>
+                                    )}
                                     <button onClick={() => handleEdit(u)} className="p-2.5 text-blue-500 bg-blue-50 rounded-xl">
                                         <Edit2 size={18} />
                                     </button>

@@ -1,10 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import Swal from 'sweetalert2';
-import { Check, Copy, FileText, Save, Loader2 } from 'lucide-react';
+import { Check, Copy, FileText, Save, Loader2, RefreshCw } from 'lucide-react';
 import { getBlueprints, getQuestionPaperTypes, saveBlueprint } from '../services/db';
 import { Blueprint, QuestionPaperType } from '../types';
-
-const QUESTION_SEPARATOR = '============================================================';
 
 const AdminQuestionConsolidator = () => {
     const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
@@ -17,48 +15,31 @@ const AdminQuestionConsolidator = () => {
     
     const editorRef = useRef<HTMLDivElement>(null);
 
-
     const formatText = (text: string) => {
         if (!text) return '';
-        // Split by lines to preserve structure
         return text.split('\n').map(line => {
-            // Convert Tab character to consistent indentation spaces
             const tabbedLine = line.replace(/\t/g, '    ');
             if (!tabbedLine.trim()) return '';
-            
-            // Wrap only alphanumeric blocks. 
-            // Spaces and Tamil characters stay outside spans to avoid font-switching gaps.
             return tabbedLine.replace(/([A-Za-z0-9\-\:\(\)\.\,\|]+)/g, '<span style="font-family: \'Times New Roman\', serif;">$1</span>');
         }).join('<br/>');
     };
 
     const handlePaste = (e: React.ClipboardEvent) => {
         e.preventDefault();
-        // Get only the plain text to strip all external HTML/CSS mess
         const text = e.clipboardData.getData('text/plain');
         if (!text) return;
-
-        // Apply our custom formatting (Tamil vs English fonts)
         const formattedHtml = formatText(text);
-        
-        // Insert at current cursor position
         document.execCommand('insertHTML', false, formattedHtml);
-        
-        // Trigger state update
         if (editorRef.current) {
             setWorkingText(editorRef.current.innerHTML);
         }
     };
-
-
 
     const refreshData = async () => {
         setIsRefreshing(true);
         try {
             const [bps, pts] = await Promise.all([getBlueprints('all'), getQuestionPaperTypes()]);
             const filtered = (bps || []).filter(bp => bp.isConfirmed || bp.isAdminAssigned);
-            
-            // Ensure unique by Exam properties (Class, Subject, Set, Term, Academic Year)
             const uniqueMap = new Map();
             filtered.forEach(bp => {
                 const key = `${bp.classLevel}-${bp.subject}-${bp.setId || 'Set A'}-${bp.examTerm}-${bp.academicYear || '2026-27'}`;
@@ -66,9 +47,7 @@ const AdminQuestionConsolidator = () => {
                     uniqueMap.set(key, bp);
                 }
             });
-            const unique = Array.from(uniqueMap.values());
-            
-            setBlueprints(unique);
+            setBlueprints(Array.from(uniqueMap.values()));
             setPaperTypes(pts || []);
         } finally {
             setIsRefreshing(false);
@@ -80,18 +59,173 @@ const AdminQuestionConsolidator = () => {
     const selectedBlueprint = useMemo(() => blueprints.find(bp => bp.id === selectedBlueprintId), [blueprints, selectedBlueprintId]);
     const selectedPaperType = useMemo(() => paperTypes.find(t => t.id === selectedBlueprint?.questionPaperTypeId), [paperTypes, selectedBlueprint]);
 
-    useEffect(() => {
-        if (selectedBlueprint && selectedPaperType) {
-            if (selectedBlueprint.massViewHeader) {
-                setWorkingText(selectedBlueprint.massViewHeader);
-            } else {
-                const header = `<div style="text-align: center; margin-bottom: 30px;">
-                    <h1 style="font-family: 'TAU-Urai', serif; font-weight: bold; font-size: 24pt; margin: 0;">சமக்ர சிக்ஷா கேரளம்</h1>
-                </div>`;
-                setWorkingText(header);
+    const formatMark = (m: number) => {
+        const s = m.toString();
+        if (s.endsWith('.5')) {
+            const whole = s.split('.')[0];
+            return whole === '0' ? '½' : `${whole}½`;
+        }
+        return s;
+    };
+
+    const toRoman = (num: number) => {
+        const roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+        return roman[num - 1] || num.toString();
+    };
+
+    const generateHeaderHTML = (bp: Blueprint) => {
+        const setLetter = (bp.setId || 'A').replace(/SET\s+/i, '').trim().charAt(0).toUpperCase();
+        const subject = bp.subject.includes('BT') ? 'BT' : 'AT';
+        const codeMap: Record<string, string> = {
+            '10-AT': 'T1002', '10-BT': 'T1012', '9-AT': 'T902', '9-BT': 'T912', '8-AT': 'T802', '8-BT': 'T812'
+        };
+        const paperCode = codeMap[`${bp.classLevel}-${subject}`] || `T${bp.classLevel}${subject === 'AT' ? '02' : '12'}`;
+
+        const year = (bp.academicYear || '2026-27').replace(/^(\d{4})-(\d{2,4})$/, (_, start, end) => `${start}-${String(end).slice(-2)}`);
+
+        let termHeading = `முதல்பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+        if (bp.examTerm === 'Second Term Summative') termHeading = `இரண்டாம் பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+        if (bp.examTerm === 'Third Term Summative') termHeading = `இறுதிப் பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+
+        const subjectTitle = bp.subject.includes('AT') 
+            ? { tamil: 'தமிழ் முதல் தாள்', eng: 'Tamil Language Paper I (AT)' }
+            : { tamil: 'தமிழ் இரண்டாம் தாள்', eng: 'Tamil Language Paper II (BT)' };
+
+        return `<div style="margin-bottom: 20px; font-family: 'TAU-Paalai', serif; line-height: 1.5; text-align: center;">
+    <div style="position: relative; display: flex; justify-content: center; align-items: center;">
+        <div style="position: absolute; left: 0; top: 0;">
+            <div style="border: 2px solid black; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px;">
+                ${setLetter}
+            </div>
+        </div>
+        <h1 style="font-weight: bold; font-size: 20px; margin: 0; line-height: 1;">சமக்ர சிக்ஷா கேரளம்</h1>
+        <div style="position: absolute; right: 0; top: 0;">
+            <div style="background: black; color: white; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: bold;">
+                ${paperCode}
+            </div>
+        </div>
+    </div>
+    <div style="margin-top: 10px;">
+        <h2 style="font-size: 16px; font-weight: bold; margin: 0;">${termHeading}</h2>
+        <h2 style="font-size: 16px; font-weight: bold; margin: 5px 0 0 0;">${subjectTitle.tamil}</h2>
+        <h3 style="font-size: 14px; font-weight: bold; margin: 5px 0 0 0;">${subjectTitle.eng}</h3>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; font-weight: bold; margin-top: 15px; font-size: 11pt; text-align: left;">
+        <div style="line-height: 1.4;">நேரம்: 90 நிமிடம்<br/>சிந்தனை நேரம் : 15 நிமிடம்</div>
+        <div style="text-align: right; line-height: 1.4;">வகுப்பு: ${bp.classLevel}<br/>மதிப்பெண்: ${formatMark(bp.totalMarks)}</div>
+    </div>
+    </div>
+    <div style="border-top: 1px solid black; border-bottom: 1px solid black; padding: 10px 0; margin-bottom: 20px; font-family: 'TAU-Paalai', serif; font-size: 11pt; font-weight: bold; line-height: 1.5; text-align: left;">
+    <div style="margin-bottom: 5px;">குறிப்புகள்:</div>
+    <div style="margin-left: 20px; font-weight: normal;">
+        - முதல் 15 நிமிடம் சிந்தனை நேரமாகும்.<br/>
+        - வினாக்களை வாசித்து விடைகளை வரிசைப்படுத்த இந்த நேரத்தைப் பயன்படுத்தலாம்.<br/>
+        - வினாக்களையும் குறிப்புகளையும் நன்கு வாசித்துப் புரிந்து விடையளிக்கவும்.<br/>
+        - விடையளிக்கும்போது மதிப்பெண், நேரம் போன்றவற்றை கவனித்து செயல்படவும்.
+    </div>
+    </div>`;
+    };
+
+    const buildFullQuestionPaperHTML = (bp: Blueprint, pt: QuestionPaperType | undefined): string => {
+        // Always regenerate header fresh — never use massViewHeader as the "header" portion
+        // (massViewHeader stores the full paper and would cause duplication if reused here)
+        const header = generateHeaderHTML(bp);
+        const bpItems = bp.items || [];
+
+        let questionContent = '<div style="margin-top: 10px; font-family: \'TAU-Paalai\', serif; font-size: 12pt; text-align: justify; line-height: 1.6;">';
+        let qGlobalNo = 1;
+
+        if (pt && pt.sections && pt.sections.length > 0) {
+            // Preferred path: order items by section, then render grouped by section
+            const sectionIndexMap = new Map(pt.sections.map((section, idx) => [section.id, idx]));
+            const orderedItems = [...bpItems].sort((a, b) => {
+                const aIdx = a.sectionId ? sectionIndexMap.get(a.sectionId) ?? 999 : 999;
+                const bIdx = b.sectionId ? sectionIndexMap.get(b.sectionId) ?? 999 : 999;
+                if (aIdx !== bIdx) return aIdx - bIdx;
+                return bpItems.indexOf(a) - bpItems.indexOf(b);
+            });
+
+            pt.sections.forEach((section, sIdx) => {
+                const sectionItems = orderedItems.filter(item => item.sectionId === section.id);
+                if (sectionItems.length === 0) return;
+
+                const qStart = qGlobalNo;
+                const qEnd = qGlobalNo + sectionItems.length - 1;
+                const rangeStr = qStart === qEnd ? `${qStart} ஆவது வினாவிற்கு` : `${qStart} முதல் ${qEnd} வரையுள்ள`;
+                const roman = toRoman(sIdx + 1);
+
+                let baseInstruction = (section.instruction || '').trim();
+                const isFormatted = /^[IVX]+\./.test(baseInstruction) || /\d+\s*முதல்\s*\d+/.test(baseInstruction);
+
+                if (isFormatted) {
+                    questionContent += `<div style="font-weight: bold; margin-top: 25px; margin-bottom: 15px;">${baseInstruction}</div>`;
+                } else {
+                    questionContent += `<div style="font-weight: bold; margin-top: 25px; margin-bottom: 15px;">${roman}. ${rangeStr} ${baseInstruction} (${formatMark(section.marks)} மதிப்பெண் வீதம்) (${section.count} x ${formatMark(section.marks)} = ${formatMark(section.count * section.marks)})</div>`;
+                }
+
+                sectionItems.forEach((item) => {
+                    const hasChoice = !!item.hasInternalChoice;
+                    questionContent += `<div style="margin-bottom: 12px; padding-left: 20px;">`;
+                    if (hasChoice) {
+                        questionContent += `<div style="font-weight: bold; margin-bottom: 5px;">${qGlobalNo}. ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்.</div>`;
+                        questionContent += `<div style="display: flex; gap: 10px; margin-bottom: 5px;"><div style="min-width: 25px;">அ)</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div>`;
+                        questionContent += `<div style="text-align: center; font-weight: bold; margin: 8px 0; font-style: italic;">(அல்லது)</div>`;
+                        questionContent += `<div style="display: flex; gap: 10px;"><div style="min-width: 25px;">ஆ)</div><div style="flex: 1;">${item.questionTextB || '(Question not entered)'}</div></div>`;
+                    } else {
+                        questionContent += `<div style="display: flex; gap: 10px;"><div style="min-width: 25px; font-weight: bold;">${qGlobalNo}.</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div>`;
+                    }
+                    questionContent += `</div>`;
+                    qGlobalNo++;
+                });
+            });
+
+            // Fallback: render items that had no matching sectionId
+            const matchedIds = new Set(
+                pt.sections.flatMap(s => bpItems.filter(i => i.sectionId === s.id).map(i => i.id))
+            );
+            const unmatched = bpItems.filter(i => !matchedIds.has(i.id));
+            if (unmatched.length > 0) {
+                questionContent += `<div style="font-weight: bold; margin-top: 25px; margin-bottom: 15px;">மேலும் வினாக்கள்</div>`;
+                unmatched.forEach(item => {
+                    questionContent += `<div style="margin-bottom: 12px; padding-left: 20px;"><div style="display: flex; gap: 10px;"><div style="min-width: 25px; font-weight: bold;">${qGlobalNo}.</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div></div>`;
+                    qGlobalNo++;
+                });
             }
+        } else {
+            // Fallback path: no paper type — just list all items sequentially
+            bpItems.forEach(item => {
+                const hasChoice = !!item.hasInternalChoice;
+                questionContent += `<div style="margin-bottom: 12px; padding-left: 20px;">`;
+                if (hasChoice) {
+                    questionContent += `<div style="font-weight: bold; margin-bottom: 5px;">${qGlobalNo}. ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்.</div>`;
+                    questionContent += `<div style="display: flex; gap: 10px; margin-bottom: 5px;"><div style="min-width: 25px;">அ)</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div>`;
+                    questionContent += `<div style="text-align: center; font-weight: bold; margin: 8px 0; font-style: italic;">(அல்லது)</div>`;
+                    questionContent += `<div style="display: flex; gap: 10px;"><div style="min-width: 25px;">ஆ)</div><div style="flex: 1;">${item.questionTextB || '(Question not entered)'}</div></div>`;
+                } else {
+                    questionContent += `<div style="display: flex; gap: 10px;"><div style="min-width: 25px; font-weight: bold;">${qGlobalNo}.</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div>`;
+                }
+                questionContent += `</div>`;
+                qGlobalNo++;
+            });
+        }
+
+        questionContent += '</div>';
+        return header + questionContent;
+    };
+
+    useEffect(() => {
+        // Load question paper whenever a blueprint is selected,
+        // regardless of whether a matching paperType is found
+        if (selectedBlueprint) {
+            setWorkingText(buildFullQuestionPaperHTML(selectedBlueprint, selectedPaperType));
         }
     }, [selectedBlueprint, selectedPaperType]);
+
+    const handleGenerateContent = () => {
+        if (!selectedBlueprint) return;
+        const fullHTML = buildFullQuestionPaperHTML(selectedBlueprint, selectedPaperType);
+        setWorkingText(fullHTML);
+    };
 
     const handleSave = async () => {
         if (!selectedBlueprint || !editorRef.current) return;
@@ -129,6 +263,14 @@ const AdminQuestionConsolidator = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        <button 
+                            onClick={handleGenerateContent} 
+                            disabled={!selectedBlueprint} 
+                            className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl font-bold text-sm hover:bg-amber-600 transition-all disabled:opacity-50 shadow-md"
+                        >
+                            <RefreshCw size={18} />
+                            Load Questions
+                        </button>
                         <button onClick={handleSave} disabled={!selectedBlueprint || isSaving} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-md">
                             {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                             {isSaving ? 'Saving...' : 'Save'}

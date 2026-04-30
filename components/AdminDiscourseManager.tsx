@@ -10,7 +10,7 @@ const AdminDiscourseManager: React.FC = () => {
     const [editingDiscourse, setEditingDiscourse] = useState<Discourse | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterSubject, setFilterSubject] = useState<string>('All');
+    const [filterSubject, setFilterSubject] = useState<string>(SubjectType.TAMIL_AT);
 
     const formatMarkString = (m: number) => {
         const s = m.toString();
@@ -25,7 +25,7 @@ const AdminDiscourseManager: React.FC = () => {
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
 
-        const subjectTitle = filterSubject === 'All' ? 'All Subjects' : filterSubject;
+        const subjectTitle = filterSubject;
         
         let tableRows = '';
         filteredDiscourses.forEach((d, idx) => {
@@ -217,7 +217,7 @@ const AdminDiscourseManager: React.FC = () => {
 
     const filteredDiscourses = discourses.filter(d => {
         const matchesSearch = d.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesSubject = filterSubject === 'All' || d.subject === filterSubject;
+        const matchesSubject = d.subject === filterSubject;
         return matchesSearch && matchesSubject;
     });
 
@@ -293,12 +293,12 @@ const AdminDiscourseManager: React.FC = () => {
                         />
                     </div>
                     <select
-                        className="border p-2 rounded-lg bg-white"
+                        className="border p-2 rounded-lg bg-white font-bold text-blue-700"
                         value={filterSubject}
                         onChange={e => setFilterSubject(e.target.value)}
                     >
-                        <option value="All">All Subjects</option>
-                        {Object.values(SubjectType).map(s => <option key={s} value={s}>{s}</option>)}
+                        <option value={SubjectType.TAMIL_AT}>Tamil AT</option>
+                        <option value={SubjectType.TAMIL_BT}>Tamil BT</option>
                     </select>
                     <button
                         onClick={handlePrint}
@@ -338,11 +338,12 @@ const AdminDiscourseManager: React.FC = () => {
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Subject</label>
                                     <select
-                                        className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        className="border w-full p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold"
                                         value={formData.subject}
                                         onChange={e => setFormData({ ...formData, subject: e.target.value as SubjectType })}
                                     >
-                                        {Object.values(SubjectType).map(s => <option key={s} value={s}>{s}</option>)}
+                                        <option value={SubjectType.TAMIL_AT}>Tamil AT</option>
+                                        <option value={SubjectType.TAMIL_BT}>Tamil BT</option>
                                     </select>
                                 </div>
                                 <div>

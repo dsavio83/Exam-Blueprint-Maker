@@ -7,17 +7,15 @@ import {
 import {
     generateBlueprintTemplate, getCurriculum,
     getDB, initDB, saveBlueprint, deleteBlueprint, getQuestionPaperTypes, getUsers,
-    getDefaultFormat, getDefaultKnowledge, getAllAccessibleBlueprints, filterCurriculumByTerm, getDiscourses
+    getDefaultFormat, getDefaultKnowledge, getAllAccessibleBlueprints, filterCurriculumByTerm, getDiscourses, getBlueprintById
 } from '@/services/db';
 import {
     Trash2, Plus, Download, LogOut, FileText,
     Settings, Edit2, Edit3, Save, Printer, UserCircle, LayoutDashboard, ChevronLeft, List, CheckCircle, RefreshCw, Clock,
     Share2, Lock, ChevronDown, ChevronUp, Sparkles, BookOpen, GraduationCap, Filter
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { useExport } from '@/hooks/useExport';
 import BlueprintSharingModal from './BlueprintSharingModal';
-import { DocExportService } from '@/services/docExport';
 import { QuestionEntryForm } from './QuestionEntryForm';
 import { BlueprintMatrix } from './BlueprintMatrix';
 import { ReportsView } from './ReportsView';
@@ -58,6 +56,7 @@ const calculateAcademicYear = () => {
 };
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateUser }) => {
+    const { handleDownloadPDF: exportPDF, handleDownloadWord: exportWord } = useExport();
     const [view, setView] = useState<'list' | 'create' | 'edit' | 'profile'>('list');
     const [currentBlueprint, setCurrentBlueprint] = useState<Blueprint | null>(null);
     const [selectedClass, setSelectedClass] = useState<ClassLevel>(ClassLevel._10);
@@ -69,7 +68,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     const [isConfigExpanded, setIsConfigExpanded] = useState(true);
     const [sharingBlueprintId, setSharingBlueprintId] = useState<string | null>(null);
     const [filterView, setFilterView] = useState<'all' | 'owned' | 'shared'>('all');
-    const [listCombinedFilter, setListCombinedFilter] = useState<string>('');
+    const [listCombinedFilter, setListCombinedFilter] = useState<string>('all');
     const [isSaving, setIsSaving] = useState(false);
     const [animateHeader, setAnimateHeader] = useState(false);
 
@@ -103,7 +102,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
     const [discourses, setDiscourses] = useState<Discourse[]>([]);
 
-    const printRef = useRef<HTMLDivElement>(null);
     const blueprintRef = useRef<Blueprint | null>(null);
 
     useEffect(() => {
@@ -123,14 +121,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
             // Sort by createdAt descending (latest first)
             const sortedBps = bps.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+            // Filter out hidden ones for UI counts and auto-selection
+            const visibleBps = sortedBps.filter(bp => !bp.isHidden);
+
             setBlueprints(sortedBps);
             setPaperTypes(pts);
             setAllUsers(usersList);
             setDiscourses(discList);
 
-            // Set default filter if not already set
-            if (!listCombinedFilter && sortedBps.length > 0) {
-                const latest = sortedBps[0];
+            // Set default filter if not already set, using only visible blueprints
+            if ((!listCombinedFilter || listCombinedFilter === 'all') && visibleBps.length > 0) {
+                const latest = visibleBps[0];
                 const filterVal = `${latest.examTerm}|${latest.academicYear || '2025-26'}`;
                 setListCombinedFilter(filterVal);
             }
@@ -169,18 +170,28 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
         setView('create');
     };
 
-    const handleEdit = (bp: Blueprint) => {
+    const handleEdit = async (bp: Blueprint) => {
         if (bp.isLocked) {
             Swal.fire("Locked", "This question paper is locked by the admin and cannot be edited.", "info");
             return;
         }
-        setCurrentBlueprint(bp);
-        setSelectedClass(bp.classLevel);
-        setSelectedSubject(bp.subject);
-        setSelectedTerm(bp.examTerm);
-        setSelectedSet(bp.setId || 'Set A');
-        setSelectedPaperType(bp.questionPaperTypeId || '');
-        setView('edit');
+        try {
+            const fullBp = await getBlueprintById(bp.id);
+            if (fullBp) {
+                setCurrentBlueprint(fullBp);
+                setSelectedClass(fullBp.classLevel);
+                setSelectedSubject(fullBp.subject);
+                setSelectedTerm(fullBp.examTerm);
+                setSelectedSet(fullBp.setId || 'Set A');
+                setSelectedPaperType(fullBp.questionPaperTypeId || '');
+                setView('edit');
+            } else {
+                Swal.fire("Error", "Could not load full blueprint data", "error");
+            }
+        } catch (error) {
+            console.error("Failed to load blueprint:", error);
+            Swal.fire("Error", "Failed to load blueprint details", "error");
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -286,88 +297,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
         }
     };
 
-    const handleDownloadPDF = async (type: string = 'all') => {
-        if (!currentBlueprint) return;
-        let pdf = new jsPDF('p', 'mm', 'a4');
-        const MARGIN = 10;
-        const pdfWidthPortrait = 210;
-        const contentWidthPortrait = pdfWidthPortrait - (MARGIN * 2);
-        let firstPage = true;
-        const addPortraitPage = async (id: string) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            if (!firstPage) pdf.addPage('a4', 'p');
-            const canvas = await html2canvas(el, { scale: 2.5, useCORS: true, logging: false, windowWidth: 1024, backgroundColor: '#ffffff' });
-            const img = canvas.toDataURL('image/png');
-            const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
-            pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, imgHeight);
-            firstPage = false;
-        };
-        if (type === 'report2' || type === 'report3') pdf = new jsPDF('l', 'mm', 'a4');
-        if (type === 'all' || type === 'report1') {
-            for (const id of ['report-page-1', 'report-page-2']) await addPortraitPage(id);
-        }
-        if (type === 'all' || type === 'report2') {
-            const pdfWidthLandscape = 297; const pdfHeightLandscape = 210;
-            const contentWidthLandscape = pdfWidthLandscape - (MARGIN * 2);
-            const contentHeightLandscape = pdfHeightLandscape - (MARGIN * 2);
-            let pageIdx = 0;
-            while (true) {
-                const el = document.getElementById(`report-item-analysis-page-${pageIdx}`);
-                if (!el) break;
-                if (!firstPage) pdf.addPage('a4', 'l');
-                const canvas = await html2canvas(el, { scale: 2.5, useCORS: true, logging: false, windowWidth: 1600, backgroundColor: '#ffffff' });
-                const img = canvas.toDataURL('image/png');
-                let imgWidth = contentWidthLandscape;
-                let imgHeight = (canvas.height * imgWidth) / canvas.width;
-                if (imgHeight > contentHeightLandscape) {
-                    const ratio = contentHeightLandscape / imgHeight;
-                    imgHeight = contentHeightLandscape; imgWidth = imgWidth * ratio;
-                    pdf.addImage(img, 'PNG', MARGIN + (contentWidthLandscape - imgWidth) / 2, MARGIN, imgWidth, imgHeight);
-                } else { pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidth, imgHeight); }
-                firstPage = false; pageIdx++;
-            }
-        }
-        if (type === 'all' || type === 'report3') {
-            const matrixEl = document.getElementById('report-page-blueprint-matrix');
-            if (matrixEl) {
-                const canvas = await html2canvas(matrixEl, { scale: 2.5, useCORS: true, logging: false, windowWidth: 1920, backgroundColor: '#ffffff' });
-                const img = canvas.toDataURL('image/png');
-                const pxToMm = 0.264583;
-                const imgWidthMm = 1920 * pxToMm; const imgHeightMm = (canvas.height / 2.5) * pxToMm;
-                const pageWidth = imgWidthMm + (MARGIN * 2); const pageHeight = imgHeightMm + (MARGIN * 2);
-                if (!firstPage) { pdf.addPage([pageWidth, pageHeight], 'l'); } else {
-                    pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: [pageWidth, pageHeight] });
-                }
-                pdf.addImage(img, 'PNG', MARGIN, MARGIN, imgWidthMm, imgHeightMm);
-                firstPage = false;
-            }
-        }
-        if (type === 'all' || type === 'answerKey') {
-            const akEl = document.getElementById('report-answer-key');
-            if (akEl) {
-                if (!firstPage) pdf.addPage('a4', 'p');
-                const canvas = await html2canvas(akEl, { scale: 2.5, useCORS: true, logging: false, windowWidth: 1024, backgroundColor: '#ffffff' });
-                const img = canvas.toDataURL('image/png');
-                const imgHeight = (canvas.height * contentWidthPortrait) / canvas.width;
-                pdf.addImage(img, 'PNG', MARGIN, MARGIN, contentWidthPortrait, imgHeight);
-            }
-        }
-        pdf.save(`blueprint_report_${currentBlueprint.id}.pdf`);
-    };
-
-    const handleDownloadWord = async (type: string = 'all') => {
-        if (!currentBlueprint || !curriculum) return;
-        try {
-            if (type === 'report1' || type === 'all') await DocExportService.exportReport1(currentBlueprint, curriculum);
-            if (type === 'report2' || type === 'all') await DocExportService.exportReport2(currentBlueprint, curriculum);
-            if (type === 'report3' || type === 'all') await DocExportService.exportReport3(currentBlueprint, curriculum);
-            if (type === 'answerKey' || type === 'all') await DocExportService.exportAnswerKey(currentBlueprint, curriculum, discourses);
-        } catch (error) {
-            console.error("Word export failed:", error);
-            Swal.fire("Error", "Failed to export Word document.", "error");
-        }
-    };
+    const handleDownloadPDF = (type: string = 'all') => exportPDF(currentBlueprint, curriculum, type);
+    const handleDownloadWord = (type: string = 'all') => exportWord(currentBlueprint, curriculum, discourses, type);
 
     const updateItem = (id: string, field: keyof BlueprintItem, value: any) => {
         setCurrentBlueprint(prev => {
@@ -422,12 +353,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                     subUnitId: newSubUnitId || newUnit.subUnits[0]?.id || 'unknown',
                     marksPerQuestion: newSection.marks,
                     totalMarks: newSection.marks * item.questionCount,
-                    itemFormat: getDefaultFormat(newSection.marks),
-                    knowledgeLevel: getDefaultKnowledge(newSection.marks),
                     unitIdB: item.hasInternalChoice ? newUnitId : undefined,
-                    subUnitIdB: item.hasInternalChoice ? (item.subUnitIdB || newSubUnitId || newUnit.subUnits[0]?.id || 'unknown') : undefined,
-                    knowledgeLevelB: item.hasInternalChoice ? getDefaultKnowledge(newSection.marks) : undefined,
-                    itemFormatB: item.hasInternalChoice ? getDefaultFormat(newSection.marks) : undefined,
+                    // If moving to a new unit, we should also reset subUnitIdB to a valid subunit for the new unit,
+                    // otherwise keep the existing one.
+                    subUnitIdB: item.hasInternalChoice ? (item.unitId === newUnitId ? (item.subUnitIdB || newSubUnitId || newUnit.subUnits[0]?.id || 'unknown') : (newSubUnitId || newUnit.subUnits[0]?.id || 'unknown')) : undefined,
                 };
             }
             return item;
@@ -436,9 +365,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
     };
 
     // ─── stats ─────────────────────────────────────────────────────────────────
-    const ownedCount = blueprints.filter(b => b.ownerId === user.id).length;
-    const sharedCount = blueprints.filter(b => b.ownerId !== user.id).length;
-    const confirmedCount = blueprints.filter(b => b.isConfirmed).length;
+    const visibleBlueprints = blueprints.filter(b => !b.isHidden);
+    const ownedCount = visibleBlueprints.filter(b => b.ownerId === user.id).length;
+    const sharedCount = visibleBlueprints.filter(b => b.ownerId !== user.id).length;
+    const confirmedCount = visibleBlueprints.filter(b => b.isConfirmed).length;
 
     return (
         <>
@@ -1053,7 +983,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                 }
             `}</style>
 
-            <div className="ud-root no-print-wrapper" ref={printRef}>
+            <div className="ud-root no-print-wrapper">
 
                 {/* ── Header ────────────────────────────────────────────────── */}
                 <header className="ud-header no-print">
@@ -1126,7 +1056,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                         >
                                             <option value="">Select Exam</option>
                                             <option value="all">All Exams & Years</option>
-                                            {Array.from(new Set(blueprints.map(bp => `${bp.examTerm}|${bp.academicYear || '2025-26'}`))).sort().map(opt => {
+                                            {Array.from(new Set(visibleBlueprints.map(bp => `${bp.examTerm}|${bp.academicYear || '2025-26'}`))).sort().map(opt => {
                                                 const [term, year] = opt.split('|');
                                                 return (
                                                     <option key={opt} value={opt}>
@@ -1153,15 +1083,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
 
                             {/* ── Content ── */}
                             {(() => {
-                                const filteredBlueprints = blueprints.filter(bp => {
-                                    if (bp.isHidden) return false;
-                                    if (!listCombinedFilter) return false;
-
+                                const filteredBlueprints = visibleBlueprints.filter(bp => {
                                     const matchesType = filterView === 'owned' ? bp.ownerId === user.id :
                                         filterView === 'shared' ? bp.ownerId !== user.id : true;
 
                                     const currentBpFilter = `${bp.examTerm}|${bp.academicYear || '2025-26'}`;
-                                    const matchesFilter = listCombinedFilter === 'all' || currentBpFilter === listCombinedFilter;
+                                    const matchesFilter = !listCombinedFilter || listCombinedFilter === 'all' || currentBpFilter === listCombinedFilter;
 
                                     return matchesType && matchesFilter;
                                 });
@@ -1449,7 +1376,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout, onUpdateU
                                     onSave={handleSaveToDB}
                                     onRegenerate={handleRegeneratePattern}
                                     onConfirm={handleConfirmPattern}
-                                    onDownloadPDF={(type) => handleDownloadPDF(type as any)}
+                                    onDownloadPDF={(type) => exportPDF(currentBlueprint, curriculum, type as any, false)}
                                     onDownloadWord={handleDownloadWord}
                                     onUpdateReportSettings={(s, p) => setCurrentBlueprint(prev => prev ? { ...prev, reportSettings: s, perReportSettings: p } : null)}
                                     onSaveSettings={handleSaveReportSettings}

@@ -132,7 +132,7 @@ const StructuredAnswerEditor = ({ value, onChange, label = "Answer", placeholder
                             </div>
                             <div className="flex-[9]">
                                 <textarea
-                                    ref={el => textareaRefs.current[idx] = el}
+                                    ref={el => { textareaRefs.current[idx] = el; }}
                                     rows={1}
                                     className={`w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:border-green-400 focus:ring-4 focus:ring-green-50 outline-none transition-all placeholder:text-gray-300 tamil-font resize-none overflow-hidden ${focusedIdx === idx ? 'border-green-200 bg-green-50/10' : 'border-gray-100'}`}
                                     placeholder={placeholder}

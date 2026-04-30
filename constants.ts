@@ -1,4 +1,3 @@
-
 import { ClassGrade, CognitiveLevel, KnowledgeLevelOption, ItemFormatOption, User, Role } from './types';
 
 export const MOCK_USERS: User[] = [

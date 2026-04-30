@@ -15,7 +15,11 @@ const Login = ({ onLogin }: { onLogin: (user: User) => void }) => {
         try {
             const result = await login(username, password);
             if (result.success && result.user) {
-                onLogin(result.user);
+                if (result.user.status === 'blocked') {
+                    setError('Your account is blocked. Please contact the administrator.');
+                } else {
+                    onLogin(result.user);
+                }
             } else {
                 setError(result.error || 'Invalid credentials');
             }

@@ -1,99 +1,17 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { X, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Info, RefreshCw, ClipboardCheck, Save, Sparkles, Plus, Settings, Trash2 } from 'lucide-react';
-
-// ─── Enums ───────────────────────────────────────────────────────────────────
-export enum KnowledgeLevel {
-  BASIC = 'Basic',
-  AVERAGE = 'Average',
-  PROFOUND = 'Profound',
-}
-
-export enum ItemFormat {
-  SR1 = 'SR1 (MCI)',
-  SR2 = 'SR2 (MI)',
-  CRS1 = 'CRS1 (VSA)',
-  CRS2 = 'CRS2 (SA)',
-  CRL = 'CRL (E)',
-}
-
-export enum CognitiveProcess {
-  CP1 = 'Conceptual Clarity',
-  CP2 = 'Application Skill',
-  CP3 = 'Computational Thinking',
-  CP4 = 'Analytical Thinking',
-  CP5 = 'Critical Thinking',
-  CP6 = 'Creative Thinking',
-  CP7 = 'Values/Attitudes'
-}
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-export interface SubUnit {
-  id: string;
-  name: string;
-}
-
-export interface Unit {
-  id: string;
-  unitNumber: number;
-  name: string;
-  subUnits: SubUnit[];
-  learningOutcomes?: string;
-}
-
-export interface Curriculum {
-  classLevel: any;
-  subject: string;
-  units: Unit[];
-}
-
-export interface PaperSection {
-  id: string;
-  marks: number;
-  count: number;
-  optionCount?: number;
-  instruction?: string;
-}
-
-export interface PaperType {
-  id: string;
-  name: string;
-  totalMarks: number;
-  sections: PaperSection[];
-  description?: string;
-}
-
-export interface BlueprintItem {
-  id: string;
-  unitId: string;
-  subUnitId: string;
-  marksPerQuestion: number;
-  totalMarks: number;
-  questionCount: number;
-  sectionId: string;
-  knowledgeLevel: KnowledgeLevel;
-  cognitiveProcess: CognitiveProcess;
-  itemFormat: ItemFormat;
-  hasInternalChoice: boolean;
-  unitIdB?: string;
-  subUnitIdB?: string;
-  knowledgeLevelB?: KnowledgeLevel;
-  cognitiveProcessB?: CognitiveProcess;
-  itemFormatB?: ItemFormat;
-  questionText?: string;
-  answerText?: string;
-}
-
-export interface Blueprint {
-  id: string;
-  classLevel: any;
-  subject: string;
-  totalMarks: number;
-  setId?: string;
-  examTerm?: string;
-  items: BlueprintItem[];
-  isLocked?: boolean;
-  isConfirmed?: boolean;
-}
+import { 
+  KnowledgeLevel, 
+  ItemFormat, 
+  CognitiveProcess, 
+  Blueprint, 
+  Curriculum, 
+  BlueprintItem, 
+  QuestionPatternSection as PaperSection,
+  QuestionPaperType as PaperType,
+  Unit,
+  SubUnit
+} from '@/types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -111,11 +29,21 @@ const KL_COLORS: Record<KnowledgeLevel, { bg: string; border: string; text: stri
 };
 
 const MARK_COLORS: Record<number, string> = {
-  1: 'bg-blue-50 border-blue-200 text-blue-900',
-  2: 'bg-green-50 border-green-200 text-green-900',
-  3: 'bg-yellow-50 border-yellow-200 text-yellow-900',
-  5: 'bg-orange-50 border-orange-200 text-orange-900',
-  6: 'bg-purple-50 border-purple-200 text-purple-900',
+  1: 'bg-blue-100 border-blue-400 text-blue-900',
+  2: 'bg-emerald-100 border-emerald-400 text-emerald-900',
+  3: 'bg-amber-100 border-amber-400 text-amber-900',
+  4: 'bg-indigo-100 border-indigo-400 text-indigo-900',
+  5: 'bg-rose-100 border-rose-400 text-rose-900',
+  6: 'bg-teal-100 border-teal-400 text-teal-900',
+  7: 'bg-purple-100 border-purple-400 text-purple-900',
+  8: 'bg-fuchsia-100 border-fuchsia-400 text-fuchsia-900',
+  10: 'bg-pink-100 border-pink-400 text-pink-900',
+};
+
+const KL_BOTTOM_COLORS: Record<KnowledgeLevel, string> = {
+  [KnowledgeLevel.BASIC]: 'bg-green-500',
+  [KnowledgeLevel.AVERAGE]: 'bg-yellow-500',
+  [KnowledgeLevel.PROFOUND]: 'bg-red-500',
 };
 
 // ─── Language Subject Helper ─────────────────────────────────────────────────
@@ -1264,7 +1192,7 @@ interface ItemCardProps {
   onToggleActive: () => void;
   onUpdate: (id: string, field: keyof BlueprintItem, value: unknown) => void;
   onRemove?: (id: string) => void;
-  onDragStart: (e: React.DragEvent, item: BlueprintItem) => void;
+  onDragStart: (e: React.DragEvent, item: BlueprintItem, isOptionB?: boolean) => void;
   onDragEnd: () => void;
 }
 
@@ -1274,8 +1202,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
   const activeLevel = renderAsOptionB ? (item.knowledgeLevelB || item.knowledgeLevel) : item.knowledgeLevel;
   const activeCP = renderAsOptionB ? (item.cognitiveProcessB || item.cognitiveProcess) : item.cognitiveProcess;
   const activeFormat = renderAsOptionB ? (item.itemFormatB || item.itemFormat) : item.itemFormat;
-  const markColor = MARK_COLORS[item.marksPerQuestion] || 'bg-gray-50 border-gray-200 text-gray-900';
-  const klBorder = `border-l-4 ${KL_COLORS[activeLevel]?.border || 'border-l-gray-300'}`;
+  const markColor = MARK_COLORS[item.marksPerQuestion] || 'bg-gray-100 border-gray-400 text-gray-900';
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [popStyle, setPopStyle] = React.useState<React.CSSProperties>({ top: '100%', left: 0 });
 
@@ -1312,24 +1239,36 @@ const ItemCard: React.FC<ItemCardProps> = ({
   const allowedCPs = getAllowedCPs();
   const optionSubUnits = curriculum.units.find(u => u.id === item.unitId)?.subUnits || [];
 
+  const isSameSubUnit = !item.subUnitIdB || item.subUnitId === item.subUnitIdB;
+  const showInlineOr = item.hasInternalChoice && !renderAsOptionB && isSameSubUnit;
+
   return (
-    <div className="space-y-0.5" ref={cardRef}>
+    <div className="space-y-1" ref={cardRef}>
       {/* Main card */}
       <div
+        id={renderAsOptionB ? `item-b-${item.id}` : `item-${item.id}`}
         draggable={!readOnly}
-        onDragStart={e => onDragStart(e, item)}
+        onDragStart={e => onDragStart(e, item, renderAsOptionB)}
         onDragEnd={onDragEnd}
         onClick={() => { onToggleActive(); !readOnly && onEdit(); }}
-        className={`p-1.5 rounded-sm text-xs border shadow-sm w-full relative transition-all group/item ${markColor} ${klBorder} ${!readOnly ? 'hover:shadow-md cursor-pointer active:scale-95' : 'cursor-default'} ${isActive ? 'ring-2 ring-fuchsia-400 animate-pulse' : ''} ${isDragging ? 'opacity-50' : ''}`}
+        className={`pb-2 p-1.5 rounded-md text-xs border shadow-sm w-full relative transition-all overflow-hidden group/item ${markColor} ${!readOnly ? 'hover:shadow-md cursor-pointer active:scale-95' : 'cursor-default'} ${isActive ? 'ring-2 ring-fuchsia-400 animate-pulse' : ''} ${isDragging ? 'opacity-50' : ''}`}
       >
+        <div className={`absolute bottom-0 left-0 w-full h-1.5 ${KL_BOTTOM_COLORS[activeLevel]} opacity-90`} />
+        
         <div className="font-bold flex justify-between items-center px-0.5">
-          <span>{renderAsOptionB ? 'OR' : `${item.questionCount}Q`}</span>
+          {item.hasInternalChoice || renderAsOptionB ? (
+            <span className="flex items-center gap-0.5 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded-full text-[9px] shadow-sm animate-pulse">
+              <Sparkles size={8} /> OR
+            </span>
+          ) : (
+            <span>{item.questionCount}Q</span>
+          )}
           <span className="text-[10px] opacity-70">({item.totalMarks}M)</span>
         </div>
-        <div className="flex justify-between items-center mt-0.5 gap-1">
-          <KLBadge level={activeLevel} short />
-          <span className="text-[8px] opacity-60">{activeCP.split(' ')[0]}</span>
-          <span className="text-[8px] opacity-60">{activeFormat}</span>
+        <div className="flex justify-between items-center mt-1 gap-1">
+          <span className="font-semibold text-[9px] opacity-80">{activeLevel.substring(0, 3).toUpperCase()}</span>
+          <span className="text-[8px] opacity-70 font-semibold">{activeCP.split(' ')[0]}</span>
+          <span className="text-[8px] opacity-80 font-bold">{activeFormat}</span>
         </div>
         {!readOnly && !renderAsOptionB && (
           <button
@@ -1343,19 +1282,27 @@ const ItemCard: React.FC<ItemCardProps> = ({
       </div>
 
       {/* OR (Option B) card */}
-      {item.hasInternalChoice && !renderAsOptionB && (
+      {showInlineOr && (
         <div
-          className={`p-1.5 rounded-sm text-xs text-center border shadow-sm w-full relative transition-all border-dashed bg-purple-50/60 border-purple-300 group/or ${!readOnly ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
+          id={`item-b-${item.id}`}
+          draggable={!readOnly}
+          onDragStart={e => { e.stopPropagation(); onDragStart(e, item, true); }}
+          onDragEnd={onDragEnd}
+          className={`pb-2 p-1.5 rounded-md text-xs text-center border shadow-sm w-full relative transition-all border-dashed bg-fuchsia-50 border-fuchsia-400 overflow-hidden group/or ${!readOnly ? 'cursor-pointer hover:shadow-md active:scale-95' : 'cursor-default'}`}
           onClick={() => { onToggleActive(); !readOnly && onEdit(); }}
         >
-          <div className="font-bold flex justify-between items-center px-0.5 text-purple-700">
-            <span>OR</span>
+          <div className={`absolute bottom-0 left-0 w-full h-1.5 ${KL_BOTTOM_COLORS[item.knowledgeLevelB || item.knowledgeLevel]} opacity-90`} />
+
+          <div className="font-bold flex justify-between items-center px-0.5 text-fuchsia-800">
+            <span className="flex items-center gap-0.5 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded-full text-[9px] shadow-sm animate-pulse">
+              <Sparkles size={8} /> OR
+            </span>
             <span className="text-[10px] opacity-70">({item.totalMarks}M)</span>
           </div>
-          <div className="flex justify-between items-center mt-0.5 gap-1">
-            <KLBadge level={item.knowledgeLevelB || item.knowledgeLevel} short />
-            <span className="text-[8px] opacity-60 text-purple-600">{(item.cognitiveProcessB || item.cognitiveProcess).split(' ')[0]}</span>
-            <span className="text-[9px] font-bold text-purple-600">{item.itemFormatB || item.itemFormat}</span>
+          <div className="flex justify-between items-center mt-1 gap-1">
+            <span className="font-semibold text-[9px] opacity-80 text-fuchsia-800">{(item.knowledgeLevelB || item.knowledgeLevel).substring(0, 3).toUpperCase()}</span>
+            <span className="text-[8px] opacity-70 font-semibold text-fuchsia-800">{(item.cognitiveProcessB || item.cognitiveProcess).split(' ')[0]}</span>
+            <span className="text-[8px] opacity-80 font-bold text-fuchsia-800">{item.itemFormatB || item.itemFormat}</span>
           </div>
           {!readOnly && (
             <button
@@ -1721,11 +1668,12 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
   }, [blueprint.items, onUpdateItem, readOnly]);
 
   // ── Drag handlers ────────────────────────────────────────────────────────────
-  const handleDragStart = useCallback((e: React.DragEvent, item: BlueprintItem) => {
+  const handleDragStart = useCallback((e: React.DragEvent, item: BlueprintItem, isOptionB: boolean = false) => {
     if (readOnly) return;
     e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.setData('isOptionB', isOptionB ? 'true' : 'false');
     e.dataTransfer.effectAllowed = 'move';
-    setDraggingItemId(item.id);
+    setDraggingItemId(isOptionB ? `${item.id}:b` : item.id);
   }, [readOnly]);
 
   const handleDragEnd = useCallback(() => {
@@ -1743,11 +1691,18 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
     if (readOnly) return;
     e.preventDefault();
     const itemId = e.dataTransfer.getData('text/plain');
+    const isOptionB = e.dataTransfer.getData('isOptionB') === 'true';
     setDropTarget(null);
     setDraggingItemId(null);
     if (!itemId) return;
-    onMoveItem(itemId, unitId, sectionId, subUnitId);
-  }, [readOnly, onMoveItem]);
+    
+    if (isOptionB) {
+      onUpdateItem(itemId, 'unitIdB', unitId);
+      onUpdateItem(itemId, 'subUnitIdB', subUnitId);
+    } else {
+      onMoveItem(itemId, unitId, sectionId, subUnitId);
+    }
+  }, [readOnly, onMoveItem, onUpdateItem]);
 
   // ── Cell helpers ─────────────────────────────────────────────────────────────
   const getCellItems = useCallback((unitId: string, subUnitId: string, sectionId: string): BlueprintItem[] =>
@@ -1816,7 +1771,7 @@ export const BlueprintMatrix: React.FC<BlueprintMatrixProps> = ({
         {/* Left side: Table + Summary */}
         <div className="w-full xl:flex-1 flex flex-col gap-4">
           {/* Matrix table container */}
-          <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm custom-scrollbar">
+          <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm custom-scrollbar" id="matrix-scroll-container">
             <table className="w-full text-[10px] border-collapse border border-gray-300 table-fixed">
               <thead>
                 <tr className="bg-slate-900 text-white">

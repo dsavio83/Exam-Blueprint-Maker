@@ -1,10 +1,10 @@
 
 import React from 'react';
-import { UserRole } from '../types';
+import { Role } from '../types';
 
 interface NavbarProps {
-  currentRole: UserRole;
-  onRoleChange: (role: UserRole) => void;
+  currentRole: Role;
+  onRoleChange: (role: Role) => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange }) => {
@@ -23,14 +23,14 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange }) => {
         <div className="flex items-center space-x-4">
           <div className="flex bg-slate-100 p-1 rounded-lg">
             <button 
-              onClick={() => onRoleChange(UserRole.ADMIN)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentRole === UserRole.ADMIN ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              onClick={() => onRoleChange(Role.ADMIN)}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentRole === Role.ADMIN ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Admin
             </button>
             <button 
-              onClick={() => onRoleChange(UserRole.TEACHER)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentRole === UserRole.TEACHER ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              onClick={() => onRoleChange(Role.USER)}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentRole === Role.USER ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Teacher
             </button>

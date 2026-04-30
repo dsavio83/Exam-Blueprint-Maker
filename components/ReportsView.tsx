@@ -71,9 +71,18 @@ export const ReportsView = ({
     };
 
     const getSettingsForTab = (tab: string): ReportSettings => {
+        const defaultOrient = (tab === 'report2' || tab === 'report3') ? 'l' : 'p';
+        const globalOrient = blueprint.reportSettings?.orientation;
+        const perReportOrient = blueprint.perReportSettings?.[tab]?.orientation;
+
         const perReport = blueprint.perReportSettings?.[tab];
-        if (perReport) return { ...defaultSettings, ...perReport };
-        return { ...defaultSettings, ...blueprint.reportSettings };
+
+        return {
+            ...defaultSettings,
+            ...blueprint.reportSettings,
+            ...perReport,
+            orientation: perReportOrient || globalOrient || defaultOrient
+        };
     };
 
     const settings = getSettingsForTab(activeTab);
@@ -191,10 +200,10 @@ export const ReportsView = ({
             if (!seg) return null;
             const isTamil = /[அ-ஹ\u0B80-\u0BFF]/.test(seg);
             return (
-                <span 
-                    key={i} 
+                <span
+                    key={i}
                     className={isTamil ? "tamil-font" : "english-font"}
-                    style={{ 
+                    style={{
                         fontFamily: isTamil ? `'TAU-Paalai', 'Latha', serif` : `'Times New Roman', serif`,
                         fontSize: isTamil ? `${settings.fontSizeTamil}pt` : `${settings.fontSizeBody}pt`,
                         lineHeight: isTamil ? `1.4` : '1.2'
@@ -232,41 +241,6 @@ export const ReportsView = ({
     });
 
     const report3Items = orderedItems;
-
-    // ============================================================
-    // PDF DOWNLOAD — Uses Puppeteer Backend
-    // ============================================================
-    const handleDownloadPDF = async (tab: string) => {
-        try {
-            Swal.fire({
-                title: 'Generating PDF...',
-                text: 'Please wait while we prepare your document.',
-                allowOutsideClick: false,
-                didOpen: () => { Swal.showLoading(); }
-            });
-
-            const response = await fetch('/api/export/pdf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    id: blueprint.id,
-                    baseUrl: window.location.origin,
-                    tab: tab,
-                    mode: isAdmin ? 'admin' : 'user'
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to generate PDF');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            Swal.close();
-        } catch (err: any) {
-            console.error(err);
-            Swal.fire("Error", err.message || "Failed to download PDF", "error");
-        }
-    };
 
     // ============================================================
     // WORD DOWNLOAD
@@ -334,24 +308,24 @@ export const ReportsView = ({
                     <div className="mb-6">
                         <h3 className="text-[12pt] font-bold text-black mb-1">I. Weightage to Content Area</h3>
                         <div className="border-b border-black w-full mb-2"></div>
-                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
+                        <table className="w-full border-collapse border border-black text-[10pt] leading-tight" style={{ fontFamily: "'TAU-Paalai', serif" }}>
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="border border-black px-1 py-1 text-center font-bold w-[6%] text-[9pt]">Sl. No</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[28%] text-[9pt]">Learning Objective</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[22%] text-[9pt]">Unit / Topic / Chapter</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[22%] text-[9pt]">Sub-unit / Sub-topic</th>
-                                    <th className="border border-black px-1 py-1 text-center font-bold w-[6%] text-[9pt]">Score</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[7%] text-[9pt]">%</th>
+                                    <th className="border border-black text-center font-bold w-[6%] text-[9pt]" style={{ padding: '5px' }}>Sl. No</th>
+                                    <th className="border border-black text-center font-bold w-[28%] text-[9pt]" style={{ padding: '5px' }}>Learning Objective</th>
+                                    <th className="border border-black text-center font-bold w-[22%] text-[9pt]" style={{ padding: '5px' }}>Unit / Topic / Chapter</th>
+                                    <th className="border border-black text-center font-bold w-[22%] text-[9pt]" style={{ padding: '5px' }}>Sub-unit / Sub-topic</th>
+                                    <th className="border border-black text-center font-bold w-[6%] text-[9pt]" style={{ padding: '5px' }}>Score</th>
+                                    <th className="border border-black text-center font-bold w-[7%] text-[9pt]" style={{ padding: '5px' }}>%</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {contentAreaStats.map((row, idx) => (
                                     <tr key={row.unit.id}>
                                         <td className="border border-black px-1 py-2 text-center align-middle english-font">{idx + 1}</td>
-                                        <td className="border border-black px-2 py-2 tamil-font text-[10pt] text-left whitespace-pre-line leading-relaxed">{row.unit.learningOutcomes || '-'}</td>
-                                        <td className="border border-black px-2 py-2 tamil-font text-left leading-relaxed">{row.unit.name}</td>
-                                        <td className="border border-black px-2 py-2 tamil-font italic text-[10pt] text-left whitespace-pre-line leading-relaxed">{row.unit.subUnits.map(s => s.name).join(', ')}</td>
+                                        <td className="border border-black px-2 py-2 text-[10pt] text-left whitespace-pre-line leading-relaxed">{row.unit.learningOutcomes || '-'}</td>
+                                        <td className="border border-black px-2 py-2 text-left leading-relaxed">{row.unit.name}</td>
+                                        <td className="border border-black px-2 py-2 italic text-[10pt] text-left whitespace-pre-line leading-relaxed">{row.unit.subUnits.map(s => s.name).join(', ')}</td>
                                         <td className="border border-black px-1 py-2 text-center font-bold align-middle english-font">{formatMark(row.score)}</td>
                                         <td className="border border-black px-1 py-2 text-center align-middle english-font">{totalScore > 0 ? Math.round((row.score / totalScore) * 100) : 0}%</td>
                                     </tr>
@@ -371,10 +345,10 @@ export const ReportsView = ({
                         <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[12%] text-[9pt]">Sl. No.</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[54%] text-[9pt]">Cognitive Process</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Score</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Percentage</th>
+                                    <th className="border border-black text-center font-bold w-[12%] text-[9pt]" style={{ padding: '5px' }}>Sl. No.</th>
+                                    <th className="border border-black text-center font-bold w-[54%] text-[9pt]" style={{ padding: '5px' }}>Cognitive Process</th>
+                                    <th className="border border-black text-center font-bold w-[17%] text-[9pt]" style={{ padding: '5px' }}>Score</th>
+                                    <th className="border border-black text-center font-bold w-[17%] text-[9pt]" style={{ padding: '5px' }}>Percentage</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -401,10 +375,10 @@ export const ReportsView = ({
                         <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[12%] text-[9pt]">Sl. No.</th>
-                                    <th className="border border-black px-1.5 py-1 text-left font-bold w-[54%] text-[9pt]">Knowledge Level</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Score</th>
-                                    <th className="border border-black px-1.5 py-1 text-center font-bold w-[17%] text-[9pt]">Percentage</th>
+                                    <th className="border border-black text-center font-bold w-[12%] text-[9pt]" style={{ padding: '5px' }}>Sl. No.</th>
+                                    <th className="border border-black text-left font-bold w-[54%] text-[9pt]" style={{ padding: '5px' }}>Knowledge Level</th>
+                                    <th className="border border-black text-center font-bold w-[17%] text-[9pt]" style={{ padding: '5px' }}>Score</th>
+                                    <th className="border border-black text-center font-bold w-[17%] text-[9pt]" style={{ padding: '5px' }}>Percentage</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -459,14 +433,14 @@ export const ReportsView = ({
                         <table className="w-full border-collapse border border-black text-[10pt] leading-tight">
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[7%]">Sl. No.</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-left font-bold w-[18%]">Item Format</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[8%]">Code</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[8%]">Format</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[12%]">No. of Items</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[12%]">Estimated Time</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[12%]">Score allotted</th>
-                                    <th className="border border-black px-1.5 py-0.5 text-center font-bold w-[10%]">Percentage</th>
+                                    <th className="border border-black text-center font-bold w-[7%]" style={{ padding: '5px' }}>Sl. No.</th>
+                                    <th className="border border-black text-left font-bold w-[18%]" style={{ padding: '5px' }}>Item Format</th>
+                                    <th className="border border-black text-center font-bold w-[8%]" style={{ padding: '5px' }}>Code</th>
+                                    <th className="border border-black text-center font-bold w-[8%]" style={{ padding: '5px' }}>Format</th>
+                                    <th className="border border-black text-center font-bold w-[12%]" style={{ padding: '5px' }}>No. of Items</th>
+                                    <th className="border border-black text-center font-bold w-[12%]" style={{ padding: '5px' }}>Estimated Time</th>
+                                    <th className="border border-black text-center font-bold w-[12%]" style={{ padding: '5px' }}>Score allotted</th>
+                                    <th className="border border-black text-center font-bold w-[10%]" style={{ padding: '5px' }}>Percentage</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -499,18 +473,20 @@ export const ReportsView = ({
                         </table>
                     </div>
 
-                    <div className="mt-4 text-sm grid grid-cols-2 gap-x-8">
-                        <div>
-                            <span className="font-bold underline">Index of Abbreviations:</span>
-                            <div className="ml-4 space-y-0.5 mt-2">
-                                <div>SR - Selected Response, CRS - Constructed Response Short Answer</div>
-                                <div>CRL - Constructed Response Long Answer, MCI - Multiple Choice Items</div>
-                                <div>MI - Matching Item</div>
+                    <div className="mt-4 text-[10pt] leading-tight">
+                        <div className="font-bold underline mb-2">Index of Abbreviations:</div>
+                        <div className="grid grid-cols-2 gap-x-12">
+                            <div className="space-y-1">
+                                <div>SR - Selected Response</div>
+                                <div>CRS - Constructed Response Short Answer</div>
+                                <div>CRL - Constructed Response Long Answer</div>
                             </div>
-                        </div>
-                        <div className="pt-8">
-                            <div className="space-y-0.5 mt-2">
-                                <div>VSA - Very Short Answer, SA - Short Answer, E - Essay</div>
+                            <div className="space-y-1">
+                                <div>MCI - Multiple Choice Items</div>
+                                <div>MI - Matching Item</div>
+                                <div>VSA - Very Short Answer</div>
+                                <div>SA - Short Answer</div>
+                                <div>E - Essay</div>
                             </div>
                         </div>
                     </div>
@@ -629,27 +605,27 @@ export const ReportsView = ({
         </colgroup>
     );
 
-    const renderAnalysisTableHeader = (firstColumnLabel: string) => {
+    const renderAnalysisTableHeader = (firstColumnLabel: string, padding: string = '3px') => {
         const showFirst = !!firstColumnLabel;
         return (
             <thead>
                 <tr className="bg-[#d9ead3] text-[9px]">
-                    {showFirst && <th rowSpan={2} className="border border-black p-[2px] font-bold text-center">{firstColumnLabel}</th>}
-                    <th colSpan={3} className="border border-black p-[2px] font-bold text-center">Content Area</th>
-                    <th colSpan={7} className="border border-black p-[2px] font-bold text-center" style={{ fontSize: '7.5px' }}>Cognitive Process</th>
-                    <th colSpan={3} className="border border-black p-[2px] font-bold text-center" style={{ fontSize: '7.5px' }}>Knowledge Level</th>
-                    <th colSpan={5} className="border border-black p-[2px] font-bold text-center" style={{ fontSize: '7.5px' }}>Item Format</th>
-                    <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px' }}>Total Item</th>
-                    <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px' }}>Total Score</th>
-                    <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px' }}>Time</th>
+                    {showFirst && <th rowSpan={2} className="border border-black font-bold text-center" style={{ padding }}>{firstColumnLabel}</th>}
+                    <th colSpan={3} className="border border-black font-bold text-center" style={{ padding }}>Content Area</th>
+                    <th colSpan={7} className="border border-black font-bold text-center" style={{ fontSize: '7.5px', padding }}>Cognitive Process</th>
+                    <th colSpan={3} className="border border-black font-bold text-center" style={{ fontSize: '7.5px', padding }}>Knowledge Level</th>
+                    <th colSpan={5} className="border border-black font-bold text-center" style={{ fontSize: '7.5px', padding }}>Item Format</th>
+                    <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px', padding }}>Total Item</th>
+                    <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px', padding }}>Total Score</th>
+                    <th rowSpan={2} className="border border-black font-bold text-center align-middle" style={{ fontSize: '7.5px', padding }}>Time</th>
                 </tr>
                 <tr className="bg-[#fff2cc] text-[7.5px] leading-tight">
-                    <th className="border border-black p-[2px] font-bold">Topic / Unit</th>
-                    <th className="border border-black p-[2px] font-bold">Learning Objective</th>
-                    <th className="border border-black p-[2px] font-bold">Sub Topic</th>
-                    {cpDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" style={{ fontSize: '9px' }}>{def.key}</th>)}
-                    {levelDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" style={{ fontSize: '9px' }}>{def.key}</th>)}
-                    {formatDefinitions.map(def => <th key={def.key} className="border border-black p-[1px] font-bold english-font" style={{ fontSize: '9px' }}>{def.key}</th>)}
+                    <th className="border border-black font-bold" style={{ padding }}>Topic / Unit</th>
+                    <th className="border border-black font-bold" style={{ padding }}>Learning Objective</th>
+                    <th className="border border-black font-bold" style={{ padding }}>Sub Topic</th>
+                    {cpDefinitions.map(def => <th key={def.key} className="border border-black font-bold english-font" style={{ fontSize: '9px', padding }}>{def.key}</th>)}
+                    {levelDefinitions.map(def => <th key={def.key} className="border border-black font-bold english-font" style={{ fontSize: '9px', padding }}>{def.key}</th>)}
+                    {formatDefinitions.map(def => <th key={def.key} className="border border-black font-bold english-font" style={{ fontSize: '9px', padding }}>{def.key}</th>)}
                 </tr>
             </thead>
         );
@@ -672,7 +648,7 @@ export const ReportsView = ({
                 {renderReportHeader('Part – II : Unit-wise Analysis')}
                 <table className="border-collapse border-2 border-black text-[8px] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
                     {renderAnalysisColGroup(false)}
-                    {renderAnalysisTableHeader('')}
+                    {renderAnalysisTableHeader('', '5px')}
                     <tbody>
                         {report2Rows.map((row) => (
                             <React.Fragment key={row.id}>
@@ -693,24 +669,35 @@ export const ReportsView = ({
                                         <td className="border border-black px-[1px] py-[1.5px] text-center text-[9px] english-font">{su.totalTime || ''}</td>
                                     </tr>
                                 ))}
+                                <tr className="bg-gray-100">
+                                    <td colSpan={3} className="border border-black text-[9px] text-black font-bold whitespace-nowrap leading-[1] align-middle" style={{ padding: '8px' }}>
+                                        {row.hasOptions ? `Options / Choice Questions (${row.optionCount})` : 'Options / Choice Questions'}
+                                    </td>
+                                    {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] text-black font-bold bg-gray-100 leading-[1] align-middle">{row.optionStats.cp[def.key].count ? <>{row.optionStats.cp[def.key].count}({formatMark(row.optionStats.cp[def.key].score)})</> : ''}</td>)}
+                                    {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] text-black font-bold bg-gray-100 leading-[1] align-middle">{row.optionStats.levels[def.key].count ? <>{row.optionStats.levels[def.key].count}({formatMark(row.optionStats.levels[def.key].score)})</> : ''}</td>)}
+                                    {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[4px] text-center text-[9px] text-black font-bold bg-gray-100 leading-[1] align-middle">{row.optionStats.formats[def.key].count ? <>{row.optionStats.formats[def.key].count}({formatMark(row.optionStats.formats[def.key].score)})</> : ''}</td>)}
+                                    <td className="border border-black px-[1px] py-[4px] text-center text-[9px] text-black font-bold bg-gray-100 leading-[1] align-middle">{row.hasOptions ? row.optionCount : ''}</td>
+                                    <td className="border border-black px-[1px] py-[4px] text-center text-[9px] text-black font-bold bg-gray-100 leading-[1] align-middle">{row.hasOptions ? formatMark(row.optionScore) : ''}</td>
+                                    <td className="border border-black px-[1px] py-[4px] bg-gray-100 leading-[1] align-middle"></td>
+                                </tr>
                             </React.Fragment>
                         ))}
                         <tr className="bg-gray-100 font-black">
-                            <td colSpan={3} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[10px]">TOTAL ITEM</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.cp[def.key].count || ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.levels[def.key].count || ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.formats[def.key].count || ''}</td>)}
-                            <td className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{derivedTotalItems}</td>
+                            <td colSpan={3} className="border border-black text-right uppercase tracking-widest text-[10px]" style={{ padding: '5px' }}>TOTAL ITEM</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{grandTotals.cp[def.key].count || ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{grandTotals.levels[def.key].count || ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{grandTotals.formats[def.key].count || ''}</td>)}
+                            <td className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{derivedTotalItems}</td>
                             <td className="border border-black bg-black"></td>
-                            <td rowSpan={2} className="border border-black px-[1px] py-[6px] text-center text-[10px] font-black english-font align-middle">{examMinutes}</td>
+                            <td rowSpan={2} className="border border-black text-center text-[10px] font-black english-font align-middle" style={{ padding: '5px' }}>{examMinutes}</td>
                         </tr>
                         <tr className="bg-gray-100 font-black">
-                            <td colSpan={3} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[10px]">TOTAL SCORE</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[10px] english-font font-black">{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
+                            <td colSpan={3} className="border border-black text-right uppercase tracking-widest text-[10px]" style={{ padding: '5px' }}>TOTAL SCORE</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{grandTotals.cp[def.key].score ? formatMark(grandTotals.cp[def.key].score) : ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{grandTotals.levels[def.key].score ? formatMark(grandTotals.levels[def.key].score) : ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[10px] english-font font-black" style={{ padding: '5px' }}>{grandTotals.formats[def.key].score ? formatMark(grandTotals.formats[def.key].score) : ''}</td>)}
                             <td className="border border-black bg-black"></td>
-                            <td className="border border-black px-[1px] py-[6px] text-center text-[10px] font-black english-font">{formatMark(derivedTotalMarks)}</td>
+                            <td className="border border-black text-center text-[10px] font-black english-font" style={{ padding: '5px' }}>{formatMark(derivedTotalMarks)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -730,7 +717,7 @@ export const ReportsView = ({
                 {renderReportHeader('Part – III : Item-wise Analysis')}
                 <table className="border-collapse border-2 border-black text-[8px] leading-[1.05] table-fixed" style={{ width: '99%', margin: '0 auto 0 0' }}>
                     {renderAnalysisColGroup(true)}
-                    {renderAnalysisTableHeader('Item / Q. No')}
+                    {renderAnalysisTableHeader('Item / Q. No', '5px')}
                     <tbody>
                         {questionRows.map((row) => {
                             const isOptionRow = row.id.endsWith('-B');
@@ -752,21 +739,21 @@ export const ReportsView = ({
                             );
                         })}
                         <tr className="bg-gray-100 font-black">
-                            <td colSpan={4} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[9px]">TOTAL ITEM</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.cp[def.key].count || ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.levels[def.key].count || ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.formats[def.key].count || ''}</td>)}
-                            <td className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{derivedTotalItems}</td>
+                            <td colSpan={4} className="border border-black text-right uppercase tracking-widest text-[9px]" style={{ padding: '5px' }}>TOTAL ITEM</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{totals.stats.cp[def.key].count || ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{totals.stats.levels[def.key].count || ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{totals.stats.formats[def.key].count || ''}</td>)}
+                            <td className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{derivedTotalItems}</td>
                             <td className="border border-black bg-black"></td>
-                            <td rowSpan={2} className="border border-black px-[1px] py-[6px] text-center text-[8px] font-black english-font align-middle">{examMinutes}</td>
+                            <td rowSpan={2} className="border border-black text-center text-[8px] font-black english-font align-middle" style={{ padding: '5px' }}>{examMinutes}</td>
                         </tr>
                         <tr className="bg-gray-100 font-black">
-                            <td colSpan={4} className="border border-black px-[6px] py-[6px] text-right uppercase tracking-widest text-[9px]">TOTAL SCORE</td>
-                            {cpDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.cp[def.key].score ? formatMark(totals.stats.cp[def.key].score) : ''}</td>)}
-                            {levelDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.levels[def.key].score ? formatMark(totals.stats.levels[def.key].score) : ''}</td>)}
-                            {formatDefinitions.map(def => <td key={def.key} className="border border-black px-[1px] py-[6px] text-center text-[8px] english-font font-black">{totals.stats.formats[def.key].score ? formatMark(totals.stats.formats[def.key].score) : ''}</td>)}
+                            <td colSpan={4} className="border border-black text-right uppercase tracking-widest text-[9px]" style={{ padding: '5px' }}>TOTAL SCORE</td>
+                            {cpDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{totals.stats.cp[def.key].score ? formatMark(totals.stats.cp[def.key].score) : ''}</td>)}
+                            {levelDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{totals.stats.levels[def.key].score ? formatMark(totals.stats.levels[def.key].score) : ''}</td>)}
+                            {formatDefinitions.map(def => <td key={def.key} className="border border-black text-center text-[8px] english-font font-black" style={{ padding: '5px' }}>{totals.stats.formats[def.key].score ? formatMark(totals.stats.formats[def.key].score) : ''}</td>)}
                             <td className="border border-black bg-black"></td>
-                            <td className="border border-black px-[1px] py-[6px] text-center text-[8px] font-black english-font">{formatMark(derivedTotalMarks)}</td>
+                            <td className="border border-black text-center text-[8px] font-black english-font" style={{ padding: '5px' }}>{formatMark(derivedTotalMarks)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -774,7 +761,7 @@ export const ReportsView = ({
         );
     };
 
-    const isLandscape = settings.orientation ? settings.orientation === 'l' : (activeTab === 'report2' || activeTab === 'report3');
+    const isLandscape = settings.orientation === 'l';
 
     return (
         <div className="mt-10 w-full text-black reports-container relative overflow-x-auto">
@@ -786,17 +773,19 @@ export const ReportsView = ({
 
             <div className="sticky top-[2px] z-30 bg-white py-4 mb-4 no-print border-b flex justify-center items-center gap-4 flex-wrap px-4">
                 <div className="flex bg-gray-100 p-1 border border-black/20 overflow-x-auto">
-                    {['report1', 'report2', 'report3', 'answerkey'].map(tab => (
+                    {['report1', 'report2', 'report3', 'answerkey', 'massview'].filter(tab => isAdmin || tab !== 'massview').map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 font-bold transition-all text-sm md:text-base whitespace-nowrap ${activeTab === tab ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'}`}>
-                            {tab === 'report1' ? 'Report 1' : tab === 'report2' ? 'Report 2' : tab === 'report3' ? 'Report 3' : 'Answer Key'}
+                            {tab === 'report1' ? 'Report 1' : tab === 'report2' ? 'Report 2' : tab === 'report3' ? 'Report 3' : tab === 'answerkey' ? 'Answer Key' : 'Question Paper'}
                         </button>
                     ))}
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={() => handleDownloadPDF(activeTab)} className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base"><Download size={18} /> PDF</button>
-                    <button onClick={() => handleDownloadWord(activeTab)} className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base"><FileText size={18} /> Word</button>
+                    <button onClick={() => onDownloadPDF(activeTab)} className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base"><Download size={18} /> PDF</button>
+                    {isAdmin && (
+                        <button onClick={() => onDownloadWord(activeTab)} className="bg-white text-black border-2 border-black px-5 py-2 font-bold hover:bg-gray-100 flex items-center gap-2 transition-all text-sm md:text-base"><FileText size={18} /> Word</button>
+                    )}
                     <button onClick={() => setIsSettingsOpen(true)} className="bg-gray-100 text-black border-2 border-gray-300 px-5 py-2 font-bold hover:bg-gray-200 flex items-center gap-2 transition-all text-sm md:text-base rounded-lg"><Settings size={18} /></button>
                 </div>
             </div>
@@ -804,23 +793,137 @@ export const ReportsView = ({
             <div className="reports-visible-content" style={{ fontFamily: `${settings.fontFamilyEnglish || 'Georgia'}, ${settings.fontFamily}, serif`, fontSize: `${settings.fontSizeBody}pt` }}>
                 {activeTab === 'report1' && (
                     <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} mx-auto`}>
-                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow mb-4 border border-gray-200 p-[12mm]`}>{renderReport1Content(1)}</div>
-                        <div className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow border border-gray-200 p-[12mm]`}>{renderReport1Content(2)}</div>
+                        <div id="report-page-1" className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow mb-4 border border-gray-200 p-[12mm]`}>{renderReport1Content(1)}</div>
+                        <div id="report-page-2" className={`${isLandscape ? 'w-full min-h-[210mm]' : 'report-1-screen-page'} bg-white shadow border border-gray-200 p-[12mm]`}>{renderReport1Content(2)}</div>
                     </div>
                 )}
                 {activeTab === 'report2' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>{renderReport2Content()}</div>
+                    <div id="report-item-analysis-page-0" className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>{renderReport2Content()}</div>
                 )}
                 {activeTab === 'report3' && (
-                    <div className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>{renderReport3Content()}</div>
+                    <div id="report-page-blueprint-matrix" className={`${isLandscape ? 'report-landscape-screen-wrapper' : 'report-1-screen-wrapper'} bg-white shadow border border-gray-200 p-4 overflow-x-auto`}>{renderReport3Content()}</div>
                 )}
                 {activeTab === 'answerkey' && (
                     <div className="report-1-screen-wrapper mx-auto">
-                        <div className="report-1-screen-page bg-white shadow border border-gray-200 p-[12mm]">
+                        <div id="report-answer-key" className="report-1-screen-page bg-white shadow border border-gray-200 p-[12mm]">
                             <AnswerKeyView blueprint={blueprint} curriculum={curriculum} discourses={discourses} isPdf={false} />
                         </div>
                     </div>
                 )}
+                {activeTab === 'massview' && (() => {
+                    // Helper functions (mirroring AdminQuestionConsolidator)
+                    const fmk = (m: number) => {
+                        const s = m.toString();
+                        if (s.endsWith('.5')) { const w = s.split('.')[0]; return w === '0' ? '½' : `${w}½`; }
+                        return s;
+                    };
+                    const toRoman = (n: number) => (['I','II','III','IV','V','VI','VII','VIII','IX','X'][n-1] || n.toString());
+
+                    const generateHeaderHTML = (bp: Blueprint): string => {
+                        const setLetter = (bp.setId || 'A').replace(/SET\s+/i, '').trim().charAt(0).toUpperCase();
+                        const subj = bp.subject.includes('BT') ? 'BT' : 'AT';
+                        const codeMap: Record<string, string> = {
+                            '10-AT': 'T1002', '10-BT': 'T1012', '9-AT': 'T902', '9-BT': 'T912', '8-AT': 'T802', '8-BT': 'T812'
+                        };
+                        const paperCode = codeMap[`${bp.classLevel}-${subj}`] || `T${bp.classLevel}${subj === 'AT' ? '02' : '12'}`;
+                        const year = (bp.academicYear || '2026-27').replace(/^(\d{4})-(\d{2,4})$/, (_, s, e) => `${s}-${String(e).slice(-2)}`);
+                        let termHeading = `முதல்பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+                        if (bp.examTerm === 'Second Term Summative') termHeading = `இரண்டாம் பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+                        if (bp.examTerm === 'Third Term Summative') termHeading = `இறுதிப் பருவத் தொகுத்தறி மதிப்பீடு ${year}`;
+                        const subjectTitle = bp.subject.includes('AT')
+                            ? { tamil: 'தமிழ் முதல் தாள்', eng: 'Tamil Language Paper I (AT)' }
+                            : { tamil: 'தமிழ் இரண்டாம் தாள்', eng: 'Tamil Language Paper II (BT)' };
+                        return `<div style="margin-bottom: 20px; font-family: 'TAU-Paalai', serif; line-height: 1.5; text-align: center;">
+    <div style="position: relative; display: flex; justify-content: center; align-items: center;">
+        <div style="position: absolute; left: 0; top: 0;">
+            <div style="border: 2px solid black; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px;">${setLetter}</div>
+        </div>
+        <h1 style="font-weight: bold; font-size: 20px; margin: 0; line-height: 1;">சமக்ர சிக்ஷா கேரளம்</h1>
+        <div style="position: absolute; right: 0; top: 0;">
+            <div style="background: black; color: white; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: bold;">${paperCode}</div>
+        </div>
+    </div>
+    <div style="margin-top: 10px;">
+        <h2 style="font-size: 16px; font-weight: bold; margin: 0;">${termHeading}</h2>
+        <h2 style="font-size: 16px; font-weight: bold; margin: 5px 0 0 0;">${subjectTitle.tamil}</h2>
+        <h3 style="font-size: 14px; font-weight: bold; margin: 5px 0 0 0;">${subjectTitle.eng}</h3>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; font-weight: bold; margin-top: 15px; font-size: 11pt; text-align: left;">
+        <div style="line-height: 1.4;">நேரம்: 90 நிமிடம்<br/>சிந்தனை நேரம் : 15 நிமிடம்</div>
+        <div style="text-align: right; line-height: 1.4;">வகுப்பு: ${bp.classLevel}<br/>மதிப்பெண்: ${fmk(bp.totalMarks)}</div>
+    </div>
+    </div>
+    <div style="border-top: 1px solid black; border-bottom: 1px solid black; padding: 10px 0; margin-bottom: 20px; font-family: 'TAU-Paalai', serif; font-size: 11pt; font-weight: bold; line-height: 1.5; text-align: left;">
+    <div style="margin-bottom: 5px;">குறிப்புகள்:</div>
+    <div style="margin-left: 20px; font-weight: normal;">
+        - முதல் 15 நிமிடம் சிந்தனை நேரமாகும்.<br/>
+        - வினாக்களை வாசித்து விடைகளை வரிசைப்படுத்த இந்த நேரத்தைப் பயன்படுத்தலாம்.<br/>
+        - வினாக்களையும் குறிப்புகளையும் நன்கு வாசித்துப் புரிந்து விடையளிக்கவும்.<br/>
+        - விடையளிக்கும்போது மதிப்பெண், நேரம் போன்றவற்றை கவனித்து செயல்படவும்.
+    </div>
+    </div>`;
+                    };
+
+                    const buildQPHTML = (): string => {
+                        // If already saved to DB, use that
+                        if (blueprint.massViewHeader) return blueprint.massViewHeader;
+                        // Otherwise generate dynamically from blueprint + paperType
+                        if (!paperType) return '<div style="text-align:center;padding:40px;color:#888;font-style:italic;">Paper Type not configured. Please select a valid exam.</div>';
+                        const header = generateHeaderHTML(blueprint);
+                        const sIdxMap = new Map((paperType.sections || []).map((s, i) => [s.id, i]));
+                        const bpItems = blueprint.items || [];
+                        const ordered = [...bpItems].sort((a, b) => {
+                            const ai = a.sectionId ? sIdxMap.get(a.sectionId) ?? 999 : 999;
+                            const bi = b.sectionId ? sIdxMap.get(b.sectionId) ?? 999 : 999;
+                            if (ai !== bi) return ai - bi;
+                            return bpItems.indexOf(a) - bpItems.indexOf(b);
+                        });
+                        let content = '<div style="margin-top: 10px; font-family: \'TAU-Paalai\', serif; font-size: 12pt; text-align: justify; line-height: 1.6;">';
+                        let qNo = 1;
+                        paperType.sections.forEach((section, sIdx) => {
+                            const secItems = ordered.filter(item => item.sectionId === section.id);
+                            if (secItems.length === 0) return;
+                            const qStart = qNo;
+                            const qEnd = qNo + secItems.length - 1;
+                            const rangeStr = qStart === qEnd ? `${qStart} ஆவது வினாவிற்கு` : `${qStart} முதல் ${qEnd} வரையுள்ள`;
+                            const roman = toRoman(sIdx + 1);
+                            const baseInstr = (section.instruction || '').trim();
+                            const isFormatted = /^[IVX]+\./.test(baseInstr) || /\d+\s*முதல்\s*\d+/.test(baseInstr);
+                            if (isFormatted) {
+                                content += `<div style="font-weight: bold; margin-top: 25px; margin-bottom: 15px;">${baseInstr}</div>`;
+                            } else {
+                                content += `<div style="font-weight: bold; margin-top: 25px; margin-bottom: 15px;">${roman}. ${rangeStr} ${baseInstr} (${fmk(section.marks)} மதிப்பெண் வீதம்) (${section.count} x ${fmk(section.marks)} = ${fmk(section.count * section.marks)})</div>`;
+                            }
+                            secItems.forEach(item => {
+                                const hasChoice = !!item.hasInternalChoice;
+                                content += `<div style="margin-bottom: 12px; padding-left: 20px;">`;
+                                if (hasChoice) {
+                                    content += `<div style="font-weight: bold; margin-bottom: 5px;">${qNo}. ஏதேனும் ஒன்றிற்கு விடையளிக்கவும்.</div>`;
+                                    content += `<div style="display: flex; gap: 10px; margin-bottom: 5px;"><div style="min-width: 25px;">அ)</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div>`;
+                                    content += `<div style="text-align: center; font-weight: bold; margin: 8px 0; font-style: italic;">(அல்லது)</div>`;
+                                    content += `<div style="display: flex; gap: 10px;"><div style="min-width: 25px;">ஆ)</div><div style="flex: 1;">${item.questionTextB || '(Question not entered)'}</div></div>`;
+                                } else {
+                                    content += `<div style="display: flex; gap: 10px;"><div style="min-width: 25px; font-weight: bold;">${qNo}.</div><div style="flex: 1;">${item.questionText || '(Question not entered)'}</div></div>`;
+                                }
+                                content += `</div>`;
+                                qNo++;
+                            });
+                        });
+                        content += '</div>';
+                        return header + content;
+                    };
+
+                    return (
+                        <div className="report-1-screen-wrapper mx-auto">
+                            <div id="report-mass-view" className="report-1-screen-page bg-white shadow border border-gray-200 p-[12mm]">
+                                <div
+                                    dangerouslySetInnerHTML={{ __html: buildQPHTML() }}
+                                    style={{ fontFamily: "'TAU-Paalai', serif", fontSize: '14pt', lineHeight: '1.6', color: '#000' }}
+                                ></div>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
 
             {isSettingsOpen && (

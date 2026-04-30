@@ -120,6 +120,21 @@ export const validateSession = async (): Promise<User> => {
 
 export const getDB = () => cachedDB;
 
+export const exportPDF = async (id: string, baseUrl: string, tab: string, mode: string): Promise<Blob> => {
+  const res = await fetch(`${API_URL}/export/pdf`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ id, baseUrl, tab, mode })
+  });
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to export PDF: ${res.status} ${errorText}`);
+  }
+  
+  return await res.blob();
+};
+
 export const login = async (username: string, password: string): Promise<{ success: boolean, user?: User, error?: string }> => {
   try {
     const res = await fetch(`${API_URL}/login`, {
@@ -184,6 +199,24 @@ export const deleteUser = async (id: string): Promise<void> => {
     method: 'DELETE',
     headers: getAuthHeaders()
   }).then(handleResponse);
+};
+
+export const heartbeat = async (): Promise<void> => {
+  const token = localStorage.getItem('blueprint_token');
+  if (!token) return;
+  try {
+    await fetch(`${API_URL}/heartbeat`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+  } catch (err) {
+    console.error('Heartbeat failed', err);
+  }
+};
+
+export const getLiveUsers = async (): Promise<User[]> => {
+  const res = await fetch(`${API_URL}/live-users`, { headers: getAuthHeaders() });
+  return await handleResponse(res) || [];
 };
 
 export const updateUserProfile = async (profileData: Partial<User>): Promise<User> => {

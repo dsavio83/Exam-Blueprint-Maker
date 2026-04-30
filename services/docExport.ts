@@ -1,6 +1,6 @@
 import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, AlignmentType, WidthType, BorderStyle, HeadingLevel, VerticalAlign, ShadingType, PageBreak } from "docx";
 import { saveAs } from "file-saver";
-import { Blueprint, Curriculum, KnowledgeLevel, CognitiveProcess, ItemFormat, Unit, BlueprintItem } from "../types";
+import { Blueprint, Curriculum, KnowledgeLevel, CognitiveProcess, ItemFormat, Unit, BlueprintItem, Discourse } from "../types";
 
 // Helper constants for styling
 const BLACK = "000000";
@@ -205,7 +205,9 @@ export class DocExportService {
         const doc = new Document({
             sections: [{
                 properties: {
-                    margin: { top: 720, right: 720, bottom: 720, left: 720 }
+                    page: {
+                        margin: { top: 720, right: 720, bottom: 720, left: 720 }
+                    }
                 },
                 children: [
                     // Page 1 Header
@@ -245,32 +247,32 @@ export class DocExportService {
                         rows: [
                             new TableRow({
                                 children: [
-                                    this.createTableCell("Sl. No.", { bold: true, shading: GREEN_HEADER }),
-                                    this.createTableCell("Learning Outcomes (LOs)", { bold: true, shading: GREEN_HEADER }),
-                                    this.createTableCell("Unit / Topic", { bold: true, shading: GREEN_HEADER }),
-                                    this.createTableCell("Sub-unit", { bold: true, shading: GREEN_HEADER }),
-                                    this.createTableCell("Score", { bold: true, shading: GREEN_HEADER }),
-                                    this.createTableCell("%", { bold: true, shading: GREEN_HEADER }),
+                                    this.createTableCell("Sl. No.", { bold: true, shading: GREEN_HEADER, font: "TAU-Paalai" }),
+                                    this.createTableCell("Learning Outcomes (LOs)", { bold: true, shading: GREEN_HEADER, font: "TAU-Paalai" }),
+                                    this.createTableCell("Unit / Topic", { bold: true, shading: GREEN_HEADER, font: "TAU-Paalai" }),
+                                    this.createTableCell("Sub-unit", { bold: true, shading: GREEN_HEADER, font: "TAU-Paalai" }),
+                                    this.createTableCell("Score", { bold: true, shading: GREEN_HEADER, font: "TAU-Paalai" }),
+                                    this.createTableCell("%", { bold: true, shading: GREEN_HEADER, font: "TAU-Paalai" }),
                                 ]
                             }),
                             ...curriculum.units.filter(u => (stats.content[u.id] || 0) > 0).map((u, idx) => {
                                 const score = stats.content[u.id] || 0;
                                 return new TableRow({
                                     children: [
-                                        this.createTableCell((idx + 1).toString()),
-                                        this.createTableCell(u.learningOutcomes || "-", { align: AlignmentType.LEFT, size: 18 }),
-                                        this.createTableCell(u.name, { align: AlignmentType.LEFT }),
-                                        this.createTableCell(u.subUnits.map(s => s.name).join(", "), { align: AlignmentType.LEFT, size: 18 }),
-                                        this.createTableCell(score.toString(), { bold: true }),
-                                        this.createTableCell(`${((score / totalScore) * 100).toFixed(0)}%`),
+                                        this.createTableCell((idx + 1).toString(), { font: "TAU-Paalai" }),
+                                        this.createTableCell(u.learningOutcomes || "-", { align: AlignmentType.LEFT, size: 18, font: "TAU-Paalai" }),
+                                        this.createTableCell(u.name, { align: AlignmentType.LEFT, font: "TAU-Paalai" }),
+                                        this.createTableCell(u.subUnits.map(s => s.name).join(", "), { align: AlignmentType.LEFT, size: 18, font: "TAU-Paalai" }),
+                                        this.createTableCell(score.toString(), { bold: true, font: "TAU-Paalai" }),
+                                        this.createTableCell(`${((score / totalScore) * 100).toFixed(0)}%`, { font: "TAU-Paalai" }),
                                     ]
                                 });
                             }),
                             new TableRow({
                                 children: [
-                                    this.createTableCell("Total", { bold: true, colSpan: 4, shading: GREY_LIGHT }),
-                                    this.createTableCell(totalScore.toString(), { bold: true, shading: GREY_LIGHT }),
-                                    this.createTableCell("100%", { bold: true, shading: GREY_LIGHT }),
+                                    this.createTableCell("Total", { bold: true, colSpan: 4, shading: GREY_LIGHT, font: "TAU-Paalai" }),
+                                    this.createTableCell(totalScore.toString(), { bold: true, shading: GREY_LIGHT, font: "TAU-Paalai" }),
+                                    this.createTableCell("100%", { bold: true, shading: GREY_LIGHT, font: "TAU-Paalai" }),
                                 ]
                             })
                         ]
@@ -393,6 +395,41 @@ export class DocExportService {
                                     this.createTableCell(blueprint.items.reduce((s, it) => s + (parseInt(this.getItemTime(it)) || 0), 0).toString(), { bold: true, shading: GREY_LIGHT }),
                                     this.createTableCell(totalScore.toString(), { bold: true, shading: GREY_LIGHT }),
                                     this.createTableCell("100%", { bold: true, shading: GREY_LIGHT }),
+                                ]
+                            })
+                        ]
+                    }),
+
+                    new Paragraph({ text: "", spacing: { before: 200 } }),
+
+                    // Abbreviation Index Table
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        borders: {
+                            top: { style: BorderStyle.NONE },
+                            bottom: { style: BorderStyle.NONE },
+                            left: { style: BorderStyle.NONE },
+                            right: { style: BorderStyle.NONE },
+                            insideHorizontal: { style: BorderStyle.NONE },
+                            insideVertical: { style: BorderStyle.NONE },
+                        },
+                        rows: [
+                            new TableRow({
+                                children: [
+                                    this.createTableCell("Index of Abbreviations:", { 
+                                        bold: true, size: 18, align: AlignmentType.LEFT, noBorder: true 
+                                    }),
+                                    this.createTableCell("", { noBorder: true }),
+                                ]
+                            }),
+                            new TableRow({
+                                children: [
+                                    this.createTableCell("SR - Selected Response\nCRS - Constructed Response Short Answer\nCRL - Constructed Response Long Answer", { 
+                                        size: 18, align: AlignmentType.LEFT, noBorder: true 
+                                    }),
+                                    this.createTableCell("MCI - Multiple Choice Items\nMI - Matching Item\nVSA - Very Short Answer\nSA - Short Answer\nE - Essay", { 
+                                        size: 18, align: AlignmentType.LEFT, noBorder: true 
+                                    }),
                                 ]
                             })
                         ]
@@ -768,7 +805,9 @@ export class DocExportService {
         const doc = new Document({
             sections: [{
                 properties: {
-                    margin: { top: 720, right: 720, bottom: 720, left: 720 }
+                    page: {
+                        margin: { top: 720, right: 720, bottom: 720, left: 720 }
+                    }
                 },
                 children: [
                     // Answer Key Header

@@ -24,6 +24,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
     // State
     const [activeTab, setActiveTab] = useState<'assign' | 'view'>('assign');
     const [users, setUsers] = useState<User[]>([]);
+    const teacherUsers = React.useMemo(() => users.filter(u => u.role !== Role.ADMIN), [users]);
     const [loading, setLoading] = useState(true);
     const [loadingAssignments, setLoadingAssignments] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -133,7 +134,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                 getQuestionPaperTypes()
             ]);
 
-            setUsers(allUsers.filter(u => u.role !== Role.ADMIN));
+            setUsers(allUsers);
             setPaperTypes(pTypes);
 
             if (pTypes.length > 0) {
@@ -247,7 +248,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
         printWindow.document.close();
     };
 
-    const filteredUsers = users.filter(user =>
+    const filteredUsers = teacherUsers.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.staffId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -539,7 +540,11 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                         onChange={(e) => setConfig({ ...config, setLabel: e.target.value })}
                                         className="ap-select w-full bg-gray-50/50 text-sm py-2"
                                     >
-                                        {setOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                        {setOptions.map(opt => (
+                                            <option key={opt} value={opt}>
+                                                {opt === 'GENERAL' ? 'GENERAL SET' : `SET ${opt}`}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -750,7 +755,7 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                 <thead>
                                     <tr className="bg-gray-50/80 border-b border-gray-100 text-left">
                                         <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Paper Details</th>
-                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Assigned Teachers (ஒதுக்கப்பட்ட ஆசிரியர்கள்)</th>
+                                        <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 border-x border-gray-100">Assigned Teachers </th>
                                         <th className="p-3 font-black uppercase text-[9px] tracking-widest text-gray-400 text-right no-print border-l border-gray-100">Actions</th>
                                     </tr>
                                 </thead>
@@ -786,33 +791,47 @@ const AdminAssignmentManager: React.FC<AdminAssignmentManagerProps> = ({ onAssig
                                                     
                                                     return (
                                                         <tr key={paperGroup.paperKey} className="hover:bg-purple-50/20 transition-colors group border-b border-gray-100">
-                                                            <td className="p-3 align-middle border-x border-gray-50">
-                                                                <div className="flex flex-col">
-                                                                    <div className="font-bold text-gray-700 text-xs">
+                                                            <td className="p-4 align-middle border-x border-gray-50 min-w-[200px]">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="font-black text-gray-800 text-[11px] uppercase tracking-tight leading-tight">
                                                                         {paperGroup.typeName}
                                                                     </div>
-                                                                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-                                                                        {paperGroup.examTerm} | {paperGroup.setId || 'SET A'}
+                                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                                        <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-widest">
+                                                                            {paperGroup.examTerm}
+                                                                        </span>
+                                                                        <span className="text-[9px] font-black bg-purple-50 text-purple-600 px-2 py-0.5 rounded border border-purple-100 uppercase tracking-widest">
+                                                                            {(() => {
+                                                                                const s = paperGroup.setId || 'A';
+                                                                                if (s.startsWith('SET')) return s;
+                                                                                if (s === 'GENERAL') return 'GENERAL SET';
+                                                                                return `SET ${s}`;
+                                                                            })()}
+                                                                        </span>
                                                                     </div>
                                                                 </div>
                                                             </td>
 
-                                                            <td className="p-3 align-middle border-r border-gray-50">
+                                                            <td className="p-4 align-middle border-r border-gray-50">
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {bps.map((bp, idx) => {
                                                                         const teacher = users.find(u => u.id === bp.ownerId);
-                                                                        if (!teacher) return null;
+                                                                        if (!teacher || teacher.role === Role.ADMIN) return null;
                                                                         return (
                                                                             <div key={bp.id} className="flex flex-col bg-white border border-gray-100 p-2 rounded-lg shadow-sm min-w-[200px] max-w-[250px]">
                                                                                 <div className="font-bold text-gray-900 text-sm leading-tight print-teacher-name">{teacher.name}</div>
                                                                                 <div className="text-[10px] text-gray-500 font-medium truncate print-school-info">
-                                                                                    {teacher.schoolName} | {teacher.district}
+                                                                                    {teacher.schoolName || 'N/A'} | {teacher.district || 'N/A'}
                                                                                 </div>
+                                                                                {teacher.pen && (
+                                                                                    <div className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">
+                                                                                        PEN: {teacher.pen}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     })}
-                                                                </div>
-                                                            </td>
+                                                                </div>                                                            </td>
 
                                                             <td className="p-3 text-right no-print align-middle border-l border-gray-50">
                                                                 <div className="flex items-center justify-end gap-2">

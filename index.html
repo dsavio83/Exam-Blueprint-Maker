@@ -147,29 +147,27 @@
       font-family: 'Times New Roman', 'Times', serif;
     }
 
-    /* Force single borders in all tables */
-    table {
+    /* Force single borders in all tables only in reports or print */
+    .reports-container table,
+    .print-only-container table,
+    .print-mode table {
       border-collapse: collapse !important;
       border-spacing: 0 !important;
       width: 100% !important;
       border: 1px solid black !important;
-      /* Outer border */
     }
 
-    th,
-    td {
+    .reports-container th,
+    .reports-container td,
+    .print-only-container th,
+    .print-only-container td,
+    .print-mode th,
+    .print-mode td {
       border: 1px solid black !important;
       padding: 2px 4px;
-      /* Professional compact look */
     }
 
     /* Maintain black borders for report-like tables */
-    .bg-white table,
-    .bg-white th,
-    .bg-white td,
-    .bg-gray-100 table,
-    .bg-gray-100 th,
-    .bg-gray-100 td,
     .reports-container table,
     .reports-container th,
     .reports-container td {
@@ -195,18 +193,26 @@
       scrollbar-width: none !important;
     }
 
-    /* Global removals for professional look */
-    .shadow-md,
-    .shadow-sm,
-    .shadow-lg,
-    .shadow {
+    /* Scoped removals for professional look in reports/print */
+    .reports-container .shadow-md,
+    .reports-container .shadow-sm,
+    .reports-container .shadow-lg,
+    .reports-container .shadow,
+    .print-mode .shadow-md,
+    .print-mode .shadow-sm,
+    .print-mode .shadow-lg,
+    .print-mode .shadow {
       box-shadow: none !important;
     }
 
-    .rounded-xl,
-    .rounded-lg,
-    .rounded-md,
-    .rounded {
+    .reports-container .rounded-xl,
+    .reports-container .rounded-lg,
+    .reports-container .rounded-md,
+    .reports-container .rounded,
+    .print-mode .rounded-xl,
+    .print-mode .rounded-lg,
+    .print-mode .rounded-md,
+    .print-mode .rounded {
       border-radius: 0 !important;
     }
 
