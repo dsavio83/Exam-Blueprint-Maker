@@ -89,11 +89,10 @@ if (!JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') process.exit(1);
 }
 
-const chromium = require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
-
 const getBrowser = async () => {
   if (process.env.VERCEL) {
+    const chromium = require('@sparticuz/chromium');
+    const puppeteer = require('puppeteer-core');
     return await puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
@@ -103,7 +102,9 @@ const getBrowser = async () => {
     });
   }
   // Local development
-  return await require('puppeteer').launch({
+  const localPuppeteer = 'puppeteer';
+  const puppeteer = require(localPuppeteer);
+  return await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
