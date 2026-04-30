@@ -53,6 +53,37 @@ const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 const PORT = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// MongoDB Connection Cache for Serverless
+let cachedConnection = null;
+
+const connectDb = async () => {
+  if (cachedConnection) return cachedConnection;
+  if (!MONGO_URI) {
+    console.error('MONGO_URI is missing');
+    return null;
+  }
+  
+  try {
+    const conn = await mongoose.connect(MONGO_URI, {
+      bufferCommands: false, // Disable buffering for faster fail-fast in serverless
+    });
+    cachedConnection = conn;
+    console.log('Connected to MongoDB');
+    return conn;
+  } catch (err) {
+    console.error('MongoDB connection error:', err.message);
+    return null;
+  }
+};
+
+// Database Connection Middleware
+app.use(async (req, res, next) => {
+  if (mongoose.connection.readyState === 1) return next();
+  const conn = await connectDb();
+  if (!conn) return serviceUnavailable(res);
+  next();
+});
+
 if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is missing.');
   if (process.env.NODE_ENV === 'production') process.exit(1);
@@ -512,16 +543,8 @@ app.get('/', (req, res) => {
 module.exports = app;
 
 if (require.main === module) {
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
-  
-  const connectToMongo = async () => {
-    if (!MONGO_URI) return console.error('MONGO_URI missing');
-    try {
-      await mongoose.connect(MONGO_URI);
-      console.log('Connected to MongoDB');
-    } catch (err) { console.error('MongoDB error:', err.message); }
-  };
-  connectToMongo();
+  connectDb();
 }
